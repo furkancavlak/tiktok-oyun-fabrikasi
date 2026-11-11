@@ -72,6 +72,12 @@ function klasorKopyala(kaynak, hedefKlasor, onek) {
 kopyala(html, 'oyun.html');
 kopyala(kopruYol, 'kopru.js');
 kopyala(baslatYol, 'BASLAT.bat');
+// Oyunun içine gömülü kitaplıkların lisansı pakette de durur (oyun.json "kitaplik": ["three"] → kitaplik/LICENSE-three.txt).
+for (const k of Array.isArray(bilgi.kitaplik) ? bilgi.kitaplik : []) {
+  const lisans = path.join(KOK, 'kitaplik', 'LICENSE-' + k + '.txt');
+  if (fs.existsSync(lisans))
+    kopyala(lisans, 'LICENSE-' + k + '.txt');
+}
 
 yaz('package.json', JSON.stringify({
   name: paketAdi,

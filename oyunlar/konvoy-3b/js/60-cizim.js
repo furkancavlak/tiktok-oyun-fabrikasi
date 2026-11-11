@@ -1,6 +1,8 @@
 /* ÇİZİM KANCALARI — 3B sahne ile çekirdeğin 2B üst katmanını aynı karede buluşturur.
  * oyunZemin(): 2B tuvali temizler (saydam üst katman), kamerayı rejiye kurdurur, arabaları ve efektleri yerleştirir,
- *   three.js sahnesini çizer. Çizim burada olduğu için çekirdeğin D.kareMs ölçümü 3B'nin gerçek maliyetini de sayar.
+ *   three.js sahnesini çizer. Dikkat: çekirdeğin D.kareMs ölçümü yalnız işlemcinin işini sayar; ekran kartı çizimi
+ *   sonra, eşzamansız yapar. Gerçek kare süresini bu dosya kendisi ölçer (iki kare arası, KALITE) ve kare yetişmiyorsa
+ *   kaliteyi kademe kademe düşürür: çizim ölçeği, gölgeler, uzak dekor, görüş uzaklığı.
  * oyunCiz(): her arabayı three.js kamerasıyla 720×1280 sanal tuvale düşürür, ekranda okunacak kadar büyük olanlara
  *   k.et verir (adı, balonu, öncelik kurallarını çekirdek çizer).
  * oyunUst(): korna yazıları ("DÜT!"), yakın çekimdeki izleyicinin ve drift atanın büyük adı, gelin süsünün izi.
@@ -8,6 +10,32 @@
  * Efektler: drift dumanı (yumuşak lekeler), havai fişekler (noktalar), selektör yapan farların parıltısı.
  */
 function oyunKamera() { return [[0, 0]]; }
+
+// WebGL yok: sahnede ne olduğunu düz Türkçeyle söyleyen bir kart (kurallar, sıralama, yazılar yine çalışır).
+const WEBGL_YOK = ['Bu oyun 3B çizilir:', 'ekran kartı (WebGL) gerekir.', '', 'Bu bilgisayarda ya da tarayıcıda', 'WebGL kapalı.', '',
+  'Tarayıcı ayarlarında "donanım', 'hızlandırması"nı açın ya da 2B', 'oyunlardan birini yayına verin:', 'Gelin Konvoyu, Mendil Kimde?,', 'Vur Düzelsin!, Müsait Bir Yerde.'];
+function webglYok() {
+  const g = c.createLinearGradient(0, 0, 0, GH);
+  g.addColorStop(0, GOK.ust);
+  g.addColorStop(0.6, GOK.ufuk);
+  g.addColorStop(1, '#c9b98a');
+  c.fillStyle = g;
+  c.fillRect(0, 0, GW, GH);
+  c.fillStyle = renkSaydam(MUREKKEP, 0.82);
+  c.beginPath();
+  c.roundRect(60, 540, 600, 440, 28);
+  c.fill();
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  WEBGL_YOK.forEach((satir, i) => {
+    c.font = (i < 2 ? '30px "Paytone One", ' : '500 25px ') + 'Rubik, system-ui, sans-serif';
+    c.fillStyle = i < 2 ? RENK.vurgu : RENK.acik;
+    c.fillText(satir, GW / 2, 590 + i * 36);
+  });
+  c.textBaseline = 'alphabetic';
+  if (!KALITE.uyari)
+    kaliteUyar('WebGL yok: bu oyunun 3B sahnesi bu bilgisayarda çizilemiyor. Sahnede bir uyarı görünür; yayına 2B oyunlardan birini verin.');
+}
 
 /* ---- efektler ---- */
 const EFEKT = { duman: [], fisek: null, parilti: null };
@@ -104,9 +132,68 @@ function efektleriGuncelle() {
 
 /* ---- boyut, gölge, gök ---- */
 function boyutEsle() {
-  const r = DUNYA.r, w = tuval.width, h = tuval.height;
+  const r = DUNYA.r, o = KALITE_KADEME[KALITE.kademe].olcek, w = Math.round(tuval.width * o), h = Math.round(tuval.height * o);
   if (r.domElement.width !== w || r.domElement.height !== h)
     r.setSize(w, h, false);
+}
+/* ---- kalite: gerçek kare aralığına göre kademe kademe düşer ---- */
+// olcek: çizim çözünürlüğü (tuval CSS ile tam boy kalır) · golge: gölge haritası (0 = kapalı) · uzak: arka sıralar,
+// bahçeler, camiler · gorus: sisin bittiği uzaklık (metre).
+const KALITE_KADEME = [
+  { olcek: 1, golge: 2048, uzak: true, gorus: 1 },
+  { olcek: 0.8, golge: 1024, uzak: true, gorus: 1 },
+  { olcek: 0.66, golge: 0, uzak: true, gorus: 0.8 },
+  { olcek: 0.5, golge: 0, uzak: false, gorus: 0.55 },
+  { olcek: 0.36, golge: 0, uzak: false, gorus: 0.45 }
+];
+const KALITE = { kademe: 0, aralik: 0, ornek: [], son: 0, yavas: false, uyari: null };
+const KALITE_SINIR = 26, KALITE_YAVAS = 40;
+function kaliteOlc() {
+  const t = performance.now(), d = t - KALITE.son;
+  KALITE.son = t;
+  // sekme arkadayken ya da ilk karede gelen uzun boşluklar sayılmaz
+  if (!(d > 0 && d < 1000))
+    return;
+  KALITE.ornek.push(d);
+  KALITE.toplam = (KALITE.toplam || 0) + d;
+  // en az 20 kare ve 1,5 saniye ya da 90 kare biriktirince karar verir: yavaş makinede de birkaç saniyede bir kademe
+  if (KALITE.ornek.length < 90 && !(KALITE.ornek.length >= 20 && KALITE.toplam >= 1500))
+    return;
+  KALITE.toplam = 0;
+  const s = KALITE.ornek.slice().sort((a, b) => a - b);
+  KALITE.aralik = s[s.length >> 1];
+  KALITE.ornek.length = 0;
+  if (KALITE.aralik > KALITE_SINIR && KALITE.kademe < KALITE_KADEME.length - 1)
+    kaliteKur(KALITE.kademe + 1);
+  else if (KALITE.aralik > KALITE_YAVAS && KALITE.kademe === KALITE_KADEME.length - 1 && !KALITE.yavas) {
+    KALITE.yavas = true;
+    kaliteUyar('Bu bilgisayarın ekran kartı 3B sahneye yetişmiyor (kare başına yaklaşık ' + Math.round(KALITE.aralik) + ' ms; akıcı görüntü için 33 ms altı gerekir). Kalite en düşükte. Tarayıcının donanım hızlandırmasını açın ya da 2B oyunlardan birini yayına verin (Gelin Konvoyu, Mendil Kimde?, Vur Düzelsin!, Müsait Bir Yerde).');
+  }
+}
+function kaliteKur(n) {
+  KALITE.kademe = n;
+  const k = KALITE_KADEME[n], g = DUNYA.gunes;
+  g.castShadow = k.golge > 0;
+  if (k.golge && g.shadow.mapSize.x !== k.golge) {
+    g.shadow.mapSize.set(k.golge, k.golge);
+    if (g.shadow.map) {
+      g.shadow.map.dispose();
+      g.shadow.map = null;
+    }
+  }
+  boyutEsle();
+}
+// Yayın masasında (panelde) düz bir uyarı satırı; izleyici görmez. Metin sabit, textContent ile yazılır.
+function kaliteUyar(metin) {
+  if (!KALITE.uyari) {
+    KALITE.uyari = document.createElement('p');
+    KALITE.uyari.className = 'not';
+    KALITE.uyari.style.color = '#ffcf4d';
+    const yer = $('panel-not');
+    if (yer && yer.parentNode)
+      yer.parentNode.insertBefore(KALITE.uyari, yer.nextSibling);
+  }
+  KALITE.uyari.textContent = metin;
 }
 function golgeAyarla() {
   const g = DUNYA.gunes, o = DUNYA.golgeOdak || DUNYA.kamera.position, R = DUNYA.golgeR, kam = g.shadow.camera;
@@ -135,16 +222,11 @@ function oyunZemin() {
   if (!DUNYA.r) {
     dunyaKur();
     if (!DUNYA.r) {
-      // WebGL yok: yalnız gökyüzü (kurallar ve yazılar yine çalışır)
-      const g = c.createLinearGradient(0, 0, 0, GH);
-      g.addColorStop(0, GOK.ust);
-      g.addColorStop(0.6, GOK.ufuk);
-      g.addColorStop(1, '#9a9a8a');
-      c.fillStyle = g;
-      c.fillRect(0, 0, GW, GH);
+      webglYok();
       return;
     }
   }
+  kaliteOlc();
   boyutEsle();
   if (kokenAyarla(false))
     DUNYA.golgeOdak = null;
@@ -165,6 +247,8 @@ function oyunCiz() {
   if (!DUNYA.r)
     return;
   const kam = DUNYA.kamera, F = (GH / 2) / Math.tan(kam.fov * Math.PI / 360), ileri = DUNYA.bakis;
+  const kart = kartKonusu().k;
+  let yazildi = false, yedek = null, yedekKart = null;
   for (const k of gorunenArabalar) {
     if (!k._M || k.cikiyor)
       continue;
@@ -183,13 +267,42 @@ function oyunCiz() {
         k.basEkran = { x: be.x, y: be.y, r: 0.15 * F / bd, kare: kareSay };
       }
     }
-    // yakın çekimin konusunun ve drift atanın adı ayrıca büyük kartta da yazar (oyunUst)
     if (!_etE.ok)
       continue;
+    const et = { x: _etE.x, y: _etE.y, s, d: derin }, seritte = et.y > SERIT_UST - 45 && et.y < SERIT_ALT - 10 && et.x > 0 && et.x < GW;
+    // yakın çekimin konusunun, drift atanın ve yeni gelin arabasının adı yalnız büyük kartta yazar (oyunUst)
+    if (k === kart) {
+      if (et.x > 0 && et.x < GW && et.y > 0 && et.y < SERIT_ALT)
+        yedekKart = et;
+      continue;
+    }
     // gelin arabasının adı her çekimde yazılır (geniş çekimde de kim olduğu görünsün)
-    if (s >= ETIKET_PX || k === D.lider)
-      k.et = { x: _etE.x, y: _etE.y, s, d: derin };
+    if (s >= ETIKET_PX || k === D.lider) {
+      k.et = et;
+      // ekranın dışındaki adı çekirdek çizmez (disari: 'gizle'): sayılmaz
+      yazildi = yazildi || (et.x > 0 && et.x < GW && et.y > 0 && et.y < SERIT_ALT);
+    }
+    else if (seritte && (!yedek || s > yedek.et.s))
+      yedek = { k, et };
   }
+  // Kadrajda hiç ad kalmadıysa (konu kartta, ötekiler küçük) en büyük görünen arabanın adı yine yazılır: sahnede her
+  // zaman en az bir ad okunur. Kadrajda başka araba hiç yoksa kartın konusu küçük etiketini de alır.
+  if (!yazildi && yedek)
+    yedek.k.et = yedek.et;
+  else if (!yazildi && yedekKart && kart)
+    kart.et = yedekKart;
+}
+// Büyük ad kartının konusu (yoksa k: null): şov çekiminde drift atan, yakın çekimde o izleyici, lider çekiminde yeni
+// gelin arabası. Bu arabanın küçük etiketi çizilmez: ad bir kez, büyük yazılır.
+function kartKonusu() {
+  const R = D.reji, ad = R.cekim && R.cekim.ad;
+  if (ad === 'sov' && D.drift && D.drift.k.ar)
+    return { k: D.drift.k, ust: 'DRIFT ŞOV!' };
+  if (ad === 'yakin' && R.konu && D.oy.has(R.konu.id) && D.oy.get(R.konu.id) === R.konu)
+    return { k: R.konu, ust: (R.konu.sn + 1) + '. araba' + (R.konu.jeton > 0 ? ' · ' + R.konu.jeton + ' jeton' : '') };
+  if (ad === 'lider' && D.lider)
+    return { k: D.lider, ust: 'YENİ GELİN ARABASI' };
+  return { k: null, ust: '' };
 }
 // Kornada arabanın yanında beliren "DÜT!" ve büyük ad kartları.
 function oyunUst() {
@@ -245,20 +358,7 @@ function oyunUst() {
     c.globalAlpha = 1;
   }
   // büyük ad kartı: yakın çekimin konusu ya da drift atan (şov çekiminde). Şeridin altında, yolun üstünde durur.
-  const R = D.reji, ad = R.cekim && R.cekim.ad;
-  let k = null, ust = '';
-  if (ad === 'sov' && D.drift && D.drift.k.ar) {
-    k = D.drift.k;
-    ust = 'DRIFT ŞOV!';
-  }
-  else if (ad === 'yakin' && R.konu && D.oy.has(R.konu.id)) {
-    k = R.konu;
-    ust = (k.sn + 1) + '. araba' + (k.jeton > 0 ? ' · ' + k.jeton + ' jeton' : '');
-  }
-  else if (ad === 'lider' && D.lider) {
-    k = D.lider;
-    ust = 'YENİ GELİN ARABASI';
-  }
+  const R = D.reji, ad = R.cekim && R.cekim.ad, { k, ust } = kartKonusu();
   if (k && R.cekim && B - R.cekim.b0 > 0.3) {
     const gir = clamp((B - R.cekim.b0 - 0.3) * 2.5, 0, 1);
     c.globalAlpha = gir;

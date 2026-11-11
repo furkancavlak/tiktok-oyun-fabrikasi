@@ -217,11 +217,16 @@ function kasaGeo(tip) {
   for (const s of [-1, 1]) {
     parcaEkle(Y, null, 'kutu', F.x - 0.005, F.y, s * F.z, 0.05, F.h + 0.04, F.w + 0.04, koyu, 0, 0, 0, 0);
     parcaEkle(Y, null, 'kutu', S.x + 0.005, S.y, s * S.z, 0.05, S.h + 0.04, S.w + 0.04, koyu, 0, 0, 0, 0);
+    // stopun yanında beyaz geri vites lambası: arka lamba iki renkli
+    parcaEkle(Y, null, 'kutu', S.x - 0.006, S.y, s * (S.z - S.w / 2 - 0.05), 0.03, S.h * 0.8, 0.07, '#f2efe6', 0, 0, 0, 0);
   }
   const x0 = A[0][0] + 0.35, x1 = son[0] - 0.45;
   for (const s of [-1, 1]) {
     // yan bant (seksenlerin kauçuk şeridi) ve kapı kolları
     parcaEkle(Y, null, 'kutu', (x0 + x1) / 2, yb - 0.33, s * (W / 2 + 0.004), x1 - x0, 0.055, 0.03, '#26272b', 0, 0, 0, 0);
+    // ince krem yan çizgi (boyanın üstünde ikinci ton) ve cam altında krom pervaz
+    parcaEkle(Y, null, 'kutu', (x0 + x1) / 2, yb - 0.17, s * (W / 2 + 0.002), x1 - x0 - 0.2, 0.022, 0.02, '#efe6cf', 0, 0, 0, 0);
+    parcaEkle(Y, null, 'kutu', (G[0][0] + G[3][0]) / 2, yb + 0.012, s * (hw(yb) + 0.004), G[3][0] - G[0][0] - 0.05, 0.022, 0.02, krom, 0, 0, 0, 0);
     for (const [a] of K.cam.slice(-2))
       parcaEkle(Y, null, 'kutu', a + 0.05, yb - 0.1, s * (W / 2 + 0.008), 0.16, 0.035, 0.03, krom, 0, 0, 0, 0);
     // ayna
@@ -256,7 +261,10 @@ function kasaGeo(tip) {
 }
 
 /* ---- örnekli çizim ---- */
-const KAP_ARABA = 48;
+// Aynı anda en çok kaç araba çizilir: sahnedeki kapasite (36) ve çıkmakta olanlar. Kalabalık bir yayında bir anda
+// çok kişi girerse çıkan arabalar birikir (sahneden düşen her araba 1,7 sn daha yaşar); sınır aşılırsa önce en eski
+// çıkanlar çizilmez (cizimSirasi). Gelin arabası ve kameranın konusu hiçbir zaman düşmez. Her havuz bu sayıya göre.
+const KAP_ARABA = 64;
 let GOVDE = null, CAM = null, TEKER = null, LAMBA = null, BASLAR = null, SACLAR = null, GOZLER = null, GOVDE_INSAN = null, PLAKA = null;
 // Gövde malzemesi: "boya" özniteliği 1 olan köşeler izleyicinin rengini alır, parlak cila gibi düşük pürüzlü olur.
 function boyaliMalzeme() {
@@ -333,15 +341,16 @@ function arabalariKur() {
 }
 
 /* ---- plakalar: izleyicinin adı plakada (tuvale fillText; HTML yok) ---- */
-const PLAKA_SUTUN = 4, PLAKA_SATIR = 16;
+// Plaka atlası: 4 × 32 hücre. Her çizilen arabanın kaydına bir hücre bağlanır (kimliğe değil: aynı kişi çıkarken
+// yeniden yazarsa çekirdek yeni bir kayıt açar). Son hücre boş plakadır: hücre kalmazsa kimsenin adı yerine o çizilir.
+const PLAKA_SUTUN = 4, PLAKA_SATIR = 32, PLAKA_BOS = PLAKA_SUTUN * PLAKA_SATIR - 1;
 let plakaTuval = null, plakaDoku = null, plakaUv = null;
 const plakaBos = [];
 function plakaKur() {
   plakaTuval = document.createElement('canvas');
   plakaTuval.width = 1024;
-  plakaTuval.height = 1024;
-  for (let i = PLAKA_SUTUN * PLAKA_SATIR - 1; i >= 0; i--)
-    plakaBos.push(i);
+  plakaTuval.height = 2048;
+  plakaSifirla();
   plakaDoku = new THREE.CanvasTexture(plakaTuval);
   plakaDoku.colorSpace = THREE.SRGBColorSpace;
   plakaDoku.anisotropy = 4;
@@ -355,17 +364,21 @@ function plakaKur() {
   };
   PLAKA = ornekli(g, m, KAP_ARABA * 2, false);
 }
-function plakaYaz(k) {
-  if (k.plakaYuva !== undefined && k.plakaAd === k.ad)
-    return;
-  if (k.plakaYuva === undefined) {
-    if (!plakaBos.length)
-      return;
-    k.plakaYuva = plakaBos.pop();
-  }
-  k.plakaAd = k.ad;
-  const a = plakaTuval.getContext('2d'), c0 = k.plakaYuva % PLAKA_SUTUN, r0 = Math.floor(k.plakaYuva / PLAKA_SUTUN), x = c0 * 256, y = r0 * 64;
-  a.clearRect(x, y, 256, 64);
+// Boş plaka hücresini çizer, bütün hücreleri boşa çıkarır (açılışta ve "boşalt"ta).
+function plakaSifirla() {
+  plakaBos.length = 0;
+  for (let i = PLAKA_BOS - 1; i >= 0; i--)
+    plakaBos.push(i);
+  for (const k of plakaSahipleri)
+    k.plakaYuva = undefined;
+  plakaSahipleri = [];
+  const a = plakaTuval.getContext('2d');
+  a.clearRect(0, 0, plakaTuval.width, plakaTuval.height);
+  plakaZemin(a, (PLAKA_BOS % PLAKA_SUTUN) * 256, Math.floor(PLAKA_BOS / PLAKA_SUTUN) * 64);
+  if (plakaDoku)
+    plakaDoku.needsUpdate = true;
+}
+function plakaZemin(a, x, y) {
   a.fillStyle = '#16181f';
   a.fillRect(x, y, 256, 64);
   a.fillStyle = '#f7f6f1';
@@ -377,15 +390,34 @@ function plakaYaz(k) {
   a.textAlign = 'center';
   a.textBaseline = 'middle';
   a.fillText('TR', x + 18, y + 47);
+}
+function plakaYaz(k) {
+  if (k.plakaYuva !== undefined && k.plakaAd === k.ad)
+    return;
+  if (k.plakaYuva === undefined) {
+    if (!plakaBos.length)
+      return;
+    k.plakaYuva = plakaBos.pop();
+  }
+  k.plakaAd = k.ad;
+  const a = plakaTuval.getContext('2d'), c0 = k.plakaYuva % PLAKA_SUTUN, r0 = Math.floor(k.plakaYuva / PLAKA_SUTUN), x = c0 * 256, y = r0 * 64;
+  a.clearRect(x, y, 256, 64);
+  plakaZemin(a, x, y);
   a.fillStyle = '#16181f';
   let punto = 40;
-  const metin = kisalt(String(k.ad).toLocaleUpperCase('tr'), 14);
+  // ad yazıldığı gibi (büyük harfe çevrilmez: "mike" İ'li olmasın); hücrenin dışına taşan işaret komşuya geçmesin
+  const metin = kisalt(String(k.ad), 16);
   a.font = '700 ' + punto + 'px Rubik, system-ui, sans-serif';
   while (punto > 18 && a.measureText(metin).width > 210) {
     punto -= 2;
     a.font = '700 ' + punto + 'px Rubik, system-ui, sans-serif';
   }
-  a.fillText(metin, x + 144, y + 34, 214);
+  a.save();
+  a.beginPath();
+  a.rect(x + 36, y + 4, 216, 56);
+  a.clip();
+  a.fillText(metin, x + 144, y + 34, 210);
+  a.restore();
   plakaDoku.needsUpdate = true;
 }
 function plakaBirak(k) {
@@ -554,14 +586,9 @@ function arabalariYerlestir() {
   let nt = 0, nl = 0, nb = 0, np = 0;
   const lc = LAMBA.instanceColor.array, bc = BASLAR.instanceColor.array, sc = SACLAR.instanceColor.array, gc = GOVDE_INSAN.instanceColor.array;
   const yanar = (B % 1) < 0.5, kamP = DUNYA.kamera.position;
-  gorunenArabalar = [];
-  for (const k of D.oy.values()) {
-    if (!k.ar)
-      continue;
+  gorunenArabalar = cizimSirasi();
+  for (const k of gorunenArabalar) {
     const tip = k.ar.tip, K = KASA[tip], i = SAYAC[tip]++;
-    if (i >= KAP_ARABA)
-      continue;
-    gorunenArabalar.push(k);
     arabaMatris(k, false, _arM);
     k._M = k._M || new THREE.Matrix4();
     k._M.copy(_arM);
@@ -597,7 +624,7 @@ function arabalariYerlestir() {
     }
     // plakalar (iki yüz aynı adı taşır)
     plakaYaz(k);
-    const yuva = k.plakaYuva === undefined ? 63 : k.plakaYuva, pu = (yuva % PLAKA_SUTUN) / PLAKA_SUTUN, pv = 1 - (Math.floor(yuva / PLAKA_SUTUN) + 1) / PLAKA_SATIR;
+    const yuva = k.plakaYuva === undefined ? PLAKA_BOS : k.plakaYuva, pu = (yuva % PLAKA_SUTUN) / PLAKA_SUTUN, pv = 1 - (Math.floor(yuva / PLAKA_SUTUN) + 1) / PLAKA_SATIR;
     _arQ.setFromAxisAngle(_v.set(0, 1, 0), HP);
     _m4.compose(_v.set(K.plaka.on[0], K.plaka.on[1], 0), _arQ, _arS).premultiply(_arM);
     PLAKA.setMatrixAt(np, _m4);
@@ -651,26 +678,53 @@ function arabalariYerlestir() {
     }
   }
   for (const tip of KASA_TIP) {
-    GOVDE[tip].count = CAM[tip].count = Math.min(SAYAC[tip], KAP_ARABA);
+    GOVDE[tip].count = CAM[tip].count = Math.min(SAYAC[tip], GOVDE[tip].instanceMatrix.count);
     GOVDE[tip].instanceMatrix.needsUpdate = CAM[tip].instanceMatrix.needsUpdate = true;
     GOVDE[tip].instanceColor.needsUpdate = true;
   }
-  TEKER.count = nt;
-  LAMBA.count = nl;
-  PLAKA.count = np;
-  BASLAR.count = SACLAR.count = GOZLER.count = GOVDE_INSAN.count = nb;
+  TEKER.count = Math.min(nt, TEKER.instanceMatrix.count);
+  LAMBA.count = Math.min(nl, LAMBA.instanceMatrix.count);
+  PLAKA.count = Math.min(np, PLAKA.instanceMatrix.count);
+  BASLAR.count = SACLAR.count = GOZLER.count = GOVDE_INSAN.count = Math.min(nb, BASLAR.instanceMatrix.count);
   for (const m of [TEKER, LAMBA, PLAKA, BASLAR, SACLAR, GOZLER, GOVDE_INSAN])
     m.instanceMatrix.needsUpdate = true;
   LAMBA.instanceColor.needsUpdate = BASLAR.instanceColor.needsUpdate = SACLAR.instanceColor.needsUpdate = GOVDE_INSAN.instanceColor.needsUpdate = true;
   plakaUv.needsUpdate = true;
-  // sahneden silinen arabaların plaka yuvası boşalır
+  // bu karede çizilmeyen kayıtların (silinen, yerine yenisi açılan ya da sınır yüzünden düşen) plaka hücresi boşalır
+  const cizilen = new Set(gorunenArabalar);
   for (const k of plakaSahipleri)
-    if (!D.oy.has(k.id))
+    if (!cizilen.has(k))
       plakaBirak(k);
   plakaSahipleri = gorunenArabalar.slice();
+  ORNEK.araba = gorunenArabalar.length;
+  ORNEK.teker = nt;
+  ORNEK.plaka = np;
+  const yuvalar = plakaSahipleri.filter(k => k.plakaYuva !== undefined);
+  ORNEK.yuva = yuvalar.length;
+  ORNEK.yuvaCakisma = yuvalar.length - new Set(yuvalar.map(k => k.plakaYuva)).size;
+  ORNEK.adYanlis = yuvalar.filter(k => k.plakaAd !== k.ad).length;
+  ORNEK.bosYuva = plakaBos.length;
+  ORNEK.dusen = cizimDisi;
   gelinSusuYerlestir();
 }
-let plakaSahipleri = [];
+let plakaSahipleri = [], cizimDisi = 0;
+const ORNEK = { araba: 0, teker: 0, plaka: 0, yuva: 0, dusen: 0, yuvaCakisma: 0, adYanlis: 0, bosYuva: 0 };
+// Çizilecek arabalar: sahnedekiler (gelin arabası, konu, drift atan önce), sonra çıkmakta olanlar en yenisinden;
+// toplam KAP_ARABA'yı geçmez. Çizilmeyen çıkan araba zaten birkaç kare sonra silinecektir.
+function cizimSirasi() {
+  const ana = [], cikan = [], konu = D.reji && D.reji.konu, yildiz = D.drift && D.drift.k;
+  for (const k of D.oy.values()) {
+    if (!k.ar)
+      continue;
+    (k.cikiyor ? cikan : ana).push(k);
+  }
+  const once = k => k === D.lider || k === konu || k === yildiz ? 1 : 0;
+  ana.sort((a, b) => once(b) - once(a));
+  cikan.sort((a, b) => b.cikis - a.cikis);
+  const hepsi = ana.concat(cikan);
+  cizimDisi = Math.max(0, hepsi.length - KAP_ARABA);
+  return hepsi.slice(0, KAP_ARABA);
+}
 function gelinSusuYerlestir() {
   const L = D.lider && D.lider.ar && !D.lider.cikiyor ? D.lider : null;
   for (const [tip, g] of Object.entries(GELIN.gruplar))

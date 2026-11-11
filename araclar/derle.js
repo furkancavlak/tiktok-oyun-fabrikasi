@@ -88,13 +88,17 @@ function uret(ad) {
   const betik = '<script>\n(() => {\n\'use strict\';\n' + js + '\n})();\n</script>';
   // Kitaplık (isteğe bağlı): oyun.json "kitaplik": ["three"] → kitaplik/three.js, oyunun betiğinden önce kendi
   // <script>'inde. Kitaplık genel bir ad tanımlar (THREE); oyun onu bu adla kullanır. İstemeyen oyunun çıktısı değişmez.
+  // Ad dosyanın adıyla harfi harfine aynı olmalı (Windows büyük/küçük harfi ayırmaz, Linux ayırır); her kitaplık bir
+  // kez gömülür. Gömülen metinde "</script", "<!--" ya da "<script" geçemez: tarayıcı betiği orada keser ya da
+  // sonraki betiği yorumun içine yutar.
   const kitaplik = bilgi.kitaplik === undefined ? [] : bilgi.kitaplik;
-  if (!Array.isArray(kitaplik) || kitaplik.some(a => typeof a !== 'string' || !/^[\w-]+$/.test(a) || !fs.existsSync(path.join(KOK, 'kitaplik', a + '.js'))))
-    hata(ok + '/oyun.json: "kitaplik" kitaplik/ altındaki dosyaların adları olmalı (ör. ["three"]; üretmek için araclar/kitaplik-three.js).');
-  const onBetik = kitaplik.map(a => {
+  const kitapDosya = kitaplik.length && fs.existsSync(path.join(KOK, 'kitaplik')) ? fs.readdirSync(path.join(KOK, 'kitaplik')) : [];
+  if (!Array.isArray(kitaplik) || kitaplik.some(a => typeof a !== 'string' || !/^[\w-]+$/.test(a) || !kitapDosya.includes(a + '.js')))
+    hata(ok + '/oyun.json: "kitaplik" kitaplik/ altındaki dosyaların adları olmalı, harfi harfine (ör. ["three"]; üretmek için araclar/kitaplik-three.js).');
+  const onBetik = [...new Set(kitaplik)].map(a => {
     const k = oku('kitaplik/' + a + '.js');
-    if (/<\/script/i.test(k))
-      hata('kitaplik/' + a + '.js içinde "</script" geçiyor: sayfaya gömülemez.');
+    if (/<\/script|<!--|<script/i.test(k))
+      hata('kitaplik/' + a + '.js içinde "</script", "<!--" ya da "<script" geçiyor: sayfaya gömülemez.');
     return '<script>\n' + k + '\n</script>\n';
   }).join('');
   const BASLIK = '<title>' + kacir(bilgi.ad || ad) + '</title>';

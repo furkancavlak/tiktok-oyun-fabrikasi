@@ -12,7 +12,7 @@ const OYUN = {
   nasil: { yorum: 'Yorum: konvoya katıl', begeni: 'Beğeni: gaz', hediye: 'Hediye: gelin arabası' },
   yazi: {
     sira: 'Konvoy sırası', gosterge: 'Gaz', bos: 'Yol boş. İlk yazan gelin arabasına biner.',
-    birim: 'araba', ses: 'Müziği başlat', sahne: 'Gelin konvoyu sahnesi (3B)', giris: 'konvoya katılır', bosalt: 'Yolu boşalt'
+    birim: 'araba', ses: 'Düğün havasını başlat', sahne: 'Gelin konvoyu sahnesi (3B)', giris: 'konvoya katılır', bosalt: 'Yolu boşalt'
   },
   kapasite: 36,
   // Büyükten küçüğe. tip, oyunHediye'nin hangi etkiyi başlatacağını seçer; etki paneldeki tabloda yazar.

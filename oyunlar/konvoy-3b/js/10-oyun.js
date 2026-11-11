@@ -12,15 +12,17 @@
  * Kancalar: oyunYerlesim, oyunGiris, oyunHediye, oyunLiderDegisti, oyunBaslat, oyunBosalt, oyunDurum.
  */
 const SERIT_L = 1.75;     // iki şeritli dizilişte şeridin yolun ortasına uzaklığı (metre)
+const SERIT_3 = 2.75;     // üç şeritli dizilişte yan şeritlerin yolun ortasına uzaklığı
 const SIRA_ARA = 7.6;   // aynı şeritte iki arabanın arası (araba boyu ~4,3 m + boşluk)
 const ILK_ARA = 9.6;    // gelin arabası ile ilk sıra arası
 const DRIFT_ON = 17;    // drift atanın yeri: gelin arabasının önündeki boş yol
 const KORNA_V = 1.5;    // bir kornanın süresi (vuruş)
 const DRIFT_V = 16;     // drift şovunun (dönüşlerin) süresi (vuruş)
-Object.assign(D, { kolon: 1, zigzag: null, fisekler: [], fisekBit: -1, sovBit: -1, driftKuyruk: [], drift: null, kurdeleUcus: null, yol: 0, hiz: 8, duman: [], sonB: 0 });
+Object.assign(D, { kolon: 1, zigzag: null, fisekler: [], fisekBit: -1, sovBit: -1, driftKuyruk: [], drift: null, kurdeleUcus: null, yol: 0, hiz: 8, duman: [], sonB: 0, yolAc: null });
 
-// Konvoy önce uzar, sonra genişler: beş arabaya kadar tek sıra, sonrası iki şerit.
-function kolonSayisi(m) { return m <= 4 ? 1 : 2; }
+// Konvoy önce uzar, sonra genişler: beş arabaya kadar tek sıra, 17'ye kadar iki şerit, sonrası üç şerit (36 arabada
+// konvoy ~90 metre kalır; iki şeritte ~140 metreydi ve izleyicilerin çoğu her kameradan uzak düşüyordu).
+function kolonSayisi(m) { return m <= 4 ? 1 : m <= 16 ? 2 : 3; }
 function oyunYerlesim() {
   const m = D.sira.length - 1, kol = kolonSayisi(m);
   D.kolon = kol;
@@ -33,15 +35,17 @@ function oyunYerlesim() {
     }
     const s = Math.floor((i - 1) / kol), o = (i - 1) % kol;
     // İki şeritte sıradaki en yüksek jeton sol şeride (gelin arabasının arkasındaki ilk yer), sağ şerit yarım sıra geride.
-    k.hedefL = kol === 1 ? 0 : o === 0 ? SERIT_L : -SERIT_L;
-    k.hedefS = -(ILK_ARA + SIRA_ARA * (s + (kol === 2 && o === 1 ? 0.5 : 0)));
+    // Üç şeritte sıranın en yüksek jetonu ortaya, sonra sol ve sağa; yan şeritler yarım sıra geride.
+    k.hedefL = kol === 1 ? 0 : kol === 2 ? (o === 0 ? SERIT_L : -SERIT_L) : [0, SERIT_3, -SERIT_3][o];
+    k.hedefS = -(ILK_ARA + SIRA_ARA * (s + ((kol === 2 && o === 1) || (kol === 3 && o > 0) ? 0.5 : 0)));
   });
 }
-// Yeni gelen arkadan, kendi şeridinin biraz dışından hızla gelip yerine girer (sollar gibi).
+// Yeni gelen arkadan, geçiş yolundan (gecisL) hızla gelip yerine girer; çıkanlar kaldırım tarafına çekilir, birbirinin
+// içinden geçmezler.
 function oyunGiris(k) {
   arabaHazir(k);
   k.gs = k.hedefS - 34;
-  k.gl = k.hedefL + (k.hedefL >= 0 ? 1.1 : -1.1);
+  k.gl = gecisL(k);
   k.yer = 0;
 }
 
@@ -106,8 +110,11 @@ function oyunBosalt() {
   D.fisekler.length = 0;
   D.duman.length = 0;
   D.fisekBit = D.sovBit = -1;
+  D.yolAc = null;
   muzik.sov = false;
   rejiSifirla();
+  if (DUNYA.r)
+    plakaSifirla();
 }
 function oyunDurum(d) {
   d.gelinArabasi = d.lider;
@@ -126,6 +133,10 @@ function oyunDurum(d) {
   d.cekimKonu = D.reji.konu ? D.reji.konu.ad : null;
   d.gpu = DUNYA.gpu;
   d.konuKadraj = D.reji.kadraj || null;
+  d.webgl = !!DUNYA.r;
+  d.kalite = KALITE.kademe;
+  d.kareAralik = +KALITE.aralik.toFixed(1);
+  d.ornek = Object.assign({}, ORNEK);
 }
 // Korna çalıyor ya da birazdan çalacak (dalga halinde başlayanlar için).
 function kornaCaliyor(k) { return k.korna !== undefined && B < k.korna + KORNA_V; }

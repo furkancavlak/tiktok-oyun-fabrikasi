@@ -14,7 +14,8 @@ const CEKIMLER = ['drone', 'yan', 'on', 'kus', 'tur', 'yakin', 'kenar', 'vinc'];
   const hatalar = [];
   const p = await b.newPage({ viewport: { width: 1280, height: 800 } });
   p.on('pageerror', e => hatalar.push('SAYFA HATASI: ' + e.message));
-  p.on('console', m => { if (m.type() === 'error' && !/ERR_TUNNEL|Failed to load resource/.test(m.text())) hatalar.push(m.text()); });
+  // WebGL uyarıları da hata sayılır ("Vertex buffer is not big enough" gibi; taşma testi bunlara bakar)
+  p.on('console', m => { if ((m.type() === 'error' && !/ERR_TUNNEL|Failed to load resource/.test(m.text())) || (m.type() === 'warning' && /WebGL|GL_|Vertex buffer/.test(m.text()))) hatalar.push(m.text()); });
   await p.goto(OYUN_URL);
   await p.waitForTimeout(800);
   await p.evaluate(() => { if (document.getElementById('oto').getAttribute('aria-pressed') === 'true') document.getElementById('oto').click(); });
@@ -173,7 +174,94 @@ const CEKIMLER = ['drone', 'yan', 'on', 'kus', 'tur', 'yakin', 'kenar', 'vinc'];
   });
   kontrol('Uzun süre sessiz kalan araba kenara çekip yoldan çıkar', cikis.cikti && cikis.silindi, cikis);
 
+  // Taşma: 36 araba sahnedeyken 1,7 saniyede 30 kişi daha girer (çıkanlar birikir). Örnek havuzları taşmaz, WebGL
+  // hata yazmaz, her çizilen arabanın dört tekerleği ve iki plakası durur (denetim: test/cikti/denetim-3b/tasma2.js).
+  await bosalt();
+  await p.evaluate(() => { for (let i = 0; i < 36; i++) CanliOyun.olay({ tip: 'yorum', kullanici: { id: 't' + i, ad: 'dolu' + i }, metin: 'x' }); });
+  await p.waitForTimeout(2500);
+  const glOnce = hatalar.length;
+  const tas = await p.evaluate(async () => {
+    for (let i = 0; i < 60; i++) CanliOyun.olay({ tip: 'yorum', kullanici: { id: 'u' + i, ad: 'yeni' + i }, metin: 'x' });
+    const enCok = [];
+    for (let i = 0; i < 8; i++) {
+      await new Promise(r => setTimeout(r, 120));
+      const d = CanliOyun.durum();
+      enCok.push({ oy: CanliOyun._test.D.oy.size, ...d.ornek });
+    }
+    return enCok;
+  });
+  const tasKotu = tas.filter(x => x.teker !== x.araba * 4 || x.plaka !== x.araba * 2 || x.araba > 64 || x.yuvaCakisma || x.adYanlis);
+  kontrol('Bir anda 60 kişi girince (yaşayan kayıt 64 üstü) örnek havuzları taşmaz: tekerlek ve plakalar tam, WebGL hata yazmaz', tasKotu.length === 0 && hatalar.length === glOnce && tas.some(x => x.oy > 64), { enCok: tas.reduce((a, x) => x.oy > a.oy ? x : a, tas[0]), kotu: tasKotu.length, gl: hatalar.slice(glOnce, glOnce + 2) });
+
+  // Plaka hücresi kayda bağlıdır: çıkmakta olan izleyici yeniden yazınca (aynı kimlik, yeni kayıt) eski hücre boşalır.
+  // 90 tur sonra her çizilen arabanın kendi hücresi ve kendi adı var; "boşalt" atlası temizler (denetim: plaka.js).
+  await bosalt();
+  await p.evaluate(() => { for (let i = 0; i < 36; i++) CanliOyun.olay({ tip: 'yorum', kullanici: { id: 'a' + i, ad: 'ilk' + i }, metin: 'x' }); });
+  await p.waitForTimeout(1500);
+  const pl = await p.evaluate(async () => {
+    const D = CanliOyun._test.D, bekle = ms => new Promise(r => setTimeout(r, ms));
+    let tur = 0;
+    for (let i = 0; i < 90; i++) {
+      const once = new Set(D.sira.map(k => k.id));
+      CanliOyun.olay({ tip: 'yorum', kullanici: { id: 'n' + i, ad: 'yeni' + i }, metin: 'x' });
+      const cikan = [...once].find(id => !D.sira.some(k => k.id === id));
+      await bekle(60);
+      if (cikan) { CanliOyun.olay({ tip: 'yorum', kullanici: { id: cikan, ad: 'geri_' + cikan }, metin: 'geldim' }); tur++; }
+      await bekle(60);
+    }
+    await bekle(2500);
+    const o = CanliOyun.durum().ornek;
+    document.getElementById('bosalt').click();
+    await bekle(300);
+    return { tur, o, bos: CanliOyun.durum().ornek.bosYuva };
+  });
+  kontrol('Plaka hücreleri sızmaz: 90 geri dönüşten sonra her araba kendi hücresinde kendi adıyla; boşaltınca bütün hücreler boşalır', pl.tur > 30 && pl.o.yuvaCakisma === 0 && pl.o.adYanlis === 0 && pl.o.yuva === pl.o.araba && pl.bos === 127, pl);
+
+  // Tek ad: büyük kartın konusu (lider çekiminde yeni gelin arabası) küçük etiketle ikinci kez yazılmaz
+  await p.evaluate(() => { for (let i = 0; i < 9; i++) CanliOyun.olay({ tip: 'yorum', kullanici: { id: 'k' + i, ad: 'kart' + i }, metin: 'x' }); CanliOyun._test.D.reji.zorla = 'lider'; });
+  await p.waitForTimeout(1500);
+  await p.waitForTimeout(2500);
+  const kart = await p.evaluate(() => { const o = CanliOyun._test.olcum(); return { lider: (o.kisiler.find(k => k.lider) || {}).etiket || null, oteki: o.kisiler.filter(k => !k.lider && k.etiket).length, cekim: CanliOyun.durum().cekim }; });
+  // Tek istisna: kadrajda başka hiçbir ad yoksa çekirdeğin "en az bir ad" kuralı için konunun küçük etiketi de yazılır.
+  kontrol('Lider çekiminde gelin arabasının adı yalnız büyük kartta (başka ad varken küçük etiket yok)', kart.cekim === 'lider' && (kart.lider === null || kart.oteki === 0), kart);
+  await p.evaluate(() => { CanliOyun._test.D.reji.zorla = null; });
+  const kal = await durum();
+  kontrol('Kalite kademesi ve gerçek kare aralığı durumda (ekran kartında en yüksek kademe)', kal.kalite === 0 && kal.kareAralik > 0 && kal.kareAralik < 26 && kal.webgl === true, { kalite: kal.kalite, kareAralik: kal.kareAralik });
+
   kontrol('Konvoy 3B testlerinde sayfada hata çıkmadı', hatalar.length === 0, hatalar.slice(0, 4).join(' | '));
   await b.close();
+
+  // WebGL yok: sahnede düz Türkçe uyarı, konsolda hata yok, kurallar yine çalışır
+  const b2 = await tarayici(['--disable-webgl', '--disable-3d-apis']);
+  const p2 = await b2.newPage({ viewport: { width: 1280, height: 800 } }), h2 = [];
+  p2.on('pageerror', e => h2.push('SAYFA HATASI: ' + e.message));
+  p2.on('console', m => { if ((m.type() === 'error' || m.type() === 'warning') && !/ERR_|Failed to load resource|AudioContext/.test(m.text())) h2.push(m.type() + ': ' + m.text()); });
+  await p2.goto(OYUN_URL);
+  await p2.waitForTimeout(1200);
+  const ng = await p2.evaluate(() => {
+    CanliOyun.olay({ tip: 'yorum', kullanici: { id: 'w', ad: 'webglsiz' }, metin: 'x' });
+    const t = document.getElementById('tuval'), g = t.getContext('2d'), px = g.getImageData(Math.round(t.width / 2), Math.round(t.height * 0.6), 1, 1).data;
+    return { webgl: CanliOyun.durum().webgl, kisi: CanliOyun.durum().kisi, piksel: Array.from(px), tuval3b: !!document.getElementById('tuval-3b') };
+  });
+  await p2.locator('#sahne').screenshot({ path: CIKTI + '/k-webgl-yok.png' });
+  kontrol('WebGL yokken sahnede koyu uyarı kartı çıkar, konsolda hata yok, oyun olayları işler', ng.webgl === false && !ng.tuval3b && ng.kisi >= 1 && ng.piksel[0] < 80 && h2.length === 0, { ...ng, hata: h2.slice(0, 3) });
+  await b2.close();
+
+  // Yazılımla çizim (ekran kartı yok gibi): gerçek kare aralığı ölçülür, kalite kademe kademe düşer; en düşükte de
+  // yavaşsa panelde düz bir uyarı çıkar.
+  const b3 = await tarayici(['--use-angle=swiftshader', '--enable-unsafe-swiftshader']);
+  const p3 = await b3.newPage({ viewport: { width: 1080, height: 1920 } });
+  await p3.goto(OYUN_URL + '#yayin');
+  await p3.waitForTimeout(800);
+  await p3.evaluate(() => { for (let i = 0; i < 36; i++) CanliOyun.olay({ tip: 'yorum', kullanici: { id: 's' + i, ad: 'yazilim' + i }, metin: 'x' }); });
+  // en çok 45 sn: önce kademeler iner, en düşükte bir ölçüm daha yavaşsa uyarı çıkar
+  for (let i = 0; i < 15; i++) {
+    await p3.waitForTimeout(3000);
+    if (await p3.evaluate(() => CanliOyun.durum().kalite >= 3 && (CanliOyun.durum().kareAralik < 33 || [...document.querySelectorAll('#panel p.not')].some(e => /yetişmiyor/.test(e.textContent)))))
+      break;
+  }
+  const sw = await p3.evaluate(() => { const d = CanliOyun.durum(); return { gpu: d.gpu, kalite: d.kalite, kareAralik: d.kareAralik, kareMs: +d.kareMs.toFixed(1), uyari: [...document.querySelectorAll('#panel p.not')].some(e => /ekran kartı 3B sahneye yetişmiyor/.test(e.textContent)) }; });
+  kontrol('Yazılımla çizimde gerçek kare aralığı ölçülür, kalite düşer; en düşükte de yavaşsa panel uyarır', sw.kalite >= 3 && (sw.kareAralik < 33 || sw.uyari), sw);
+  await b3.close();
   process.exit(raporla(sonuc) ? 1 : 0);
 })().catch(e => { console.error('TEST ÇÖKTÜ', e); process.exit(1); });

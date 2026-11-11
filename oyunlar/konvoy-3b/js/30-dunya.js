@@ -227,6 +227,12 @@ function dokulariHazirla() {
       a.beginPath();
       a.arc(192, 64, 11, 0, TAU);
       a.fill();
+      // jantın üst kenarında parlama (güneş yansıması): dönüşte de görünür
+      a.strokeStyle = 'rgba(255,255,255,.85)';
+      a.lineWidth = 4;
+      a.beginPath();
+      a.arc(192, 64, 40, -2.4, -1.2);
+      a.stroke();
       a.fillStyle = '#e23d2f';
       a.fillRect(186, 22, 12, 9);
     }),
@@ -305,12 +311,16 @@ function malzemeleriHazirla() {
 function dunyaKur() {
   if (DUNYA.r || DUNYA.yok)
     return;
-  let r;
+  // WebGL yoksa (eski bilgisayar, kapalı ekran kartı hızlandırması) three.js hiç kurulmaz: konsola hata düşmesin.
+  // Oyun yine çalışır (kurallar, sıralama, yazılar); sahnede ne olduğunu söyleyen bir yazı çıkar (oyunZemin).
+  let r = null;
   try {
-    r = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: true });
+    const dene = document.createElement('canvas');
+    if (dene.getContext('webgl2') || dene.getContext('webgl'))
+      r = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: true });
   }
-  catch (e) {
-    // WebGL yoksa oyun yine çalışır (kurallar, yazılar); sahne yerine düz bir gök çizilir (oyunZemin).
+  catch (e) { r = null; }
+  if (!r) {
     DUNYA.yok = true;
     return;
   }
@@ -553,9 +563,9 @@ function parcaKur(i) {
     }
   ekle(K.bitir(), MALZ.renkli, false);
   // yol kenarı ve kasaba
-  const kenar = { '-1': new Yigin(), '1': new Yigin() }, bina = new Yigin(), cam = new Yigin(), tabela = new Yigin(true), bayrak = new Yigin(), park = new Yigin();
+  const kenar = { '-1': new Yigin(), '1': new Yigin() }, bina = new Yigin(), cam = new Yigin(), tabela = new Yigin(true), bayrak = new Yigin(), park = new Yigin(), uzak = new Yigin();
   kenarDiz(i, s0, s1, ox, oz, kenar, bayrak, r);
-  binaDiz(i, s0, s1, ox, oz, bina, cam, tabela, r);
+  binaDiz(i, s0, s1, ox, oz, bina, cam, tabela, r, uzak);
   parkDiz(i, s0, s1, ox, oz, park);
   // ağaç ve direk sırası her yanda ayrı parça: alçak kamera o yanın ağaç sırasına girince o sıra gizlenir (reji)
   const kenarM = {};
@@ -576,7 +586,9 @@ function parcaKur(i) {
     parkMesh.userData.park = true;
   }
   DUNYA.sahne.add(grup);
-  DUNYA.parcalar.set(i, { grup, wx: ox, wz: oz, s0, park: parkMesh, kenar: kenarM });
+  // arka sıralar, bahçeler, cami: kalite düşünce (zayıf ekran kartı) gizlenir
+  const uzakMesh = uzak.bos() ? null : ekle(uzak.bitir(), MALZ.renkli, false);
+  DUNYA.parcalar.set(i, { grup, wx: ox, wz: oz, s0, park: parkMesh, kenar: kenarM, uzak: uzakMesh });
 }
 
 /* ---- yol kenarı: ağaçlar, direkler, bayraklı ipler ---- */
@@ -667,7 +679,7 @@ const TENTE = [['#d83a2c', '#f7f1e6'], ['#2f8f55', '#f7f1e6'], ['#2765a8', '#f7f
 // Ara sokak: her ikinci parçada, parçanın ortasında yoldan dik ayrılan bir sokak (iki yanda da). Binalar ona boşluk bırakır.
 function araSokak(pi) { return pi % 2 === 0 ? pi * PARCA + 30 : null; }
 const SOKAK_YARI = 4.6;
-function binaDiz(pi, s0, s1, ox, oz, Y, CY, TY, r) {
+function binaDiz(pi, s0, s1, ox, oz, Y, CY, TY, r, UY) {
   const M = new THREE.Matrix4(), sokak = araSokak(pi);
   const bos = (a, b) => sokak === null || b < sokak - SOKAK_YARI || a > sokak + SOKAK_YARI;
   for (const yan of [-1, 1]) {
@@ -694,6 +706,7 @@ function binaDiz(pi, s0, s1, ox, oz, Y, CY, TY, r) {
     }
     // arka sıralar: kiremit çatılı evler, aralarında bahçe ağaçları; üç sıra, uzaklaştıkça daha sık ve basit
     for (const [l0, l1, ad] of [[22, 38, 'a'], [42, 62, 'b'], [66, 96, 'c']]) {
+      const Y2 = ad === 'a' ? Y : UY;
       const ra = rastgeleUret(ozet('arka' + ad + pi + ':' + yan));
       for (let s2 = s0 + ra() * 6; s2 < s1; s2 += 9 + ra() * 6) {
         const l = yan * (l0 + ra() * (l1 - l0 - 8)), w = 7 + ra() * 5, d = 7 + ra() * 4, h = 4 + Math.floor(ra() * (ad === 'a' ? 4 : 3)) * 3;
@@ -703,11 +716,11 @@ function binaDiz(pi, s0, s1, ox, oz, Y, CY, TY, r) {
         if (ra() < 0.22) {
           // bahçe: iki üç ağaç öbeği
           for (let q = 0; q < 3; q++)
-            parcaEkle(Y, M, 'top', (ra() - 0.5) * w, 3 + ra() * 2, -d / 2 + (ra() - 0.5) * d, 4 + ra() * 2, 3.5 + ra() * 1.5, 4 + ra() * 2, ra() < 0.5 ? '#5f8f3a' : '#4f7d33');
+            parcaEkle(Y2, M, 'top', (ra() - 0.5) * w, 3 + ra() * 2, -d / 2 + (ra() - 0.5) * d, 4 + ra() * 2, 3.5 + ra() * 1.5, 4 + ra() * 2, ra() < 0.5 ? '#5f8f3a' : '#4f7d33');
           continue;
         }
-        parcaEkle(Y, M, 'kutu', 0, h / 2, -d / 2, w, h, d, SIVA[Math.floor(ra() * SIVA.length)]);
-        parcaEkle(Y, M, 'piramit', 0, h + 1.2, -d / 2, w * 1.08, 2.4, d * 1.1, ra() < 0.8 ? '#b5533a' : '#9a4a36');
+        parcaEkle(Y2, M, 'kutu', 0, h / 2, -d / 2, w, h, d, SIVA[Math.floor(ra() * SIVA.length)]);
+        parcaEkle(Y2, M, 'piramit', 0, h + 1.2, -d / 2, w * 1.08, 2.4, d * 1.1, ra() < 0.8 ? '#b5533a' : '#9a4a36');
         if (ad === 'a')
           for (let k = 0; k < Math.floor(h / 3); k++)
             for (let q = -1; q <= 1; q++)
@@ -718,7 +731,7 @@ function binaDiz(pi, s0, s1, ox, oz, Y, CY, TY, r) {
     const rc = rastgeleUret(ozet('cami' + pi + ':' + yan));
     if (rc() < 0.22) {
       cerceveMatris(s0 + 20 + rc() * 20, yan * (100 + rc() * 40), 0, ox, oz, true, M);
-      caminin(Y, M);
+      caminin(UY, M);
     }
   }
 }

@@ -523,6 +523,29 @@ CanliOyun.olay({tip:"hediye", kullanici:{id:"ayse", ad:"Ayşe"}, jeton:50})</pre
  * Copyright 2010-2023 Three.js Authors
  * SPDX-License-Identifier: MIT
  */
+/*
+ * three.js r160 - The MIT License
+ *
+ * Copyright © 2010-2023 three.js authors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
 /* Bu dosya üretilir: node araclar/kitaplik-three.js <three.module.js>. three.js r160, genel THREE nesnesi olarak. */
 var THREE = (function () {
 'use strict';
@@ -53585,7 +53608,7 @@ const OYUN = {
   nasil: { yorum: 'Yorum: konvoya katıl', begeni: 'Beğeni: gaz', hediye: 'Hediye: gelin arabası' },
   yazi: {
     sira: 'Konvoy sırası', gosterge: 'Gaz', bos: 'Yol boş. İlk yazan gelin arabasına biner.',
-    birim: 'araba', ses: 'Müziği başlat', sahne: 'Gelin konvoyu sahnesi (3B)', giris: 'konvoya katılır', bosalt: 'Yolu boşalt'
+    birim: 'araba', ses: 'Düğün havasını başlat', sahne: 'Gelin konvoyu sahnesi (3B)', giris: 'konvoya katılır', bosalt: 'Yolu boşalt'
   },
   kapasite: 36,
   // Büyükten küçüğe. tip, oyunHediye'nin hangi etkiyi başlatacağını seçer; etki paneldeki tabloda yazar.
@@ -56978,15 +57001,17 @@ queueMicrotask(() => {
  * Kancalar: oyunYerlesim, oyunGiris, oyunHediye, oyunLiderDegisti, oyunBaslat, oyunBosalt, oyunDurum.
  */
 const SERIT_L = 1.75;     // iki şeritli dizilişte şeridin yolun ortasına uzaklığı (metre)
+const SERIT_3 = 2.75;     // üç şeritli dizilişte yan şeritlerin yolun ortasına uzaklığı
 const SIRA_ARA = 7.6;   // aynı şeritte iki arabanın arası (araba boyu ~4,3 m + boşluk)
 const ILK_ARA = 9.6;    // gelin arabası ile ilk sıra arası
 const DRIFT_ON = 17;    // drift atanın yeri: gelin arabasının önündeki boş yol
 const KORNA_V = 1.5;    // bir kornanın süresi (vuruş)
 const DRIFT_V = 16;     // drift şovunun (dönüşlerin) süresi (vuruş)
-Object.assign(D, { kolon: 1, zigzag: null, fisekler: [], fisekBit: -1, sovBit: -1, driftKuyruk: [], drift: null, kurdeleUcus: null, yol: 0, hiz: 8, duman: [], sonB: 0 });
+Object.assign(D, { kolon: 1, zigzag: null, fisekler: [], fisekBit: -1, sovBit: -1, driftKuyruk: [], drift: null, kurdeleUcus: null, yol: 0, hiz: 8, duman: [], sonB: 0, yolAc: null });
 
-// Konvoy önce uzar, sonra genişler: beş arabaya kadar tek sıra, sonrası iki şerit.
-function kolonSayisi(m) { return m <= 4 ? 1 : 2; }
+// Konvoy önce uzar, sonra genişler: beş arabaya kadar tek sıra, 17'ye kadar iki şerit, sonrası üç şerit (36 arabada
+// konvoy ~90 metre kalır; iki şeritte ~140 metreydi ve izleyicilerin çoğu her kameradan uzak düşüyordu).
+function kolonSayisi(m) { return m <= 4 ? 1 : m <= 16 ? 2 : 3; }
 function oyunYerlesim() {
   const m = D.sira.length - 1, kol = kolonSayisi(m);
   D.kolon = kol;
@@ -56999,15 +57024,17 @@ function oyunYerlesim() {
     }
     const s = Math.floor((i - 1) / kol), o = (i - 1) % kol;
     // İki şeritte sıradaki en yüksek jeton sol şeride (gelin arabasının arkasındaki ilk yer), sağ şerit yarım sıra geride.
-    k.hedefL = kol === 1 ? 0 : o === 0 ? SERIT_L : -SERIT_L;
-    k.hedefS = -(ILK_ARA + SIRA_ARA * (s + (kol === 2 && o === 1 ? 0.5 : 0)));
+    // Üç şeritte sıranın en yüksek jetonu ortaya, sonra sol ve sağa; yan şeritler yarım sıra geride.
+    k.hedefL = kol === 1 ? 0 : kol === 2 ? (o === 0 ? SERIT_L : -SERIT_L) : [0, SERIT_3, -SERIT_3][o];
+    k.hedefS = -(ILK_ARA + SIRA_ARA * (s + ((kol === 2 && o === 1) || (kol === 3 && o > 0) ? 0.5 : 0)));
   });
 }
-// Yeni gelen arkadan, kendi şeridinin biraz dışından hızla gelip yerine girer (sollar gibi).
+// Yeni gelen arkadan, geçiş yolundan (gecisL) hızla gelip yerine girer; çıkanlar kaldırım tarafına çekilir, birbirinin
+// içinden geçmezler.
 function oyunGiris(k) {
   arabaHazir(k);
   k.gs = k.hedefS - 34;
-  k.gl = k.hedefL + (k.hedefL >= 0 ? 1.1 : -1.1);
+  k.gl = gecisL(k);
   k.yer = 0;
 }
 
@@ -57072,8 +57099,11 @@ function oyunBosalt() {
   D.fisekler.length = 0;
   D.duman.length = 0;
   D.fisekBit = D.sovBit = -1;
+  D.yolAc = null;
   muzik.sov = false;
   rejiSifirla();
+  if (DUNYA.r)
+    plakaSifirla();
 }
 function oyunDurum(d) {
   d.gelinArabasi = d.lider;
@@ -57092,6 +57122,10 @@ function oyunDurum(d) {
   d.cekimKonu = D.reji.konu ? D.reji.konu.ad : null;
   d.gpu = DUNYA.gpu;
   d.konuKadraj = D.reji.kadraj || null;
+  d.webgl = !!DUNYA.r;
+  d.kalite = KALITE.kademe;
+  d.kareAralik = +KALITE.aralik.toFixed(1);
+  d.ornek = Object.assign({}, ORNEK);
 }
 // Korna çalıyor ya da birazdan çalacak (dalga halinde başlayanlar için).
 function kornaCaliyor(k) { return k.korna !== undefined && B < k.korna + KORNA_V; }
@@ -57120,21 +57154,33 @@ function yolNokta(s, l, y, out) {
 }
 
 let sonDt = 0.016;
+// Geçiş yolu: arkadan gelen (yeni katılan, öne geçen yeni gelin arabası, drift atan) bu yanal çizgiden ilerler, yerine
+// yaklaşınca kendi şeridine kayar. Öteki arabalar o sürerken geçiş yolundan yana açılır (yolAc).
+function gecisL() { return D.kolon === 1 ? 2.1 : D.kolon === 2 ? 0 : -3.3; }
+function yolAcPay(k) { return D.kolon === 1 ? -2.0 : D.kolon === 2 ? (k.hedefL > 0 ? 0.95 : -0.95) : 1.0; }
+// Çıkan araba kaldırım tarafına çekilir (geçiş yolunun öbür yanı).
+function cikisL(k) { return D.kolon === 1 ? -3.5 : D.kolon === 2 ? (k.gl >= 0 ? 3.5 : -3.5) : 3.6; }
 function arabaHareket(k, dt) {
   let hs = k.hedefS, hl = k.hedefL;
   const dr = D.drift, yildiz = dr && dr.k === k;
   if (k.cikiyor) {
     // Çıkan arabanın hızı düşer, kaldırıma çekip geride kalır.
-    if (k.cikS === undefined)
+    if (k.cikS === undefined) {
       k.cikS = k.gs;
-    hl = (k.gl >= 0 ? 1 : -1) * 3.3;
-    hs = k.gs - 30;
+      k.cikL = cikisL(k);
+    }
+    hl = k.cikL;
+    // önce kenara çeker, sonra geride kalır
+    hs = k.gs - (Math.abs(k.gl - hl) < 0.8 ? 30 : 3);
     k.gitti = k.gs < k.cikS - 24;
   }
   else if (yildiz) {
     hs = DRIFT_ON;
-    hl = dr.donus === null ? (D.kolon === 1 ? 2.1 : 0) : 0;
+    hl = dr.donus === null && Math.abs(hs - k.gs) > 4 ? gecisL() : 0;
   }
+  else if (Math.abs(hs - k.gs) > 6 && k.yer < 0.9)
+    // yerinden uzakta (yeni katılmış, öne geçen): geçiş yolundan gider
+    hl = gecisL();
   // İleri geri: uzaktaysa hızlı (drift atan konvoyu sollayarak öne fırlar), yaklaştıkça yavaşlar.
   const ds = hs - k.gs, ads = Math.abs(ds);
   if (ads > 0.002) {
@@ -57156,9 +57202,12 @@ function arabaHareket(k, dt) {
       ox += 1.15 * Math.sin(Math.PI * u / zz.sure) * Math.sin(TAU * u / 4 - sira * 0.9);
   }
   // Drift şovunda öteki arabalar iki yana açılır: ortada yıldızın koridoru kalır (tek sırada hepsi sağa).
-  if (dr && !yildiz && !k.cikiyor)
-    ox += (D.kolon === 1 ? -1 : k.hedefL > 0 ? 1 : -1) * (D.kolon === 1 ? 2.0 : 0.95);
-  k.ox += (ox - k.ox) * Math.min(1, dt * (dr ? 4 : 10));
+  // Drift atan ya da yeni gelin arabası öne geçerken öteki arabalar geçiş yolundan yana açılır.
+  const gecen = dr && dr.donus === null ? dr.k : D.yolAc;
+  const acik = gecen && gecen !== k && !k.cikiyor && k.yer > 0.5;
+  if (acik || (dr && !yildiz && !k.cikiyor))
+    ox += yolAcPay(k);
+  k.ox += (ox - k.ox) * Math.min(1, dt * (dr || acik ? 4 : 10));
   if (yildiz && dr.donus !== null && !azHareket) {
     // Drift: dört vuruşun ikisinde yerinde küçük bir daire çizerek tam tur döner, ikisinde poz verir.
     const su = B - dr.donus;
@@ -57167,13 +57216,15 @@ function arabaHareket(k, dt) {
       sapma = a;
       k.ox = 1.5 * Math.sin(a);
       os = 1.1 * (1 - Math.cos(a));
-      if (u < 2 && D.duman.length < 70 && Math.random() < dt * 34)
+      // duman vuruş saatiyle çıkar: vuruşun her on altıda birinde iki lastikten birer bulut
+      if (u < 2 && D.duman.length < 70 && Math.floor(B * 16) !== Math.floor((k._dumanB ?? B) * 16))
         for (const ar of [-1.3, 1.3]) {
           const p = yolNokta(D.yol + k.gs + os + ar * Math.cos(a), k.gl + k.ox - ar * Math.sin(a), 0, rejiV0);
           D.duman.push({ x: p.x + DUNYA.kx + (Math.random() - 0.5) * 0.6, z: p.z + DUNYA.kz + (Math.random() - 0.5) * 0.6, b0: B, r: 0.6 + Math.random() * 0.5 });
         }
     }
   }
+  k._dumanB = B;
   k.os = os;
   // Yön: arabanın gerçek hızının yönü (yola göre). Şerit değiştiren, zigzag yapan araba gittiği yana kırılır.
   const sToplam = k.gs + k.os, lToplam = k.gl + k.ox;
@@ -57489,6 +57540,12 @@ function dokulariHazirla() {
       a.beginPath();
       a.arc(192, 64, 11, 0, TAU);
       a.fill();
+      // jantın üst kenarında parlama (güneş yansıması): dönüşte de görünür
+      a.strokeStyle = 'rgba(255,255,255,.85)';
+      a.lineWidth = 4;
+      a.beginPath();
+      a.arc(192, 64, 40, -2.4, -1.2);
+      a.stroke();
       a.fillStyle = '#e23d2f';
       a.fillRect(186, 22, 12, 9);
     }),
@@ -57567,12 +57624,16 @@ function malzemeleriHazirla() {
 function dunyaKur() {
   if (DUNYA.r || DUNYA.yok)
     return;
-  let r;
+  // WebGL yoksa (eski bilgisayar, kapalı ekran kartı hızlandırması) three.js hiç kurulmaz: konsola hata düşmesin.
+  // Oyun yine çalışır (kurallar, sıralama, yazılar); sahnede ne olduğunu söyleyen bir yazı çıkar (oyunZemin).
+  let r = null;
   try {
-    r = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: true });
+    const dene = document.createElement('canvas');
+    if (dene.getContext('webgl2') || dene.getContext('webgl'))
+      r = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: true });
   }
-  catch (e) {
-    // WebGL yoksa oyun yine çalışır (kurallar, yazılar); sahne yerine düz bir gök çizilir (oyunZemin).
+  catch (e) { r = null; }
+  if (!r) {
     DUNYA.yok = true;
     return;
   }
@@ -57815,9 +57876,9 @@ function parcaKur(i) {
     }
   ekle(K.bitir(), MALZ.renkli, false);
   // yol kenarı ve kasaba
-  const kenar = { '-1': new Yigin(), '1': new Yigin() }, bina = new Yigin(), cam = new Yigin(), tabela = new Yigin(true), bayrak = new Yigin(), park = new Yigin();
+  const kenar = { '-1': new Yigin(), '1': new Yigin() }, bina = new Yigin(), cam = new Yigin(), tabela = new Yigin(true), bayrak = new Yigin(), park = new Yigin(), uzak = new Yigin();
   kenarDiz(i, s0, s1, ox, oz, kenar, bayrak, r);
-  binaDiz(i, s0, s1, ox, oz, bina, cam, tabela, r);
+  binaDiz(i, s0, s1, ox, oz, bina, cam, tabela, r, uzak);
   parkDiz(i, s0, s1, ox, oz, park);
   // ağaç ve direk sırası her yanda ayrı parça: alçak kamera o yanın ağaç sırasına girince o sıra gizlenir (reji)
   const kenarM = {};
@@ -57838,7 +57899,9 @@ function parcaKur(i) {
     parkMesh.userData.park = true;
   }
   DUNYA.sahne.add(grup);
-  DUNYA.parcalar.set(i, { grup, wx: ox, wz: oz, s0, park: parkMesh, kenar: kenarM });
+  // arka sıralar, bahçeler, cami: kalite düşünce (zayıf ekran kartı) gizlenir
+  const uzakMesh = uzak.bos() ? null : ekle(uzak.bitir(), MALZ.renkli, false);
+  DUNYA.parcalar.set(i, { grup, wx: ox, wz: oz, s0, park: parkMesh, kenar: kenarM, uzak: uzakMesh });
 }
 
 /* ---- yol kenarı: ağaçlar, direkler, bayraklı ipler ---- */
@@ -57929,7 +57992,7 @@ const TENTE = [['#d83a2c', '#f7f1e6'], ['#2f8f55', '#f7f1e6'], ['#2765a8', '#f7f
 // Ara sokak: her ikinci parçada, parçanın ortasında yoldan dik ayrılan bir sokak (iki yanda da). Binalar ona boşluk bırakır.
 function araSokak(pi) { return pi % 2 === 0 ? pi * PARCA + 30 : null; }
 const SOKAK_YARI = 4.6;
-function binaDiz(pi, s0, s1, ox, oz, Y, CY, TY, r) {
+function binaDiz(pi, s0, s1, ox, oz, Y, CY, TY, r, UY) {
   const M = new THREE.Matrix4(), sokak = araSokak(pi);
   const bos = (a, b) => sokak === null || b < sokak - SOKAK_YARI || a > sokak + SOKAK_YARI;
   for (const yan of [-1, 1]) {
@@ -57956,6 +58019,7 @@ function binaDiz(pi, s0, s1, ox, oz, Y, CY, TY, r) {
     }
     // arka sıralar: kiremit çatılı evler, aralarında bahçe ağaçları; üç sıra, uzaklaştıkça daha sık ve basit
     for (const [l0, l1, ad] of [[22, 38, 'a'], [42, 62, 'b'], [66, 96, 'c']]) {
+      const Y2 = ad === 'a' ? Y : UY;
       const ra = rastgeleUret(ozet('arka' + ad + pi + ':' + yan));
       for (let s2 = s0 + ra() * 6; s2 < s1; s2 += 9 + ra() * 6) {
         const l = yan * (l0 + ra() * (l1 - l0 - 8)), w = 7 + ra() * 5, d = 7 + ra() * 4, h = 4 + Math.floor(ra() * (ad === 'a' ? 4 : 3)) * 3;
@@ -57965,11 +58029,11 @@ function binaDiz(pi, s0, s1, ox, oz, Y, CY, TY, r) {
         if (ra() < 0.22) {
           // bahçe: iki üç ağaç öbeği
           for (let q = 0; q < 3; q++)
-            parcaEkle(Y, M, 'top', (ra() - 0.5) * w, 3 + ra() * 2, -d / 2 + (ra() - 0.5) * d, 4 + ra() * 2, 3.5 + ra() * 1.5, 4 + ra() * 2, ra() < 0.5 ? '#5f8f3a' : '#4f7d33');
+            parcaEkle(Y2, M, 'top', (ra() - 0.5) * w, 3 + ra() * 2, -d / 2 + (ra() - 0.5) * d, 4 + ra() * 2, 3.5 + ra() * 1.5, 4 + ra() * 2, ra() < 0.5 ? '#5f8f3a' : '#4f7d33');
           continue;
         }
-        parcaEkle(Y, M, 'kutu', 0, h / 2, -d / 2, w, h, d, SIVA[Math.floor(ra() * SIVA.length)]);
-        parcaEkle(Y, M, 'piramit', 0, h + 1.2, -d / 2, w * 1.08, 2.4, d * 1.1, ra() < 0.8 ? '#b5533a' : '#9a4a36');
+        parcaEkle(Y2, M, 'kutu', 0, h / 2, -d / 2, w, h, d, SIVA[Math.floor(ra() * SIVA.length)]);
+        parcaEkle(Y2, M, 'piramit', 0, h + 1.2, -d / 2, w * 1.08, 2.4, d * 1.1, ra() < 0.8 ? '#b5533a' : '#9a4a36');
         if (ad === 'a')
           for (let k = 0; k < Math.floor(h / 3); k++)
             for (let q = -1; q <= 1; q++)
@@ -57980,7 +58044,7 @@ function binaDiz(pi, s0, s1, ox, oz, Y, CY, TY, r) {
     const rc = rastgeleUret(ozet('cami' + pi + ':' + yan));
     if (rc() < 0.22) {
       cerceveMatris(s0 + 20 + rc() * 20, yan * (100 + rc() * 40), 0, ox, oz, true, M);
-      caminin(Y, M);
+      caminin(UY, M);
     }
   }
 }
@@ -58296,11 +58360,16 @@ function kasaGeo(tip) {
   for (const s of [-1, 1]) {
     parcaEkle(Y, null, 'kutu', F.x - 0.005, F.y, s * F.z, 0.05, F.h + 0.04, F.w + 0.04, koyu, 0, 0, 0, 0);
     parcaEkle(Y, null, 'kutu', S.x + 0.005, S.y, s * S.z, 0.05, S.h + 0.04, S.w + 0.04, koyu, 0, 0, 0, 0);
+    // stopun yanında beyaz geri vites lambası: arka lamba iki renkli
+    parcaEkle(Y, null, 'kutu', S.x - 0.006, S.y, s * (S.z - S.w / 2 - 0.05), 0.03, S.h * 0.8, 0.07, '#f2efe6', 0, 0, 0, 0);
   }
   const x0 = A[0][0] + 0.35, x1 = son[0] - 0.45;
   for (const s of [-1, 1]) {
     // yan bant (seksenlerin kauçuk şeridi) ve kapı kolları
     parcaEkle(Y, null, 'kutu', (x0 + x1) / 2, yb - 0.33, s * (W / 2 + 0.004), x1 - x0, 0.055, 0.03, '#26272b', 0, 0, 0, 0);
+    // ince krem yan çizgi (boyanın üstünde ikinci ton) ve cam altında krom pervaz
+    parcaEkle(Y, null, 'kutu', (x0 + x1) / 2, yb - 0.17, s * (W / 2 + 0.002), x1 - x0 - 0.2, 0.022, 0.02, '#efe6cf', 0, 0, 0, 0);
+    parcaEkle(Y, null, 'kutu', (G[0][0] + G[3][0]) / 2, yb + 0.012, s * (hw(yb) + 0.004), G[3][0] - G[0][0] - 0.05, 0.022, 0.02, krom, 0, 0, 0, 0);
     for (const [a] of K.cam.slice(-2))
       parcaEkle(Y, null, 'kutu', a + 0.05, yb - 0.1, s * (W / 2 + 0.008), 0.16, 0.035, 0.03, krom, 0, 0, 0, 0);
     // ayna
@@ -58335,7 +58404,10 @@ function kasaGeo(tip) {
 }
 
 /* ---- örnekli çizim ---- */
-const KAP_ARABA = 48;
+// Aynı anda en çok kaç araba çizilir: sahnedeki kapasite (36) ve çıkmakta olanlar. Kalabalık bir yayında bir anda
+// çok kişi girerse çıkan arabalar birikir (sahneden düşen her araba 1,7 sn daha yaşar); sınır aşılırsa önce en eski
+// çıkanlar çizilmez (cizimSirasi). Gelin arabası ve kameranın konusu hiçbir zaman düşmez. Her havuz bu sayıya göre.
+const KAP_ARABA = 64;
 let GOVDE = null, CAM = null, TEKER = null, LAMBA = null, BASLAR = null, SACLAR = null, GOZLER = null, GOVDE_INSAN = null, PLAKA = null;
 // Gövde malzemesi: "boya" özniteliği 1 olan köşeler izleyicinin rengini alır, parlak cila gibi düşük pürüzlü olur.
 function boyaliMalzeme() {
@@ -58412,15 +58484,16 @@ function arabalariKur() {
 }
 
 /* ---- plakalar: izleyicinin adı plakada (tuvale fillText; HTML yok) ---- */
-const PLAKA_SUTUN = 4, PLAKA_SATIR = 16;
+// Plaka atlası: 4 × 32 hücre. Her çizilen arabanın kaydına bir hücre bağlanır (kimliğe değil: aynı kişi çıkarken
+// yeniden yazarsa çekirdek yeni bir kayıt açar). Son hücre boş plakadır: hücre kalmazsa kimsenin adı yerine o çizilir.
+const PLAKA_SUTUN = 4, PLAKA_SATIR = 32, PLAKA_BOS = PLAKA_SUTUN * PLAKA_SATIR - 1;
 let plakaTuval = null, plakaDoku = null, plakaUv = null;
 const plakaBos = [];
 function plakaKur() {
   plakaTuval = document.createElement('canvas');
   plakaTuval.width = 1024;
-  plakaTuval.height = 1024;
-  for (let i = PLAKA_SUTUN * PLAKA_SATIR - 1; i >= 0; i--)
-    plakaBos.push(i);
+  plakaTuval.height = 2048;
+  plakaSifirla();
   plakaDoku = new THREE.CanvasTexture(plakaTuval);
   plakaDoku.colorSpace = THREE.SRGBColorSpace;
   plakaDoku.anisotropy = 4;
@@ -58434,17 +58507,21 @@ function plakaKur() {
   };
   PLAKA = ornekli(g, m, KAP_ARABA * 2, false);
 }
-function plakaYaz(k) {
-  if (k.plakaYuva !== undefined && k.plakaAd === k.ad)
-    return;
-  if (k.plakaYuva === undefined) {
-    if (!plakaBos.length)
-      return;
-    k.plakaYuva = plakaBos.pop();
-  }
-  k.plakaAd = k.ad;
-  const a = plakaTuval.getContext('2d'), c0 = k.plakaYuva % PLAKA_SUTUN, r0 = Math.floor(k.plakaYuva / PLAKA_SUTUN), x = c0 * 256, y = r0 * 64;
-  a.clearRect(x, y, 256, 64);
+// Boş plaka hücresini çizer, bütün hücreleri boşa çıkarır (açılışta ve "boşalt"ta).
+function plakaSifirla() {
+  plakaBos.length = 0;
+  for (let i = PLAKA_BOS - 1; i >= 0; i--)
+    plakaBos.push(i);
+  for (const k of plakaSahipleri)
+    k.plakaYuva = undefined;
+  plakaSahipleri = [];
+  const a = plakaTuval.getContext('2d');
+  a.clearRect(0, 0, plakaTuval.width, plakaTuval.height);
+  plakaZemin(a, (PLAKA_BOS % PLAKA_SUTUN) * 256, Math.floor(PLAKA_BOS / PLAKA_SUTUN) * 64);
+  if (plakaDoku)
+    plakaDoku.needsUpdate = true;
+}
+function plakaZemin(a, x, y) {
   a.fillStyle = '#16181f';
   a.fillRect(x, y, 256, 64);
   a.fillStyle = '#f7f6f1';
@@ -58456,15 +58533,34 @@ function plakaYaz(k) {
   a.textAlign = 'center';
   a.textBaseline = 'middle';
   a.fillText('TR', x + 18, y + 47);
+}
+function plakaYaz(k) {
+  if (k.plakaYuva !== undefined && k.plakaAd === k.ad)
+    return;
+  if (k.plakaYuva === undefined) {
+    if (!plakaBos.length)
+      return;
+    k.plakaYuva = plakaBos.pop();
+  }
+  k.plakaAd = k.ad;
+  const a = plakaTuval.getContext('2d'), c0 = k.plakaYuva % PLAKA_SUTUN, r0 = Math.floor(k.plakaYuva / PLAKA_SUTUN), x = c0 * 256, y = r0 * 64;
+  a.clearRect(x, y, 256, 64);
+  plakaZemin(a, x, y);
   a.fillStyle = '#16181f';
   let punto = 40;
-  const metin = kisalt(String(k.ad).toLocaleUpperCase('tr'), 14);
+  // ad yazıldığı gibi (büyük harfe çevrilmez: "mike" İ'li olmasın); hücrenin dışına taşan işaret komşuya geçmesin
+  const metin = kisalt(String(k.ad), 16);
   a.font = '700 ' + punto + 'px Rubik, system-ui, sans-serif';
   while (punto > 18 && a.measureText(metin).width > 210) {
     punto -= 2;
     a.font = '700 ' + punto + 'px Rubik, system-ui, sans-serif';
   }
-  a.fillText(metin, x + 144, y + 34, 214);
+  a.save();
+  a.beginPath();
+  a.rect(x + 36, y + 4, 216, 56);
+  a.clip();
+  a.fillText(metin, x + 144, y + 34, 210);
+  a.restore();
   plakaDoku.needsUpdate = true;
 }
 function plakaBirak(k) {
@@ -58633,14 +58729,9 @@ function arabalariYerlestir() {
   let nt = 0, nl = 0, nb = 0, np = 0;
   const lc = LAMBA.instanceColor.array, bc = BASLAR.instanceColor.array, sc = SACLAR.instanceColor.array, gc = GOVDE_INSAN.instanceColor.array;
   const yanar = (B % 1) < 0.5, kamP = DUNYA.kamera.position;
-  gorunenArabalar = [];
-  for (const k of D.oy.values()) {
-    if (!k.ar)
-      continue;
+  gorunenArabalar = cizimSirasi();
+  for (const k of gorunenArabalar) {
     const tip = k.ar.tip, K = KASA[tip], i = SAYAC[tip]++;
-    if (i >= KAP_ARABA)
-      continue;
-    gorunenArabalar.push(k);
     arabaMatris(k, false, _arM);
     k._M = k._M || new THREE.Matrix4();
     k._M.copy(_arM);
@@ -58676,7 +58767,7 @@ function arabalariYerlestir() {
     }
     // plakalar (iki yüz aynı adı taşır)
     plakaYaz(k);
-    const yuva = k.plakaYuva === undefined ? 63 : k.plakaYuva, pu = (yuva % PLAKA_SUTUN) / PLAKA_SUTUN, pv = 1 - (Math.floor(yuva / PLAKA_SUTUN) + 1) / PLAKA_SATIR;
+    const yuva = k.plakaYuva === undefined ? PLAKA_BOS : k.plakaYuva, pu = (yuva % PLAKA_SUTUN) / PLAKA_SUTUN, pv = 1 - (Math.floor(yuva / PLAKA_SUTUN) + 1) / PLAKA_SATIR;
     _arQ.setFromAxisAngle(_v.set(0, 1, 0), HP);
     _m4.compose(_v.set(K.plaka.on[0], K.plaka.on[1], 0), _arQ, _arS).premultiply(_arM);
     PLAKA.setMatrixAt(np, _m4);
@@ -58730,26 +58821,53 @@ function arabalariYerlestir() {
     }
   }
   for (const tip of KASA_TIP) {
-    GOVDE[tip].count = CAM[tip].count = Math.min(SAYAC[tip], KAP_ARABA);
+    GOVDE[tip].count = CAM[tip].count = Math.min(SAYAC[tip], GOVDE[tip].instanceMatrix.count);
     GOVDE[tip].instanceMatrix.needsUpdate = CAM[tip].instanceMatrix.needsUpdate = true;
     GOVDE[tip].instanceColor.needsUpdate = true;
   }
-  TEKER.count = nt;
-  LAMBA.count = nl;
-  PLAKA.count = np;
-  BASLAR.count = SACLAR.count = GOZLER.count = GOVDE_INSAN.count = nb;
+  TEKER.count = Math.min(nt, TEKER.instanceMatrix.count);
+  LAMBA.count = Math.min(nl, LAMBA.instanceMatrix.count);
+  PLAKA.count = Math.min(np, PLAKA.instanceMatrix.count);
+  BASLAR.count = SACLAR.count = GOZLER.count = GOVDE_INSAN.count = Math.min(nb, BASLAR.instanceMatrix.count);
   for (const m of [TEKER, LAMBA, PLAKA, BASLAR, SACLAR, GOZLER, GOVDE_INSAN])
     m.instanceMatrix.needsUpdate = true;
   LAMBA.instanceColor.needsUpdate = BASLAR.instanceColor.needsUpdate = SACLAR.instanceColor.needsUpdate = GOVDE_INSAN.instanceColor.needsUpdate = true;
   plakaUv.needsUpdate = true;
-  // sahneden silinen arabaların plaka yuvası boşalır
+  // bu karede çizilmeyen kayıtların (silinen, yerine yenisi açılan ya da sınır yüzünden düşen) plaka hücresi boşalır
+  const cizilen = new Set(gorunenArabalar);
   for (const k of plakaSahipleri)
-    if (!D.oy.has(k.id))
+    if (!cizilen.has(k))
       plakaBirak(k);
   plakaSahipleri = gorunenArabalar.slice();
+  ORNEK.araba = gorunenArabalar.length;
+  ORNEK.teker = nt;
+  ORNEK.plaka = np;
+  const yuvalar = plakaSahipleri.filter(k => k.plakaYuva !== undefined);
+  ORNEK.yuva = yuvalar.length;
+  ORNEK.yuvaCakisma = yuvalar.length - new Set(yuvalar.map(k => k.plakaYuva)).size;
+  ORNEK.adYanlis = yuvalar.filter(k => k.plakaAd !== k.ad).length;
+  ORNEK.bosYuva = plakaBos.length;
+  ORNEK.dusen = cizimDisi;
   gelinSusuYerlestir();
 }
-let plakaSahipleri = [];
+let plakaSahipleri = [], cizimDisi = 0;
+const ORNEK = { araba: 0, teker: 0, plaka: 0, yuva: 0, dusen: 0, yuvaCakisma: 0, adYanlis: 0, bosYuva: 0 };
+// Çizilecek arabalar: sahnedekiler (gelin arabası, konu, drift atan önce), sonra çıkmakta olanlar en yenisinden;
+// toplam KAP_ARABA'yı geçmez. Çizilmeyen çıkan araba zaten birkaç kare sonra silinecektir.
+function cizimSirasi() {
+  const ana = [], cikan = [], konu = D.reji && D.reji.konu, yildiz = D.drift && D.drift.k;
+  for (const k of D.oy.values()) {
+    if (!k.ar)
+      continue;
+    (k.cikiyor ? cikan : ana).push(k);
+  }
+  const once = k => k === D.lider || k === konu || k === yildiz ? 1 : 0;
+  ana.sort((a, b) => once(b) - once(a));
+  cikan.sort((a, b) => b.cikis - a.cikis);
+  const hepsi = ana.concat(cikan);
+  cizimDisi = Math.max(0, hepsi.length - KAP_ARABA);
+  return hepsi.slice(0, KAP_ARABA);
+}
 function gelinSusuYerlestir() {
   const L = D.lider && D.lider.ar && !D.lider.cikiyor ? D.lider : null;
   for (const [tip, g] of Object.entries(GELIN.gruplar))
@@ -58905,7 +59023,8 @@ function sigacakKadar(c, p, h, k, fov, merkezY) {
   const d = c.dSig === undefined || gerek > c.dSig ? (c.dSig = gerek) : yakinlas(c, 'dSig', gerek, 2);
   return h.clone().addScaledVector(yon, Math.max(d, d0));
 }
-const yakinlas = (c, ad, deger, hiz) => (c[ad] = c[ad] === undefined ? deger : lerp(c[ad], deger, Math.min(1, sonDt * (hiz || 2.5))));
+// Yumuşatma vuruş saatiyle yürür (R.dbSn: son karede geçen vuruş, saniyeye çevrilmiş ölçüyle; 1,85 vuruş ≈ 1 sn).
+const yakinlas = (c, ad, deger, hiz) => (c[ad] = c[ad] === undefined ? deger : lerp(c[ad], deger, Math.min(1, D.reji.dbSn * (hiz || 2.5))));
 
 /* ---- çekimler ---- */
 // Her çekim: taraf ve yükseklik (art arda tekrarı önlemek için), gok (gökyüzü görünür mü; havai fişekte gerekir),
@@ -59017,30 +59136,43 @@ const CEKIM = {
   kenar: { taraf: 'sag', yuk: 'alcak', gok: true, sure: [12, 16],
     kur(c, z) {
       // yol kenarında sabit kamera: konvoyun önünde, sağ kaldırımda iki ağacın arasında
-      let n = Math.ceil((z.SL + 24) / YUVA);
+      // Konvoyun kuyruğu çekim bitmeden kameranın önünden geçip gitmesin: kamera, kuyruğun çekim süresince alacağı
+      // yolun ötesine konur (kısa konvoyda daha ileride; araba uzaktan gelir).
+      if (z.uzun < 45)
+        c.sure = 8;
+      const vurusSn = Math.max(1, muzik.calanBpm() / 60), gidilen = D.hiz * c.sure / vurusSn;
+      let n = Math.ceil(Math.max(z.SL + 24, z.ST + 12 + gidilen) / YUVA);
       for (let i = 0; i < 4 && yuvaNe(n, -1) === 'direk'; i++)
         n++;
       const s = n * YUVA + YUVA / 2;
       c.s = s;
-      const p = yN(s, -5.0, 1.6);
+      const p = yN(s, -7.0, 1.6);
       c.wx = p.x + DUNYA.kx;
       c.wz = p.z + DUNYA.kz;
     },
     poz(c, t, z) {
-      // konvoy önünden geçer, kamera başıyla onu izler (önce gelin arabasına, geçince yolun ilerisine bakar)
-      // kamera başını çevirerek bir arabayı izler: önce gelin arabasını, o geçince kameranın hizasına yeni gelen arabayı
-      const hedefS = Math.min(z.SL - 0.6, c.s + 2);
-      let en = null, enU = Infinity;
-      for (const k of D.oy.values())
-        if (k.ar && !k.cikiyor && Math.abs(D.yol + k.gs - hedefS) < enU) {
-          enU = Math.abs(D.yol + k.gs - hedefS);
+      // konvoy önünden geçer; kamera başını çevirerek yaklaşan bir arabayı izler: önce gelin arabasını, sonra kameraya
+      // yedi metre kala gelen arabayı (yanından geçip gidene bakmaz: o artık kadrajın kenarındadır)
+      const hedefS = Math.min(z.SL - 0.6, c.s - 7);
+      // Konu yalnız henüz kameraya varmamış arabalardan seçilir; hepsi geçtiyse kamera uzaklaşan kuyruğa bakar.
+      let en = null, enU = Infinity, kuyruk = null;
+      for (const k of D.oy.values()) {
+        if (!k.ar || k.cikiyor)
+          continue;
+        const ks = D.yol + k.gs;
+        if (!kuyruk || ks < D.yol + kuyruk.gs)
+          kuyruk = k;
+        if (ks < c.s - 3 && Math.abs(ks - hedefS) < enU) {
+          enU = Math.abs(ks - hedefS);
           en = k;
         }
+      }
+      en = en || kuyruk;
       c.konu = en;
       const hs = yakinlas(c, 'hs', en ? D.yol + en.gs : hedefS, 3), hl = yakinlas(c, 'hl', en ? en.gl : 0, 3);
-      return { p: rejiV2.set(c.wx - DUNYA.kx, 1.6, c.wz - DUNYA.kz).clone(), h: yN(hs, hl, 0.8), fov: 52 };
+      return { p: rejiV2.set(c.wx - DUNYA.kx, 1.6, c.wz - DUNYA.kz).clone(), h: yN(hs, hl, 0.8), fov: 50 };
     },
-    bitti(c, z) { return z.ST > c.s + 4; } },
+    bitti(c, z) { return z.ST > c.s - 9; } },
   vinc: { taraf: 'on', yuk: 'yuksek', gok: false, sure: [16, 16],
     kur(c) { c.yan = c.rnd() < 0.5 ? -1 : 1; },
     poz(c, t, z) {
@@ -59164,6 +59296,15 @@ function rejiSifirla() {
 const OLCU = 4;
 function rejiGuncelle(dt) {
   const R = D.reji, z = konvoyOzet();
+  R.dbSn = clamp(B - (R.oncekiB ?? B), 0, 0.5) / 1.85;
+  R.oncekiB = B;
+  // yakın çekim sırası yalnız sahnedekileri tutar
+  if (R.yakinSira.size > MAKS * 2)
+    for (const id of R.yakinSira.keys())
+      if (!D.oy.has(id))
+        R.yakinSira.delete(id);
+  // yeni gelin arabası öne geçerken öteki arabalar geçiş yolundan açılır (lider çekimi sürerken)
+  D.yolAc = R.cekim && R.cekim.ad === 'lider' && R.cekim.k && R.cekim.k === D.lider && R.cekim.k.yer < 0.9 ? R.cekim.k : null;
   if (!D.lider) {
     // boş yol: yolun kendisini gösteren yavaş bir drone
     if (!R.cekim || R.cekim.ad !== 'bos')
@@ -59213,24 +59354,20 @@ function rejiGuncelle(dt) {
       poz = { p: a.p.clone().lerp(poz.p, e), h: a.h.clone().lerp(poz.h, e), fov: lerp(a.fov, poz.fov, e), merkezY: lerp(a.merkezY || MERKEZ_Y, poz.merkezY || MERKEZ_Y, e) };
     }
   }
-  // Konunun önüne başka bir araba girerse kamera yavaşça yükselip onun üstünden bakar (engel kalkınca iner).
+  // Konunun önüne başka bir araba girerse (merkezine, tavanının önüne ya da arkasına giden çizgi bir arabanın içinden
+  // geçerse) kamera yükselip onun üstünden bakar; engel kalkınca yavaşça iner.
   const konu0 = konuArabasi(c);
-  const engel = konu0 && !R.gecis && engelVar(poz.p, arabaKonum(konu0, 0.8), konu0);
-  c.kaldir = lerp(c.kaldir || 0, engel ? 3.2 : 0, Math.min(1, dt * (engel ? 2.5 : 0.8)));
+  let engel = false;
+  if (konu0)
+    for (const y of [0.8, 1.6])
+      for (const ds of [-1.6, 0, 1.6])
+        engel = engel || engelVar(poz.p, yolNokta(D.yol + konu0.gs + konu0.os + ds, konu0.gl + konu0.ox, y, rejiV1), konu0);
+  c.kaldir = lerp(c.kaldir || 0, engel ? 3.4 : 0, Math.min(1, R.dbSn * (engel ? 4 : 0.8)));
+  if (engel)
+    c.kaldir = Math.max(c.kaldir, 1.2);
   poz.p.y += c.kaldir;
   guvenli(poz.p, poz.h);
-  // Son denetim: güvenlik itmesinden (araba üstünden aşma, bina sınırı) sonra da konu arabası şeride sığsın; sığmıyorsa
-  // kamera bakış doğrultusunda geri çekilir (yan ve kenar çekiminde kamera yerinde kalır, onlar kendi açısını ayarlar).
-  const konu = konuArabasi(c);
-  if (konu && c.ad !== 'yan' && c.ad !== 'kenar' && !R.gecis) {
-    const yon = poz.p.clone().sub(poz.h), d0 = yon.length();
-    yon.divideScalar(d0);
-    const d = sigdir(poz.h, yon, arabaKoseleri(konu, []), poz.fov, d0, d0 * 3 + 10, poz.merkezY || MERKEZ_Y);
-    if (d > d0 + 0.01) {
-      poz.p = poz.h.clone().addScaledVector(yon, d);
-      guvenli(poz.p, poz.h);
-    }
-  }
+  sonKadraj(c, z, poz);
   kameraKoy(poz.p, poz.h, poz.fov, poz.merkezY || MERKEZ_Y);
   konuKadraj(c, z);
   // gölge kutusu: geniş çekimde geniş, yakında sıkı (gölge keskin kalsın)
@@ -59239,6 +59376,66 @@ function rejiGuncelle(dt) {
 }
 // Çekimin asıl konusu ekranda nerede (720×1280): testler ve kare betiği her karede şeritte mi diye bakar.
 // Geniş çekimlerde (drone, kuş, vinç sonu) bütün konvoy, öbürlerinde konu arabası (köşeleriyle).
+// Son denetim: kameranın asıl konusu (geniş çekimde gelin arabası ve ilk sıralar, öbürlerinde konu arabası) şeride ve
+// kadraja sığsın. Önce kamera bakış doğrultusunda geri çekilir (yan ve kenar çekiminde kamera yerinde kalır), güvenlik
+// itmesinden sonra hâlâ sığmıyorsa görüş açısı genişler. Her karede, gecikmesiz: konu kadrajdan hiç kaçmaz.
+function konuNoktalari(c, z) {
+  const n = [];
+  if (c.ad === 'drone' || c.ad === 'kus' || (c.ad === 'vinc' && B - c.b0 > 9)) {
+    for (const k of z.on.slice(0, c.ad === 'kus' ? 7 : 6))
+      arabaKoseleri(k, n);
+  }
+  else {
+    const k = konuArabasi(c);
+    if (k)
+      arabaKoseleri(k, n);
+  }
+  return n;
+}
+function uyuyor(p, h, fov, merkezY, n) {
+  kameraHazirla(OLCER, fov, merkezY);
+  OLCER.position.copy(p);
+  OLCER.lookAt(h);
+  OLCER.updateMatrixWorld();
+  return kadrajda(OLCER, n);
+}
+function sonKadraj(c, z, poz) {
+  const n = konuNoktalari(c, z), my = poz.merkezY || MERKEZ_Y;
+  if (!n.length || uyuyor(poz.p, poz.h, poz.fov, my, n))
+    return;
+  if (c.ad !== 'yan' && c.ad !== 'kenar') {
+    const yon = poz.p.clone().sub(poz.h), d0 = yon.length();
+    yon.divideScalar(d0);
+    const d = sigdir(poz.h, yon, n, poz.fov, d0, d0 * 4 + 40, my);
+    poz.p = poz.h.clone().addScaledVector(yon, d);
+    guvenli(poz.p, poz.h);
+    if (uyuyor(poz.p, poz.h, poz.fov, my, n))
+      return;
+  }
+  else {
+    // yerinde duran kamera (yan, kenar): önce başını konunun ortasına çevirir (yumuşatılmış bakış geride kalmışsa)
+    const orta = new THREE.Vector3();
+    for (const v of n)
+      orta.add(v);
+    orta.divideScalar(n.length);
+    poz.h = orta;
+    if (uyuyor(poz.p, poz.h, poz.fov, my, n))
+      return;
+  }
+  let a = poz.fov, b = 92;
+  if (!uyuyor(poz.p, poz.h, b, my, n)) {
+    poz.fov = b;
+    return;
+  }
+  for (let i = 0; i < 10; i++) {
+    const m = (a + b) / 2;
+    if (uyuyor(poz.p, poz.h, m, my, n))
+      b = m;
+    else
+      a = m;
+  }
+  poz.fov = b;
+}
 function konuArabasi(c) {
   if (c.ad === 'drone' || c.ad === 'kus' || c.ad === 'bos' || (c.ad === 'vinc' && B - c.b0 > 9))
     return null;
@@ -59247,16 +59444,7 @@ function konuArabasi(c) {
 }
 function konuKadraj(c, z) {
   const kam = DUNYA.kamera, n = [];
-  const genis = c.ad === 'drone' || c.ad === 'kus' || (c.ad === 'vinc' && B - c.b0 > 9);
-  if (genis) {
-    for (const k of z.on.slice(0, c.ad === 'kus' ? 7 : 6))
-      n.push(arabaKonum(k, 0.7));
-  }
-  else {
-    const k = konuArabasi(c);
-    if (k)
-      arabaKoseleri(k, n);
-  }
+  n.push(...konuNoktalari(c, z));
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, gorunmez = 0;
   for (const v of n) {
     ekranNokta(kam, v, _en);
@@ -59280,8 +59468,9 @@ function kameraKoy(p, h, fov, merkezY) {
   DUNYA.bakis.subVectors(h, p).normalize();
   // sis kameranın konuya uzaklığına göre: geniş çekim pusa boğulmasın, yakın çekimde uzak kasaba yumuşasın
   const uz = p.distanceTo(h), sis = DUNYA.sahne.fog;
-  sis.near = Math.max(110, uz * 1.3);
-  sis.far = Math.max(560, uz * 3.2 + 300);
+  const gorus = KALITE_KADEME[KALITE.kademe].gorus;
+  sis.near = Math.max(110, uz * 1.3) * gorus;
+  sis.far = Math.max(560, uz * 3.2 + 300) * gorus;
   DUNYA.merkezY = merkezY;
   if (!DUNYA.golgeOdak)
     DUNYA.golgeOdak = h.clone();
@@ -59319,7 +59508,7 @@ function engelVar(p, q, konu) {
   return false;
 }
 // Kamera yerin altına inmez, binaların içine girmez, arabaların içinden geçmez (yaklaşırsa üstünden aşar).
-const _gMat = new THREE.Matrix4(), _gYer = new THREE.Vector3();
+const _gMat = new THREE.Matrix4(), _gMat2 = new THREE.Matrix4(), _gYer = new THREE.Vector3();
 function guvenli(p, h) {
   // yolun yerel ekseninde: s ve yanal uzaklık (iki adımda yaklaşık)
   let s = p.z + DUNYA.kz, l = 0;
@@ -59339,16 +59528,19 @@ function guvenli(p, h) {
     p.x = _gYer.x;
     p.z = _gYer.z;
   }
+  // Arabanın bu kareki yeri (önceki karenin matrisi değil: drift atan saniyede 30 metre gider); hızlı arabanın önünde
+  // pay hızıyla büyür.
   for (const k of D.oy.values()) {
-    if (!k.ar || !k._M)
+    if (!k.ar)
       continue;
-    const K = KASA[k.ar.tip];
-    _gYer.copy(p).applyMatrix4(_gMat.copy(k._M).invert());
+    const K = KASA[k.ar.tip], M = arabaMatris(k, false, _gMat2);
+    _gYer.copy(p).applyMatrix4(_gMat.copy(M).invert());
+    const ileri = Math.max(0, (k.hizM || 0) - D.hiz) * 0.12;
     const L = (K.tampon.on - K.tampon.arka) / 2 + 0.55, w = K.W / 2 + 0.55, ust = Math.max(K.ev[1][1], K.ev[2][1]) + 0.6;
-    if (Math.abs(_gYer.x) < L && Math.abs(_gYer.z) < w && _gYer.y < ust) {
+    if (_gYer.x > -L && _gYer.x < L + ileri && Math.abs(_gYer.z) < w && _gYer.y < ust) {
       // içine girecekti: üstünden geç
       _gYer.y = ust;
-      p.copy(_gYer.applyMatrix4(k._M));
+      p.copy(_gYer.applyMatrix4(M));
     }
   }
 }
@@ -59361,6 +59553,8 @@ function parkGizle() {
     const yakin = Math.abs(p.s0 + PARCA / 2 - s) < 75;
     if (p.park)
       p.park.visible = !(y < 3 && l > 1.5 && yakin);
+    if (p.uzak)
+      p.uzak.visible = KALITE_KADEME[KALITE.kademe].uzak;
     for (const yan of ['-1', '1'])
       if (p.kenar[yan])
         p.kenar[yan].visible = !(y < 9.5 && l * +yan > 4.5 && yakin);
@@ -59381,7 +59575,9 @@ addEventListener('keydown', e => {
 /* ── oyunlar/konvoy-3b/js/60-cizim.js ── */
 /* ÇİZİM KANCALARI — 3B sahne ile çekirdeğin 2B üst katmanını aynı karede buluşturur.
  * oyunZemin(): 2B tuvali temizler (saydam üst katman), kamerayı rejiye kurdurur, arabaları ve efektleri yerleştirir,
- *   three.js sahnesini çizer. Çizim burada olduğu için çekirdeğin D.kareMs ölçümü 3B'nin gerçek maliyetini de sayar.
+ *   three.js sahnesini çizer. Dikkat: çekirdeğin D.kareMs ölçümü yalnız işlemcinin işini sayar; ekran kartı çizimi
+ *   sonra, eşzamansız yapar. Gerçek kare süresini bu dosya kendisi ölçer (iki kare arası, KALITE) ve kare yetişmiyorsa
+ *   kaliteyi kademe kademe düşürür: çizim ölçeği, gölgeler, uzak dekor, görüş uzaklığı.
  * oyunCiz(): her arabayı three.js kamerasıyla 720×1280 sanal tuvale düşürür, ekranda okunacak kadar büyük olanlara
  *   k.et verir (adı, balonu, öncelik kurallarını çekirdek çizer).
  * oyunUst(): korna yazıları ("DÜT!"), yakın çekimdeki izleyicinin ve drift atanın büyük adı, gelin süsünün izi.
@@ -59389,6 +59585,32 @@ addEventListener('keydown', e => {
  * Efektler: drift dumanı (yumuşak lekeler), havai fişekler (noktalar), selektör yapan farların parıltısı.
  */
 function oyunKamera() { return [[0, 0]]; }
+
+// WebGL yok: sahnede ne olduğunu düz Türkçeyle söyleyen bir kart (kurallar, sıralama, yazılar yine çalışır).
+const WEBGL_YOK = ['Bu oyun 3B çizilir:', 'ekran kartı (WebGL) gerekir.', '', 'Bu bilgisayarda ya da tarayıcıda', 'WebGL kapalı.', '',
+  'Tarayıcı ayarlarında "donanım', 'hızlandırması"nı açın ya da 2B', 'oyunlardan birini yayına verin:', 'Gelin Konvoyu, Mendil Kimde?,', 'Vur Düzelsin!, Müsait Bir Yerde.'];
+function webglYok() {
+  const g = c.createLinearGradient(0, 0, 0, GH);
+  g.addColorStop(0, GOK.ust);
+  g.addColorStop(0.6, GOK.ufuk);
+  g.addColorStop(1, '#c9b98a');
+  c.fillStyle = g;
+  c.fillRect(0, 0, GW, GH);
+  c.fillStyle = renkSaydam(MUREKKEP, 0.82);
+  c.beginPath();
+  c.roundRect(60, 540, 600, 440, 28);
+  c.fill();
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  WEBGL_YOK.forEach((satir, i) => {
+    c.font = (i < 2 ? '30px "Paytone One", ' : '500 25px ') + 'Rubik, system-ui, sans-serif';
+    c.fillStyle = i < 2 ? RENK.vurgu : RENK.acik;
+    c.fillText(satir, GW / 2, 590 + i * 36);
+  });
+  c.textBaseline = 'alphabetic';
+  if (!KALITE.uyari)
+    kaliteUyar('WebGL yok: bu oyunun 3B sahnesi bu bilgisayarda çizilemiyor. Sahnede bir uyarı görünür; yayına 2B oyunlardan birini verin.');
+}
 
 /* ---- efektler ---- */
 const EFEKT = { duman: [], fisek: null, parilti: null };
@@ -59485,9 +59707,68 @@ function efektleriGuncelle() {
 
 /* ---- boyut, gölge, gök ---- */
 function boyutEsle() {
-  const r = DUNYA.r, w = tuval.width, h = tuval.height;
+  const r = DUNYA.r, o = KALITE_KADEME[KALITE.kademe].olcek, w = Math.round(tuval.width * o), h = Math.round(tuval.height * o);
   if (r.domElement.width !== w || r.domElement.height !== h)
     r.setSize(w, h, false);
+}
+/* ---- kalite: gerçek kare aralığına göre kademe kademe düşer ---- */
+// olcek: çizim çözünürlüğü (tuval CSS ile tam boy kalır) · golge: gölge haritası (0 = kapalı) · uzak: arka sıralar,
+// bahçeler, camiler · gorus: sisin bittiği uzaklık (metre).
+const KALITE_KADEME = [
+  { olcek: 1, golge: 2048, uzak: true, gorus: 1 },
+  { olcek: 0.8, golge: 1024, uzak: true, gorus: 1 },
+  { olcek: 0.66, golge: 0, uzak: true, gorus: 0.8 },
+  { olcek: 0.5, golge: 0, uzak: false, gorus: 0.55 },
+  { olcek: 0.36, golge: 0, uzak: false, gorus: 0.45 }
+];
+const KALITE = { kademe: 0, aralik: 0, ornek: [], son: 0, yavas: false, uyari: null };
+const KALITE_SINIR = 26, KALITE_YAVAS = 40;
+function kaliteOlc() {
+  const t = performance.now(), d = t - KALITE.son;
+  KALITE.son = t;
+  // sekme arkadayken ya da ilk karede gelen uzun boşluklar sayılmaz
+  if (!(d > 0 && d < 1000))
+    return;
+  KALITE.ornek.push(d);
+  KALITE.toplam = (KALITE.toplam || 0) + d;
+  // en az 20 kare ve 1,5 saniye ya da 90 kare biriktirince karar verir: yavaş makinede de birkaç saniyede bir kademe
+  if (KALITE.ornek.length < 90 && !(KALITE.ornek.length >= 20 && KALITE.toplam >= 1500))
+    return;
+  KALITE.toplam = 0;
+  const s = KALITE.ornek.slice().sort((a, b) => a - b);
+  KALITE.aralik = s[s.length >> 1];
+  KALITE.ornek.length = 0;
+  if (KALITE.aralik > KALITE_SINIR && KALITE.kademe < KALITE_KADEME.length - 1)
+    kaliteKur(KALITE.kademe + 1);
+  else if (KALITE.aralik > KALITE_YAVAS && KALITE.kademe === KALITE_KADEME.length - 1 && !KALITE.yavas) {
+    KALITE.yavas = true;
+    kaliteUyar('Bu bilgisayarın ekran kartı 3B sahneye yetişmiyor (kare başına yaklaşık ' + Math.round(KALITE.aralik) + ' ms; akıcı görüntü için 33 ms altı gerekir). Kalite en düşükte. Tarayıcının donanım hızlandırmasını açın ya da 2B oyunlardan birini yayına verin (Gelin Konvoyu, Mendil Kimde?, Vur Düzelsin!, Müsait Bir Yerde).');
+  }
+}
+function kaliteKur(n) {
+  KALITE.kademe = n;
+  const k = KALITE_KADEME[n], g = DUNYA.gunes;
+  g.castShadow = k.golge > 0;
+  if (k.golge && g.shadow.mapSize.x !== k.golge) {
+    g.shadow.mapSize.set(k.golge, k.golge);
+    if (g.shadow.map) {
+      g.shadow.map.dispose();
+      g.shadow.map = null;
+    }
+  }
+  boyutEsle();
+}
+// Yayın masasında (panelde) düz bir uyarı satırı; izleyici görmez. Metin sabit, textContent ile yazılır.
+function kaliteUyar(metin) {
+  if (!KALITE.uyari) {
+    KALITE.uyari = document.createElement('p');
+    KALITE.uyari.className = 'not';
+    KALITE.uyari.style.color = '#ffcf4d';
+    const yer = $('panel-not');
+    if (yer && yer.parentNode)
+      yer.parentNode.insertBefore(KALITE.uyari, yer.nextSibling);
+  }
+  KALITE.uyari.textContent = metin;
 }
 function golgeAyarla() {
   const g = DUNYA.gunes, o = DUNYA.golgeOdak || DUNYA.kamera.position, R = DUNYA.golgeR, kam = g.shadow.camera;
@@ -59516,16 +59797,11 @@ function oyunZemin() {
   if (!DUNYA.r) {
     dunyaKur();
     if (!DUNYA.r) {
-      // WebGL yok: yalnız gökyüzü (kurallar ve yazılar yine çalışır)
-      const g = c.createLinearGradient(0, 0, 0, GH);
-      g.addColorStop(0, GOK.ust);
-      g.addColorStop(0.6, GOK.ufuk);
-      g.addColorStop(1, '#9a9a8a');
-      c.fillStyle = g;
-      c.fillRect(0, 0, GW, GH);
+      webglYok();
       return;
     }
   }
+  kaliteOlc();
   boyutEsle();
   if (kokenAyarla(false))
     DUNYA.golgeOdak = null;
@@ -59546,6 +59822,8 @@ function oyunCiz() {
   if (!DUNYA.r)
     return;
   const kam = DUNYA.kamera, F = (GH / 2) / Math.tan(kam.fov * Math.PI / 360), ileri = DUNYA.bakis;
+  const kart = kartKonusu().k;
+  let yazildi = false, yedek = null, yedekKart = null;
   for (const k of gorunenArabalar) {
     if (!k._M || k.cikiyor)
       continue;
@@ -59564,13 +59842,42 @@ function oyunCiz() {
         k.basEkran = { x: be.x, y: be.y, r: 0.15 * F / bd, kare: kareSay };
       }
     }
-    // yakın çekimin konusunun ve drift atanın adı ayrıca büyük kartta da yazar (oyunUst)
     if (!_etE.ok)
       continue;
+    const et = { x: _etE.x, y: _etE.y, s, d: derin }, seritte = et.y > SERIT_UST - 45 && et.y < SERIT_ALT - 10 && et.x > 0 && et.x < GW;
+    // yakın çekimin konusunun, drift atanın ve yeni gelin arabasının adı yalnız büyük kartta yazar (oyunUst)
+    if (k === kart) {
+      if (et.x > 0 && et.x < GW && et.y > 0 && et.y < SERIT_ALT)
+        yedekKart = et;
+      continue;
+    }
     // gelin arabasının adı her çekimde yazılır (geniş çekimde de kim olduğu görünsün)
-    if (s >= ETIKET_PX || k === D.lider)
-      k.et = { x: _etE.x, y: _etE.y, s, d: derin };
+    if (s >= ETIKET_PX || k === D.lider) {
+      k.et = et;
+      // ekranın dışındaki adı çekirdek çizmez (disari: 'gizle'): sayılmaz
+      yazildi = yazildi || (et.x > 0 && et.x < GW && et.y > 0 && et.y < SERIT_ALT);
+    }
+    else if (seritte && (!yedek || s > yedek.et.s))
+      yedek = { k, et };
   }
+  // Kadrajda hiç ad kalmadıysa (konu kartta, ötekiler küçük) en büyük görünen arabanın adı yine yazılır: sahnede her
+  // zaman en az bir ad okunur. Kadrajda başka araba hiç yoksa kartın konusu küçük etiketini de alır.
+  if (!yazildi && yedek)
+    yedek.k.et = yedek.et;
+  else if (!yazildi && yedekKart && kart)
+    kart.et = yedekKart;
+}
+// Büyük ad kartının konusu (yoksa k: null): şov çekiminde drift atan, yakın çekimde o izleyici, lider çekiminde yeni
+// gelin arabası. Bu arabanın küçük etiketi çizilmez: ad bir kez, büyük yazılır.
+function kartKonusu() {
+  const R = D.reji, ad = R.cekim && R.cekim.ad;
+  if (ad === 'sov' && D.drift && D.drift.k.ar)
+    return { k: D.drift.k, ust: 'DRIFT ŞOV!' };
+  if (ad === 'yakin' && R.konu && D.oy.has(R.konu.id) && D.oy.get(R.konu.id) === R.konu)
+    return { k: R.konu, ust: (R.konu.sn + 1) + '. araba' + (R.konu.jeton > 0 ? ' · ' + R.konu.jeton + ' jeton' : '') };
+  if (ad === 'lider' && D.lider)
+    return { k: D.lider, ust: 'YENİ GELİN ARABASI' };
+  return { k: null, ust: '' };
 }
 // Kornada arabanın yanında beliren "DÜT!" ve büyük ad kartları.
 function oyunUst() {
@@ -59626,20 +59933,7 @@ function oyunUst() {
     c.globalAlpha = 1;
   }
   // büyük ad kartı: yakın çekimin konusu ya da drift atan (şov çekiminde). Şeridin altında, yolun üstünde durur.
-  const R = D.reji, ad = R.cekim && R.cekim.ad;
-  let k = null, ust = '';
-  if (ad === 'sov' && D.drift && D.drift.k.ar) {
-    k = D.drift.k;
-    ust = 'DRIFT ŞOV!';
-  }
-  else if (ad === 'yakin' && R.konu && D.oy.has(R.konu.id)) {
-    k = R.konu;
-    ust = (k.sn + 1) + '. araba' + (k.jeton > 0 ? ' · ' + k.jeton + ' jeton' : '');
-  }
-  else if (ad === 'lider' && D.lider) {
-    k = D.lider;
-    ust = 'YENİ GELİN ARABASI';
-  }
+  const R = D.reji, ad = R.cekim && R.cekim.ad, { k, ust } = kartKonusu();
   if (k && R.cekim && B - R.cekim.b0 > 0.3) {
     const gir = clamp((B - R.cekim.b0 - 0.3) * 2.5, 0, 1);
     c.globalAlpha = gir;

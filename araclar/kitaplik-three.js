@@ -23,8 +23,8 @@ if (!surum || surum[1] !== '160')
   console.warn('UYARI: beklenen three.js r160, bulunan ' + (surum ? 'r' + surum[1] : 'bilinmiyor'));
 if (/^\s*import\s/m.test(kod) || /import\.meta/.test(kod))
   hata('Girdide import var: tek dosyalık (bağımlılıksız) modül gerekir.');
-if (/<\/script/i.test(kod))
-  hata('Girdide "</script" geçiyor: sayfaya gömülemez.');
+if (/<\/script|<!--|<script/i.test(kod))
+  hata('Girdide "</script", "<!--" ya da "<script" geçiyor: sayfaya gömülemez.');
 const exportlar = [...kod.matchAll(/^export\s*\{([^}]*)\};?\s*$/gm)];
 if (exportlar.length !== 1)
   hata('Girdide tek bir "export { … };" satırı bekleniyordu, ' + exportlar.length + ' bulundu.');
@@ -38,7 +38,25 @@ const lisans = /^\/\*\*[\s\S]*?\*\/\n/.exec(kod);
 if (!lisans || !/@license/.test(lisans[0]) || !/MIT/.test(lisans[0]))
   hata('Girdinin başında MIT lisans başlığı bulunamadı.');
 kod = kod.slice(lisans[0].length).replace(exportlar[0][0], 'return { ' + adlar.join(', ') + ' };');
-const cikti = lisans[0] +
+// MIT izin metninin tamamı başlıkta durur: derlenen her oyun.html lisansı kendisi taşır.
+const IZIN = [
+  '/*', ' * three.js r160 - The MIT License', ' *', ' * Copyright © 2010-2023 three.js authors', ' *',
+  ' * Permission is hereby granted, free of charge, to any person obtaining a copy',
+  ' * of this software and associated documentation files (the "Software"), to deal',
+  ' * in the Software without restriction, including without limitation the rights',
+  ' * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell',
+  ' * copies of the Software, and to permit persons to whom the Software is',
+  ' * furnished to do so, subject to the following conditions:', ' *',
+  ' * The above copyright notice and this permission notice shall be included in',
+  ' * all copies or substantial portions of the Software.', ' *',
+  ' * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR',
+  ' * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,',
+  ' * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE',
+  ' * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER',
+  ' * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,',
+  ' * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN',
+  ' * THE SOFTWARE.', ' */', ''].join('\n');
+const cikti = lisans[0] + IZIN +
   '/* Bu dosya üretilir: node araclar/kitaplik-three.js <three.module.js>. three.js r160, genel THREE nesnesi olarak. */\n' +
   'var THREE = (function () {\n\'use strict\';\n' + kod + '\n})();\n';
 fs.mkdirSync(path.join(KOK, 'kitaplik'), { recursive: true });

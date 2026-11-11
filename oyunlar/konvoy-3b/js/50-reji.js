@@ -114,7 +114,8 @@ function sigacakKadar(c, p, h, k, fov, merkezY) {
   const d = c.dSig === undefined || gerek > c.dSig ? (c.dSig = gerek) : yakinlas(c, 'dSig', gerek, 2);
   return h.clone().addScaledVector(yon, Math.max(d, d0));
 }
-const yakinlas = (c, ad, deger, hiz) => (c[ad] = c[ad] === undefined ? deger : lerp(c[ad], deger, Math.min(1, sonDt * (hiz || 2.5))));
+// Yumuşatma vuruş saatiyle yürür (R.dbSn: son karede geçen vuruş, saniyeye çevrilmiş ölçüyle; 1,85 vuruş ≈ 1 sn).
+const yakinlas = (c, ad, deger, hiz) => (c[ad] = c[ad] === undefined ? deger : lerp(c[ad], deger, Math.min(1, D.reji.dbSn * (hiz || 2.5))));
 
 /* ---- çekimler ---- */
 // Her çekim: taraf ve yükseklik (art arda tekrarı önlemek için), gok (gökyüzü görünür mü; havai fişekte gerekir),
@@ -226,30 +227,43 @@ const CEKIM = {
   kenar: { taraf: 'sag', yuk: 'alcak', gok: true, sure: [12, 16],
     kur(c, z) {
       // yol kenarında sabit kamera: konvoyun önünde, sağ kaldırımda iki ağacın arasında
-      let n = Math.ceil((z.SL + 24) / YUVA);
+      // Konvoyun kuyruğu çekim bitmeden kameranın önünden geçip gitmesin: kamera, kuyruğun çekim süresince alacağı
+      // yolun ötesine konur (kısa konvoyda daha ileride; araba uzaktan gelir).
+      if (z.uzun < 45)
+        c.sure = 8;
+      const vurusSn = Math.max(1, muzik.calanBpm() / 60), gidilen = D.hiz * c.sure / vurusSn;
+      let n = Math.ceil(Math.max(z.SL + 24, z.ST + 12 + gidilen) / YUVA);
       for (let i = 0; i < 4 && yuvaNe(n, -1) === 'direk'; i++)
         n++;
       const s = n * YUVA + YUVA / 2;
       c.s = s;
-      const p = yN(s, -5.0, 1.6);
+      const p = yN(s, -7.0, 1.6);
       c.wx = p.x + DUNYA.kx;
       c.wz = p.z + DUNYA.kz;
     },
     poz(c, t, z) {
-      // konvoy önünden geçer, kamera başıyla onu izler (önce gelin arabasına, geçince yolun ilerisine bakar)
-      // kamera başını çevirerek bir arabayı izler: önce gelin arabasını, o geçince kameranın hizasına yeni gelen arabayı
-      const hedefS = Math.min(z.SL - 0.6, c.s + 2);
-      let en = null, enU = Infinity;
-      for (const k of D.oy.values())
-        if (k.ar && !k.cikiyor && Math.abs(D.yol + k.gs - hedefS) < enU) {
-          enU = Math.abs(D.yol + k.gs - hedefS);
+      // konvoy önünden geçer; kamera başını çevirerek yaklaşan bir arabayı izler: önce gelin arabasını, sonra kameraya
+      // yedi metre kala gelen arabayı (yanından geçip gidene bakmaz: o artık kadrajın kenarındadır)
+      const hedefS = Math.min(z.SL - 0.6, c.s - 7);
+      // Konu yalnız henüz kameraya varmamış arabalardan seçilir; hepsi geçtiyse kamera uzaklaşan kuyruğa bakar.
+      let en = null, enU = Infinity, kuyruk = null;
+      for (const k of D.oy.values()) {
+        if (!k.ar || k.cikiyor)
+          continue;
+        const ks = D.yol + k.gs;
+        if (!kuyruk || ks < D.yol + kuyruk.gs)
+          kuyruk = k;
+        if (ks < c.s - 3 && Math.abs(ks - hedefS) < enU) {
+          enU = Math.abs(ks - hedefS);
           en = k;
         }
+      }
+      en = en || kuyruk;
       c.konu = en;
       const hs = yakinlas(c, 'hs', en ? D.yol + en.gs : hedefS, 3), hl = yakinlas(c, 'hl', en ? en.gl : 0, 3);
-      return { p: rejiV2.set(c.wx - DUNYA.kx, 1.6, c.wz - DUNYA.kz).clone(), h: yN(hs, hl, 0.8), fov: 52 };
+      return { p: rejiV2.set(c.wx - DUNYA.kx, 1.6, c.wz - DUNYA.kz).clone(), h: yN(hs, hl, 0.8), fov: 50 };
     },
-    bitti(c, z) { return z.ST > c.s + 4; } },
+    bitti(c, z) { return z.ST > c.s - 9; } },
   vinc: { taraf: 'on', yuk: 'yuksek', gok: false, sure: [16, 16],
     kur(c) { c.yan = c.rnd() < 0.5 ? -1 : 1; },
     poz(c, t, z) {
@@ -373,6 +387,15 @@ function rejiSifirla() {
 const OLCU = 4;
 function rejiGuncelle(dt) {
   const R = D.reji, z = konvoyOzet();
+  R.dbSn = clamp(B - (R.oncekiB ?? B), 0, 0.5) / 1.85;
+  R.oncekiB = B;
+  // yakın çekim sırası yalnız sahnedekileri tutar
+  if (R.yakinSira.size > MAKS * 2)
+    for (const id of R.yakinSira.keys())
+      if (!D.oy.has(id))
+        R.yakinSira.delete(id);
+  // yeni gelin arabası öne geçerken öteki arabalar geçiş yolundan açılır (lider çekimi sürerken)
+  D.yolAc = R.cekim && R.cekim.ad === 'lider' && R.cekim.k && R.cekim.k === D.lider && R.cekim.k.yer < 0.9 ? R.cekim.k : null;
   if (!D.lider) {
     // boş yol: yolun kendisini gösteren yavaş bir drone
     if (!R.cekim || R.cekim.ad !== 'bos')
@@ -422,24 +445,20 @@ function rejiGuncelle(dt) {
       poz = { p: a.p.clone().lerp(poz.p, e), h: a.h.clone().lerp(poz.h, e), fov: lerp(a.fov, poz.fov, e), merkezY: lerp(a.merkezY || MERKEZ_Y, poz.merkezY || MERKEZ_Y, e) };
     }
   }
-  // Konunun önüne başka bir araba girerse kamera yavaşça yükselip onun üstünden bakar (engel kalkınca iner).
+  // Konunun önüne başka bir araba girerse (merkezine, tavanının önüne ya da arkasına giden çizgi bir arabanın içinden
+  // geçerse) kamera yükselip onun üstünden bakar; engel kalkınca yavaşça iner.
   const konu0 = konuArabasi(c);
-  const engel = konu0 && !R.gecis && engelVar(poz.p, arabaKonum(konu0, 0.8), konu0);
-  c.kaldir = lerp(c.kaldir || 0, engel ? 3.2 : 0, Math.min(1, dt * (engel ? 2.5 : 0.8)));
+  let engel = false;
+  if (konu0)
+    for (const y of [0.8, 1.6])
+      for (const ds of [-1.6, 0, 1.6])
+        engel = engel || engelVar(poz.p, yolNokta(D.yol + konu0.gs + konu0.os + ds, konu0.gl + konu0.ox, y, rejiV1), konu0);
+  c.kaldir = lerp(c.kaldir || 0, engel ? 3.4 : 0, Math.min(1, R.dbSn * (engel ? 4 : 0.8)));
+  if (engel)
+    c.kaldir = Math.max(c.kaldir, 1.2);
   poz.p.y += c.kaldir;
   guvenli(poz.p, poz.h);
-  // Son denetim: güvenlik itmesinden (araba üstünden aşma, bina sınırı) sonra da konu arabası şeride sığsın; sığmıyorsa
-  // kamera bakış doğrultusunda geri çekilir (yan ve kenar çekiminde kamera yerinde kalır, onlar kendi açısını ayarlar).
-  const konu = konuArabasi(c);
-  if (konu && c.ad !== 'yan' && c.ad !== 'kenar' && !R.gecis) {
-    const yon = poz.p.clone().sub(poz.h), d0 = yon.length();
-    yon.divideScalar(d0);
-    const d = sigdir(poz.h, yon, arabaKoseleri(konu, []), poz.fov, d0, d0 * 3 + 10, poz.merkezY || MERKEZ_Y);
-    if (d > d0 + 0.01) {
-      poz.p = poz.h.clone().addScaledVector(yon, d);
-      guvenli(poz.p, poz.h);
-    }
-  }
+  sonKadraj(c, z, poz);
   kameraKoy(poz.p, poz.h, poz.fov, poz.merkezY || MERKEZ_Y);
   konuKadraj(c, z);
   // gölge kutusu: geniş çekimde geniş, yakında sıkı (gölge keskin kalsın)
@@ -448,6 +467,66 @@ function rejiGuncelle(dt) {
 }
 // Çekimin asıl konusu ekranda nerede (720×1280): testler ve kare betiği her karede şeritte mi diye bakar.
 // Geniş çekimlerde (drone, kuş, vinç sonu) bütün konvoy, öbürlerinde konu arabası (köşeleriyle).
+// Son denetim: kameranın asıl konusu (geniş çekimde gelin arabası ve ilk sıralar, öbürlerinde konu arabası) şeride ve
+// kadraja sığsın. Önce kamera bakış doğrultusunda geri çekilir (yan ve kenar çekiminde kamera yerinde kalır), güvenlik
+// itmesinden sonra hâlâ sığmıyorsa görüş açısı genişler. Her karede, gecikmesiz: konu kadrajdan hiç kaçmaz.
+function konuNoktalari(c, z) {
+  const n = [];
+  if (c.ad === 'drone' || c.ad === 'kus' || (c.ad === 'vinc' && B - c.b0 > 9)) {
+    for (const k of z.on.slice(0, c.ad === 'kus' ? 7 : 6))
+      arabaKoseleri(k, n);
+  }
+  else {
+    const k = konuArabasi(c);
+    if (k)
+      arabaKoseleri(k, n);
+  }
+  return n;
+}
+function uyuyor(p, h, fov, merkezY, n) {
+  kameraHazirla(OLCER, fov, merkezY);
+  OLCER.position.copy(p);
+  OLCER.lookAt(h);
+  OLCER.updateMatrixWorld();
+  return kadrajda(OLCER, n);
+}
+function sonKadraj(c, z, poz) {
+  const n = konuNoktalari(c, z), my = poz.merkezY || MERKEZ_Y;
+  if (!n.length || uyuyor(poz.p, poz.h, poz.fov, my, n))
+    return;
+  if (c.ad !== 'yan' && c.ad !== 'kenar') {
+    const yon = poz.p.clone().sub(poz.h), d0 = yon.length();
+    yon.divideScalar(d0);
+    const d = sigdir(poz.h, yon, n, poz.fov, d0, d0 * 4 + 40, my);
+    poz.p = poz.h.clone().addScaledVector(yon, d);
+    guvenli(poz.p, poz.h);
+    if (uyuyor(poz.p, poz.h, poz.fov, my, n))
+      return;
+  }
+  else {
+    // yerinde duran kamera (yan, kenar): önce başını konunun ortasına çevirir (yumuşatılmış bakış geride kalmışsa)
+    const orta = new THREE.Vector3();
+    for (const v of n)
+      orta.add(v);
+    orta.divideScalar(n.length);
+    poz.h = orta;
+    if (uyuyor(poz.p, poz.h, poz.fov, my, n))
+      return;
+  }
+  let a = poz.fov, b = 92;
+  if (!uyuyor(poz.p, poz.h, b, my, n)) {
+    poz.fov = b;
+    return;
+  }
+  for (let i = 0; i < 10; i++) {
+    const m = (a + b) / 2;
+    if (uyuyor(poz.p, poz.h, m, my, n))
+      b = m;
+    else
+      a = m;
+  }
+  poz.fov = b;
+}
 function konuArabasi(c) {
   if (c.ad === 'drone' || c.ad === 'kus' || c.ad === 'bos' || (c.ad === 'vinc' && B - c.b0 > 9))
     return null;
@@ -456,16 +535,7 @@ function konuArabasi(c) {
 }
 function konuKadraj(c, z) {
   const kam = DUNYA.kamera, n = [];
-  const genis = c.ad === 'drone' || c.ad === 'kus' || (c.ad === 'vinc' && B - c.b0 > 9);
-  if (genis) {
-    for (const k of z.on.slice(0, c.ad === 'kus' ? 7 : 6))
-      n.push(arabaKonum(k, 0.7));
-  }
-  else {
-    const k = konuArabasi(c);
-    if (k)
-      arabaKoseleri(k, n);
-  }
+  n.push(...konuNoktalari(c, z));
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, gorunmez = 0;
   for (const v of n) {
     ekranNokta(kam, v, _en);
@@ -489,8 +559,9 @@ function kameraKoy(p, h, fov, merkezY) {
   DUNYA.bakis.subVectors(h, p).normalize();
   // sis kameranın konuya uzaklığına göre: geniş çekim pusa boğulmasın, yakın çekimde uzak kasaba yumuşasın
   const uz = p.distanceTo(h), sis = DUNYA.sahne.fog;
-  sis.near = Math.max(110, uz * 1.3);
-  sis.far = Math.max(560, uz * 3.2 + 300);
+  const gorus = KALITE_KADEME[KALITE.kademe].gorus;
+  sis.near = Math.max(110, uz * 1.3) * gorus;
+  sis.far = Math.max(560, uz * 3.2 + 300) * gorus;
   DUNYA.merkezY = merkezY;
   if (!DUNYA.golgeOdak)
     DUNYA.golgeOdak = h.clone();
@@ -528,7 +599,7 @@ function engelVar(p, q, konu) {
   return false;
 }
 // Kamera yerin altına inmez, binaların içine girmez, arabaların içinden geçmez (yaklaşırsa üstünden aşar).
-const _gMat = new THREE.Matrix4(), _gYer = new THREE.Vector3();
+const _gMat = new THREE.Matrix4(), _gMat2 = new THREE.Matrix4(), _gYer = new THREE.Vector3();
 function guvenli(p, h) {
   // yolun yerel ekseninde: s ve yanal uzaklık (iki adımda yaklaşık)
   let s = p.z + DUNYA.kz, l = 0;
@@ -548,16 +619,19 @@ function guvenli(p, h) {
     p.x = _gYer.x;
     p.z = _gYer.z;
   }
+  // Arabanın bu kareki yeri (önceki karenin matrisi değil: drift atan saniyede 30 metre gider); hızlı arabanın önünde
+  // pay hızıyla büyür.
   for (const k of D.oy.values()) {
-    if (!k.ar || !k._M)
+    if (!k.ar)
       continue;
-    const K = KASA[k.ar.tip];
-    _gYer.copy(p).applyMatrix4(_gMat.copy(k._M).invert());
+    const K = KASA[k.ar.tip], M = arabaMatris(k, false, _gMat2);
+    _gYer.copy(p).applyMatrix4(_gMat.copy(M).invert());
+    const ileri = Math.max(0, (k.hizM || 0) - D.hiz) * 0.12;
     const L = (K.tampon.on - K.tampon.arka) / 2 + 0.55, w = K.W / 2 + 0.55, ust = Math.max(K.ev[1][1], K.ev[2][1]) + 0.6;
-    if (Math.abs(_gYer.x) < L && Math.abs(_gYer.z) < w && _gYer.y < ust) {
+    if (_gYer.x > -L && _gYer.x < L + ileri && Math.abs(_gYer.z) < w && _gYer.y < ust) {
       // içine girecekti: üstünden geç
       _gYer.y = ust;
-      p.copy(_gYer.applyMatrix4(k._M));
+      p.copy(_gYer.applyMatrix4(M));
     }
   }
 }
@@ -570,6 +644,8 @@ function parkGizle() {
     const yakin = Math.abs(p.s0 + PARCA / 2 - s) < 75;
     if (p.park)
       p.park.visible = !(y < 3 && l > 1.5 && yakin);
+    if (p.uzak)
+      p.uzak.visible = KALITE_KADEME[KALITE.kademe].uzak;
     for (const yan of ['-1', '1'])
       if (p.kenar[yan])
         p.kenar[yan].visible = !(y < 9.5 && l * +yan > 4.5 && yakin);

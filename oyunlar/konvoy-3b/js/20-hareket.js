@@ -21,21 +21,33 @@ function yolNokta(s, l, y, out) {
 }
 
 let sonDt = 0.016;
+// Geçiş yolu: arkadan gelen (yeni katılan, öne geçen yeni gelin arabası, drift atan) bu yanal çizgiden ilerler, yerine
+// yaklaşınca kendi şeridine kayar. Öteki arabalar o sürerken geçiş yolundan yana açılır (yolAc).
+function gecisL() { return D.kolon === 1 ? 2.1 : D.kolon === 2 ? 0 : -3.3; }
+function yolAcPay(k) { return D.kolon === 1 ? -2.0 : D.kolon === 2 ? (k.hedefL > 0 ? 0.95 : -0.95) : 1.0; }
+// Çıkan araba kaldırım tarafına çekilir (geçiş yolunun öbür yanı).
+function cikisL(k) { return D.kolon === 1 ? -3.5 : D.kolon === 2 ? (k.gl >= 0 ? 3.5 : -3.5) : 3.6; }
 function arabaHareket(k, dt) {
   let hs = k.hedefS, hl = k.hedefL;
   const dr = D.drift, yildiz = dr && dr.k === k;
   if (k.cikiyor) {
     // Çıkan arabanın hızı düşer, kaldırıma çekip geride kalır.
-    if (k.cikS === undefined)
+    if (k.cikS === undefined) {
       k.cikS = k.gs;
-    hl = (k.gl >= 0 ? 1 : -1) * 3.3;
-    hs = k.gs - 30;
+      k.cikL = cikisL(k);
+    }
+    hl = k.cikL;
+    // önce kenara çeker, sonra geride kalır
+    hs = k.gs - (Math.abs(k.gl - hl) < 0.8 ? 30 : 3);
     k.gitti = k.gs < k.cikS - 24;
   }
   else if (yildiz) {
     hs = DRIFT_ON;
-    hl = dr.donus === null ? (D.kolon === 1 ? 2.1 : 0) : 0;
+    hl = dr.donus === null && Math.abs(hs - k.gs) > 4 ? gecisL() : 0;
   }
+  else if (Math.abs(hs - k.gs) > 6 && k.yer < 0.9)
+    // yerinden uzakta (yeni katılmış, öne geçen): geçiş yolundan gider
+    hl = gecisL();
   // İleri geri: uzaktaysa hızlı (drift atan konvoyu sollayarak öne fırlar), yaklaştıkça yavaşlar.
   const ds = hs - k.gs, ads = Math.abs(ds);
   if (ads > 0.002) {
@@ -57,9 +69,12 @@ function arabaHareket(k, dt) {
       ox += 1.15 * Math.sin(Math.PI * u / zz.sure) * Math.sin(TAU * u / 4 - sira * 0.9);
   }
   // Drift şovunda öteki arabalar iki yana açılır: ortada yıldızın koridoru kalır (tek sırada hepsi sağa).
-  if (dr && !yildiz && !k.cikiyor)
-    ox += (D.kolon === 1 ? -1 : k.hedefL > 0 ? 1 : -1) * (D.kolon === 1 ? 2.0 : 0.95);
-  k.ox += (ox - k.ox) * Math.min(1, dt * (dr ? 4 : 10));
+  // Drift atan ya da yeni gelin arabası öne geçerken öteki arabalar geçiş yolundan yana açılır.
+  const gecen = dr && dr.donus === null ? dr.k : D.yolAc;
+  const acik = gecen && gecen !== k && !k.cikiyor && k.yer > 0.5;
+  if (acik || (dr && !yildiz && !k.cikiyor))
+    ox += yolAcPay(k);
+  k.ox += (ox - k.ox) * Math.min(1, dt * (dr || acik ? 4 : 10));
   if (yildiz && dr.donus !== null && !azHareket) {
     // Drift: dört vuruşun ikisinde yerinde küçük bir daire çizerek tam tur döner, ikisinde poz verir.
     const su = B - dr.donus;
@@ -68,13 +83,15 @@ function arabaHareket(k, dt) {
       sapma = a;
       k.ox = 1.5 * Math.sin(a);
       os = 1.1 * (1 - Math.cos(a));
-      if (u < 2 && D.duman.length < 70 && Math.random() < dt * 34)
+      // duman vuruş saatiyle çıkar: vuruşun her on altıda birinde iki lastikten birer bulut
+      if (u < 2 && D.duman.length < 70 && Math.floor(B * 16) !== Math.floor((k._dumanB ?? B) * 16))
         for (const ar of [-1.3, 1.3]) {
           const p = yolNokta(D.yol + k.gs + os + ar * Math.cos(a), k.gl + k.ox - ar * Math.sin(a), 0, rejiV0);
           D.duman.push({ x: p.x + DUNYA.kx + (Math.random() - 0.5) * 0.6, z: p.z + DUNYA.kz + (Math.random() - 0.5) * 0.6, b0: B, r: 0.6 + Math.random() * 0.5 });
         }
     }
   }
+  k._dumanB = B;
   k.os = os;
   // Yön: arabanın gerçek hızının yönü (yola göre). Şerit değiştiren, zigzag yapan araba gittiği yana kırılır.
   const sToplam = k.gs + k.os, lToplam = k.gl + k.ox;
