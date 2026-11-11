@@ -101,6 +101,7 @@ const oku = [
   '  1. BASLAT.bat dosyasına çift tıkla.',
   '  2. İlk seferde kütüphane iner; internet gerekir. Bu bir kez olur.',
   '  3. TikTok kullanıcı adını yaz (başında @ olmadan), Enter.',
+  '     Yalnızca denemek için boş bırak: TikTok\'a bağlanmadan, sahte izleyicilerle açılır.',
   '  4. Oyun tarayıcıda açılır. Yayın açıksa yorumlar oyuna akmaya başlar.',
   '',
   'Yayına alma',

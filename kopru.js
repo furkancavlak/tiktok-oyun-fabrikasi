@@ -16,7 +16,8 @@
  *   node kopru.js kullanici_adin --ac           oyunu tarayıcıda kendisi açar
  *
  * Hangi oyun: --oyun <ad> verilirse oyunlar/<ad>/oyun.html. Verilmezse önce bu dosyanın yanındaki oyun.html
- * (yayıncı paketi böyle gelir), o da yoksa depoda tek oyun varsa o açılır.
+ * (yayıncı paketi böyle gelir), o da yoksa depoda tek oyun varsa o açılır. Birden çok oyun varsa hangisinin
+ * açılacağını sorar (komut satırında elle çalıştırılınca ya da --sor ile; BASLAT.bat --sor verir).
  */
 'use strict';
 const http = require('http'), crypto = require('crypto'), fs = require('fs'), path = require('path');
@@ -37,11 +38,23 @@ function oyunKlasoru() {
   const adlar = oyunlariBul();
   return adlar.length === 1 ? path.join(__dirname, 'oyunlar', adlar[0]) : null;
 }
-const KLASOR = oyunKlasoru();
-const OYUN = KLASOR ? path.join(KLASOR, 'oyun.html') : null;
+// Açılan oyun. Çoğu zaman açılışta bellidir; birden çok oyun varken ad verilmediyse sorulduktan sonra atanır.
 // Hazır parçalar açılan oyunun kendi klasöründen gelir: oyunlar/<ad>/muzik/ (paketlenince paketin muzik/ klasörü).
 // Bütün oyunların ortak kullandığı bir müzik klasörü yoktur: her oyunun müziği kendinedir (docs/MUZIK.md).
-const MUZIK_KLASOR = KLASOR ? path.join(KLASOR, 'muzik') : null;
+let KLASOR = null, OYUN = null, MUZIK_KLASOR = null;
+function oyunAta(klasor) {
+  KLASOR = klasor;
+  OYUN = klasor ? path.join(klasor, 'oyun.html') : null;
+  MUZIK_KLASOR = klasor ? path.join(klasor, 'muzik') : null;
+}
+oyunAta(oyunKlasoru());
+// "Hangi oyun?" sorusunun yanıtını oyun adına çevirir: listedeki sıra numarası ya da oyunun adı.
+function oyunSec(adlar, yanit) {
+  const y = String(yanit == null ? '' : yanit).trim().toLowerCase();
+  if (/^\d+$/.test(y))
+    return adlar[parseInt(y, 10) - 1] || null;
+  return adlar.find(a => a.toLowerCase() === y) || null;
+}
 
 const yaz = (...a) => console.log(new Date().toTimeString().slice(0, 8), ...a);
 
@@ -140,9 +153,44 @@ function calistir() {
   }
   if (!OYUN || !fs.existsSync(OYUN)) {
     const adlar = oyunlariBul();
+    // Ad verilmemiş ve birden çok oyun var: kişi karşıdaysa (BASLAT.bat --sor verir ya da komut satırında elle
+    // çalıştırılmıştır) sor. Köprüyü başka bir program çalıştırıyorsa sorup asılı kalma, eskisi gibi söyleyip dur.
+    if (oi < 0 && adlar.length > 1 && (args.includes('--sor') || process.stdin.isTTY)) {
+      oyunSor(adlar);
+      return;
+    }
     console.log('\nHangi oyun açılacak? --oyun <ad> ekle.' + (adlar.length ? ' Derlenmiş oyunlar: ' + adlar.join(', ') : ' Henüz derlenmiş oyun yok: node araclar/derle.js <ad>') + '\n');
     process.exit(1);
   }
+  dinle();
+}
+// Derlenmiş oyunları sıralar, birini seçtirir, seçilenle köprüyü açar. Listede olmayan yanıtta yeniden sorar.
+function oyunSor(adlar) {
+  const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout });
+  let secildi = false;
+  console.log('\nHangi oyun açılsın?\n');
+  adlar.forEach((ad, i) => {
+    let gorunen = '';
+    try { gorunen = JSON.parse(fs.readFileSync(path.join(__dirname, 'oyunlar', ad, 'oyun.json'), 'utf8')).ad || ''; } catch (e) { }
+    console.log('  ' + (i + 1) + ') ' + ad + (gorunen ? '   (' + gorunen + ')' : ''));
+  });
+  const sor = () => rl.question('\nNumarasını ya da adını yazıp Enter\'a bas: ', yanit => {
+    const ad = oyunSec(adlar, yanit);
+    if (!ad) {
+      console.log('  Listede yok: ' + String(yanit).trim());
+      sor();
+      return;
+    }
+    secildi = true;
+    rl.close();
+    oyunAta(path.join(__dirname, 'oyunlar', ad));
+    dinle();
+  });
+  // Yanıt gelmeden girdi biterse (pencere kapatıldı, girdi başka yerden geliyordu) asılı kalma.
+  rl.on('close', () => { if (!secildi) { console.log('\nOyun seçilmedi. Doğrudan açmak için: --oyun <ad>\n'); process.exit(1); } });
+  sor();
+}
+function dinle() {
   // Yalnızca bu bilgisayardan erişilir (127.0.0.1); ağdaki başka cihazlar bağlanamaz.
   sunucu.listen(PORT, '127.0.0.1', () => {
     console.log('\n  Köprü çalışıyor. Oyun: ' + path.relative(__dirname, OYUN));
@@ -253,5 +301,5 @@ function denemeBaslat() {
   }, 400);
 }
 
-module.exports = { cevir }; // testler için
+module.exports = { cevir, oyunSec }; // testler için
 if (require.main === module) calistir();

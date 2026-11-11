@@ -35,6 +35,8 @@ node kopru.js --deneme --oyun halay --ac
 
 Tarayıcı açılır. Sahte izleyiciler yorum yazar, beğeni ve hediye gönderir. Hiçbir hesaba bağlanmaz.
 
+Windows'ta komut yazmadan: `BASLAT.bat` dosyasına çift tıkla, kullanıcı adını boş bırakıp Enter'a bas, listeden oyunu seç.
+
 ### Yol 2: Kendi oyununu Claude Code ile yap
 
 1. Depo klasöründe Claude Code'u aç. Ajan `AGENTS.md` dosyasını ve `.claude/skills/` altındaki beceriyi okur; çekirdeğin sınırlarını ve komutları oradan öğrenir.

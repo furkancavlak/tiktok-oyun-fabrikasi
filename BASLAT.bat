@@ -26,13 +26,17 @@ if not exist "node_modules\tiktok-live-connector" (
 )
 
 echo.
+echo  Kendi yayininla oynamak icin TikTok kullanici adini yaz.
+echo  Yalnizca denemek istiyorsan bos birak ve Enter'a bas: TikTok'a baglanmadan, sahte izleyicilerle acilir.
+echo.
+set "KULLANICI="
 set /p KULLANICI= TikTok kullanici adin (basinda @ olmadan):
-if "%KULLANICI%"=="" (
-  echo  Kullanici adi bos birakilamaz.
-  pause
-  exit /b 1
-)
 
-node kopru.js "%KULLANICI%" --ac
+rem --sor: klasorde birden cok oyun varsa kopru hangisinin acilacagini sorar (depo kokunden calistirinca).
+if "%KULLANICI%"=="" (
+  node kopru.js --deneme --ac --sor
+) else (
+  node kopru.js "%KULLANICI%" --ac --sor
+)
 echo.
 pause

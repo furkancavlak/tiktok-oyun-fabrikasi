@@ -20,7 +20,8 @@ Bu rehber, programcı olmayan bir yayıncı içindir. Elinde bir oyun paketi kla
 
 1. Paket klasöründeki `BASLAT.bat` dosyasına çift tıkla.
 2. İlk seferde gereken kütüphane iner. Bu bir kez olur, internet ister.
-3. Ekranda TikTok kullanıcı adın sorulur. Başında `@` olmadan yaz ve Enter'a bas.
+3. Ekranda TikTok kullanıcı adın sorulur. Başında `@` olmadan yaz ve Enter'a bas. Yalnızca denemek için boş
+   bırak: TikTok'a bağlanmadan, sahte izleyicilerle açılır.
 4. Oyun tarayıcıda açılır. Solda sahne, sağda yayın masası (panel) vardır. Masanın en üstündeki şeritte Bağlantı
    kutusu **Canlı** yazıyorsa yorumlar, beğeniler ve hediyeler oyuna akıyor demektir. Yanında kaç olay alındığı yazar.
 5. Sayfada bir kez herhangi bir yere tıkla ya da başlat düğmesine bas. Tarayıcılar, kullanıcı tıklamadan ses çalmaya izin vermez.
