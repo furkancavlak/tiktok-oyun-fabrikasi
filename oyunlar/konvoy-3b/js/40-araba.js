@@ -43,9 +43,73 @@ const KASA = {
     tampon: { on: 2.38, arka: -2.38, y: 0.44, renk: '#d4d7dc' }, far: { x: 2.29, y: 0.68, z: 0.52, w: 0.32, h: 0.16 }, stop: { x: -2.33, y: 0.72, z: 0.7, w: 0.14, h: 0.3 },
     plaka: { on: [2.45, 0.44], arka: [-2.34, 0.45] }, surucu: { x: -0.12, y: 1.25 }, kasa: [-2.24, -0.7] }
 };
+/* ---- hazır modeller (Kenney Car Kit, CC0) ----
+ * Arabanın görünümü iki türlü: kodla kurulan kasalar (KASA, kasaGeo) ya da derlemede gömülen hazır modeller
+ * (kitaplik/araba-modelleri.js, genel ARABA_MODELLERI; üreten araclar/kitaplik-araba.js). Adres satırında ?araba=kod
+ * eskisini, ?araba=hazir (ya da hiçbir şey) hazır modelleri açar; ikisi aynı derlemede yan yana karşılaştırılır.
+ * Hazır modelde üç kasa var: sedan, kombi, van. Kodun beş tipi bunlara eşlenir (hatchback → kombi, pikap → van);
+ * kasanın ölçüleri (KASA kaydı) modelden türer, oyunun geri kalanı (reji, süs, plaka, ışık) farkı bilmez.
+ */
+const ARABA_HAZIR = arabaHazirMi();
+function arabaHazirMi() {
+  let secim = null;
+  try { secim = new URLSearchParams(location.search).get('araba'); }
+  catch (e) { }
+  return typeof ARABA_MODELLERI !== 'undefined' && secim !== 'kod';
+}
+const ARABA_TIPLERI = ARABA_HAZIR ? ['sedan', 'kombi', 'van'] : KASA_TIP;
+const HAZIR_ESLE = { hatch: 'kombi', pikap: 'van' };
+// Modelin ölçülerinden KASA kaydı: gövde kutusu, cam ve tavan kutusu, Kenney paletinin far (sarı), stop (kırmızı) ve
+// plaka (beyaz) şeritleri derleme aracında ölçülmüştür. alt / ev, kodlu kasadaki anlamlarıyla (gelin süsü bunlara göre).
+function hazirKasa(M) {
+  const o = M.olcu, k = M.kutu, c = o.cam, ust = k.max[1], on = k.max[0], arka = k.min[0];
+  const kaputY = o.kaput ? o.kaput.max[1] : c.min[1] - 0.05, bagajY = o.bagaj ? o.bagaj.max[1] : c.min[1];
+  const isik = (b, x, yedek) => b ? { x, y: (b.min[1] + b.max[1]) / 2, z: (b.min[2] + b.max[2]) / 2, w: b.max[2] - b.min[2], h: b.max[1] - b.min[1] } : yedek;
+  const plakaY = o['45arka'] ? (o['45arka'].min[1] + o['45arka'].max[1]) / 2 : 0.3;
+  return {
+    hazir: true, W: k.max[2] * 2, r: M.tekerR, teker: M.tekerX, tz: M.tekerZ,
+    alt: [[arka, 0.3], [arka, bagajY - 0.15], [arka + 0.08, bagajY], [c.max[0] + 0.1, kaputY], [on - 0.1, kaputY - 0.03], [on, kaputY - 0.2], [on, 0.3]],
+    ev: [[c.min[0], c.min[1]], [o.tavan.min[0], ust], [o.tavan.max[0], ust], [c.max[0], c.min[1]]],
+    tampon: { on, arka, y: 0.3, renk: '#6b6d7a' },
+    far: isik(o['51on'], o['51on'] && o['51on'].max[0], { x: on, y: 0.7, z: 0.5, w: 0.3, h: 0.14 }),
+    stop: isik(o['53arka'], o['53arka'] && o['53arka'].min[0], { x: arka, y: 0.75, z: 0.5, w: 0.3, h: 0.12 }),
+    plaka: { on: [on + 0.012, plakaY], arka: [arka - 0.012, plakaY] },
+    surucu: { x: Math.min(c.max[0] - 0.85, o.tavan.max[0] - 0.2), y: c.min[1] + 0.27 }
+  };
+}
+if (ARABA_HAZIR)
+  for (const tip of ARABA_TIPLERI)
+    KASA[tip] = hazirKasa(ARABA_MODELLERI.modeller[tip]);
+// Gömülü veriyi (base64 tamsayı dizileri) geometriye açar. Renkler sRGB'den doğrusala çevrilir (Yigin'in renkleri gibi).
+function b64Dizi(s, Tur) {
+  const ham = atob(s), u = new Uint8Array(ham.length);
+  for (let i = 0; i < ham.length; i++)
+    u[i] = ham.charCodeAt(i);
+  return new Tur(u.buffer);
+}
+function hazirGeo(d, renkli) {
+  const P = b64Dizi(d.p, Int16Array), N = b64Dizi(d.n, Int8Array), p = new Float32Array(P.length);
+  for (let i = 0; i < P.length; i++) {
+    const kt = d.kutu[i % 3];
+    p[i] = kt[0] + (P[i] + 32768) / 65535 * (kt[1] - kt[0]);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(p, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(Float32Array.from(N, v => v / 127), 3));
+  if (renkli) {
+    const C = b64Dizi(d.c, Uint8Array), Bo = b64Dizi(d.b, Uint8Array);
+    g.setAttribute('color', new THREE.BufferAttribute(Float32Array.from(C, v => Math.pow(v / 255, 2.2)), 3));
+    g.setAttribute('boya', new THREE.BufferAttribute(Float32Array.from(Bo), 1));
+  }
+  g.setIndex(new THREE.BufferAttribute(b64Dizi(d.i, Uint16Array), 1));
+  return g;
+}
 function arabaUret(id) {
   const r = rastgeleUret(ozet('araba:' + id)), sec2 = a => a[Math.floor(r() * a.length)];
-  const z = r(), tip = z < 0.42 ? 'sedan' : z < 0.62 ? 'hatch' : z < 0.75 ? 'kombi' : z < 0.88 ? 'van' : 'pikap';
+  const z = r();
+  let tip = z < 0.42 ? 'sedan' : z < 0.62 ? 'hatch' : z < 0.75 ? 'kombi' : z < 0.88 ? 'van' : 'pikap';
+  if (ARABA_HAZIR)
+    tip = HAZIR_ESLE[tip] || tip;
   return { tip, renk: new THREE.Color(sec2(ARABA_RENK)), kurdele: sec2(KURDELE), faz: r(), yolcu: r() < 0.55, yolcuG: gorunumUret(id + '#yolcu') };
 }
 function arabaHazir(k) {
@@ -153,6 +217,10 @@ const KASA_GEO = {};
 function kasaGeo(tip) {
   if (KASA_GEO[tip])
     return KASA_GEO[tip];
+  if (ARABA_HAZIR) {
+    const M = ARABA_MODELLERI.modeller[tip];
+    return (KASA_GEO[tip] = { govde: hazirGeo(M.govde, true), cam: hazirGeo(M.cam, false) });
+  }
   const K = KASA[tip], W = K.W, R = K.r + 0.075, sil = K.sil, A = K.alt;
   // 1) gövde: yan silüet, tekerlek kemerleri oyulmuş; yuvarlak kenarlı extrude
   const sh = new THREE.Shape();
@@ -291,7 +359,7 @@ function arabalariKur() {
   const boyali = boyaliMalzeme(), camM = new THREE.MeshStandardMaterial({ color: '#2b4560', emissive: '#7fa6c9', emissiveIntensity: 0.18, transparent: true, opacity: 0.58, roughness: 0.08, metalness: 0.5, depthWrite: false, side: THREE.DoubleSide });
   GOVDE = {};
   CAM = {};
-  for (const tip of KASA_TIP) {
+  for (const tip of ARABA_TIPLERI) {
     const kg = kasaGeo(tip);
     GOVDE[tip] = ornekli(kg.govde, boyali, KAP_ARABA, true);
     GOVDE[tip].instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(KAP_ARABA * 3).fill(1), 3);
@@ -309,7 +377,9 @@ function arabalariKur() {
     ku.setX(i, 0.5 + ku.getX(i) * 0.5);
   ty.geo(kapak, new THREE.Matrix4().makeTranslation(0, 0, 0.1), '#ffffff');
   ty.geo(kapak, new THREE.Matrix4().makeRotationY(Math.PI).setPosition(0, 0, -0.1), '#ffffff');
-  TEKER = ornekli(ty.bitir(), new THREE.MeshStandardMaterial({ map: DOKU.teker, roughness: 0.7, metalness: 0.1 }), KAP_ARABA * 4, true);
+  // hazır modelde tekerlek de modelin kendisidir (Kenney'in jantlı lastiği, köşe renkli)
+  TEKER = ARABA_HAZIR ? ornekli(hazirGeo(ARABA_MODELLERI.teker, true), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, metalness: 0.05 }), KAP_ARABA * 4, true)
+    : ornekli(ty.bitir(), new THREE.MeshStandardMaterial({ map: DOKU.teker, roughness: 0.7, metalness: 0.1 }), KAP_ARABA * 4, true);
   // ışıklar: far, stop, sinyal; renkleri her karede (yanıp sönme) örnek rengiyle verilir
   LAMBA = ornekli(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ toneMapped: false }), KAP_ARABA * 8, false);
   LAMBA.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(KAP_ARABA * 8 * 3), 3);
@@ -578,10 +648,10 @@ function arabaMatris(k, yaySiz, out) {
   _arQ.setFromEuler(_arE);
   return out.compose(_arP, _arQ, _arS);
 }
-const SAYAC = {};
+const SAYAC = {}, Y_YARIM = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
 let gorunenArabalar = [];
 function arabalariYerlestir() {
-  for (const tip of KASA_TIP)
+  for (const tip of ARABA_TIPLERI)
     SAYAC[tip] = 0;
   let nt = 0, nl = 0, nb = 0, np = 0;
   const lc = LAMBA.instanceColor.array, bc = BASLAR.instanceColor.array, sc = SACLAR.instanceColor.array, gc = GOVDE_INSAN.instanceColor.array;
@@ -598,10 +668,14 @@ function arabalariYerlestir() {
     GOVDE[tip].instanceColor.setXYZ(i, r.r, r.g, r.b);
     // tekerlekler: yay yok (gövde onların üstünde yaylanır), zıplamada onlar da kalkar
     arabaMatris(k, true, _arM2);
+    const tz = K.hazir ? K.tz : K.W / 2 - 0.13;
     for (const xc of K.teker)
       for (const s of [-1, 1]) {
         _arQ.setFromAxisAngle(_v.set(0, 0, 1), -k.teker);
-        _m4.compose(_v.set(xc, K.r + k.zipY, s * (K.W / 2 - 0.13)), _arQ, _arS).premultiply(_arM2);
+        // hazır tekerleğin dış yüzü solda (-z): sağdakiler yarım tur çevrilir, jant dışa baksın
+        if (K.hazir && s > 0)
+          _arQ.multiply(Y_YARIM);
+        _m4.compose(_v.set(xc, K.r + k.zipY, s * tz), _arQ, _arS).premultiply(_arM2);
         TEKER.setMatrixAt(nt++, _m4);
       }
     // ışıklar: korna çalınca selektör (farlar yanıp söner), dörtlüler vuruşla yanar, fren yaparken ve her ölçünün
@@ -677,7 +751,7 @@ function arabalariYerlestir() {
       nb++;
     }
   }
-  for (const tip of KASA_TIP) {
+  for (const tip of ARABA_TIPLERI) {
     GOVDE[tip].count = CAM[tip].count = Math.min(SAYAC[tip], GOVDE[tip].instanceMatrix.count);
     GOVDE[tip].instanceMatrix.needsUpdate = CAM[tip].instanceMatrix.needsUpdate = true;
     GOVDE[tip].instanceColor.needsUpdate = true;
@@ -755,10 +829,10 @@ function gelinSusuYerlestir() {
 
 /* ---- park etmiş arabalar (yol kenarının parçası, tek geometride birleşir) ---- */
 function parkArabasi(Y, M, r) {
-  const tip = KASA_TIP[Math.floor(r() * 3)], K = KASA[tip], kg = kasaGeo(tip);
+  const tip = ARABA_TIPLERI[Math.floor(r() * 3)], K = KASA[tip], kg = kasaGeo(tip);
   Y.geoBoyali(kg.govde, M, ARABA_RENK[Math.floor(r() * ARABA_RENK.length)]);
   Y.geo(kg.cam, M, '#2c3946');
   for (const xc of K.teker)
     for (const s of [-1, 1])
-      parcaEkle(Y, M, 'silindir', xc, K.r, s * (K.W / 2 - 0.13), K.r * 2, 0.2, K.r * 2, '#1e1e22', 0, HP, 0);
+      parcaEkle(Y, M, 'silindir', xc, K.r, s * (K.hazir ? K.tz + 0.15 : K.W / 2 - 0.13), K.r * 2, 0.2, K.r * 2, '#1e1e22', 0, HP, 0);
 }
