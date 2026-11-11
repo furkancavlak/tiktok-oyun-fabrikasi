@@ -213,6 +213,8 @@ if (process.platform === 'win32') {
     const acKl = path.join(hk, 'zip-acik'), ex = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Expand-Archive -LiteralPath "' + pkZip + '" -DestinationPath "' + acKl + '"'], { encoding: 'utf8', timeout: 120000 });
     kontrol('ZIP Windows\'un kendi açıcısıyla (Expand-Archive) açılır, klasör düzeni korunur', ex.status === 0 && fs.existsSync(path.join(acKl, 'deneme-oyun', 'BASLAT.command')) && fs.existsSync(path.join(acKl, 'deneme-oyun', 'kopru.js')), (ex.stderr || '').slice(0, 200));
   }
+  // Bu bloğun kendi kurduğu geçici klasör (yaklaşık 390 MB: node.exe kopyası) her koşuda birikmesin.
+  try { fs.rmSync(hk, { recursive: true, force: true }); } catch (e) { }
 }
 // ==== HAZIR PAKET — sonu ====
 

@@ -139,7 +139,12 @@ Sahne 720x1280 sanal ölçekte çizilir, TikTok'un dikey yayınına göre. Alt k
 
 ## Lisans
 
-MIT. Ayrıntı `LICENSE` dosyasında.
+Bu deponun kendi kodu MIT lisanslıdır. Ayrıntı `LICENSE` dosyasında.
+
+TikTok bağlantısını kuran `tiktok-live-connector` ve `tiktok-live-proto` kütüphaneleri bu deponun parçası değildir ve
+AGPL-3.0 lisanslıdır. Kaynak koddan kurarken onları npm indirir; hazır Windows paketi ise ikisini de kaynak kodu ve lisans
+metniyle birlikte `node_modules` içinde taşır. Hazır paketi başkasına verirsen bu lisansın koşulları geçerlidir: paketi
+olduğu gibi, lisans dosyalarıyla birlikte ver. Paketteki Node.js'in lisansı `node\LICENSE` dosyasındadır.
 
 ## English summary
 
