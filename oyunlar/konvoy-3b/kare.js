@@ -79,13 +79,17 @@ const bekle = ms => new Promise(r => setTimeout(r, ms));
   };
   const sayfa = async (dosyalar, sutun, w, h, cik, yazilar) => {
     const s = await b.newPage({ viewport: { width: w * sutun, height: h * Math.ceil(dosyalar.length / sutun) } });
-    await s.setContent('<body style="margin:0;display:flex;flex-wrap:wrap;background:#111;font:700 15px sans-serif;color:#fff">' + dosyalar.map((d, i) => '<div style="position:relative;width:' + w + 'px;height:' + h + 'px"><img style="width:100%;height:100%;display:block" src="data:image/png;base64,' + fs.readFileSync(path.join(cikti, d)).toString('base64') + '"><span style="position:absolute;left:4px;top:4px;background:#000c;padding:1px 5px">' + (yazilar ? yazilar[i] : d.replace('.png', '')) + '</span><div style="position:absolute;left:0;right:0;top:' + (h * 505 / 1280) + 'px;height:' + (h * 501 / 1280) + 'px;border-top:1px dashed #0f08;border-bottom:1px dashed #0f08"></div></div>').join('') + '</body>');
+    // görüntüler base64 yerine dosya yoluyla yüklenir: 60 tam boy kare base64 olarak sayfayı çökertiyordu
+    const html = path.join(cikti, cik.replace('.png', '-sayfa.html'));
+    fs.writeFileSync(html, '<!doctype html><meta charset="utf-8"><body style="margin:0;display:flex;flex-wrap:wrap;background:#111;font:700 15px sans-serif;color:#fff">' + dosyalar.map((d, i) => '<div style="position:relative;width:' + w + 'px;height:' + h + 'px"><img style="width:100%;height:100%;display:block" src="' + encodeURI(d) + '"><span style="position:absolute;left:4px;top:4px;background:#000c;padding:1px 5px">' + (yazilar ? yazilar[i] : d.replace('.png', '')) + '</span><div style="position:absolute;left:0;right:0;top:' + (h * 505 / 1280) + 'px;height:' + (h * 501 / 1280) + 'px;border-top:1px dashed #0f08;border-bottom:1px dashed #0f08"></div></div>').join('') + '</body>');
+    await s.goto(require('url').pathToFileURL(html).href);
     await s.waitForTimeout(300);
     // dosya başka bir programda açıksa (Windows kilidi) yanına -yeni ekiyle yazılır
     const png = await s.screenshot();
     try { fs.writeFileSync(path.join(cikti, cik), png); }
     catch (e) { fs.writeFileSync(path.join(cikti, cik.replace('.png', '-yeni.png')), png); console.log(cik + ' kilitli, ' + cik.replace('.png', '-yeni.png') + ' yazıldı'); }
     await s.close();
+    fs.unlinkSync(html);
   };
 
   const CEKIMLER = ['drone', 'yan', 'on', 'kus', 'tur', 'yakin', 'kenar', 'vinc'];

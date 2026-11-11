@@ -59852,17 +59852,88 @@ const CEKIM_SIRA = ['drone', 'yan', 'on', 'kus', 'tur', 'yakin', 'kenar', 'vinc'
 // Otomatik reji geniş çekimde yaşar (konvoy bir bütün okunur); yakın ve orta çekimler programda yalnız kısa ve seyrek
 // ara kesmedir (en çok beşte bir, art arda hiç). Yakın çekimleri olaylar alır: drift şovu, yeni gelin arabası, öne
 // geçen (sollama), hediye atan izleyici. Olaydan sonra hep geniş çekime dönülür.
-const GENIS = ['drone', 'kus', 'arka', 'yanust', 'vinc'];
+// Geniş çekimlerin hepsinde yol ekranda yukarı doğru akar (dikeyden en çok ~35°): dikey kadrajda konvoy bandın boyunu
+// doldurur. Yandan bakan çekim (yol yatay çizgi) geniş havuzda yoktur.
+const GENIS = ['arka', 'drone', 'ucsol', 'ucsag', 'kus', 'vinc'];
 const ARA_KESME = ['yakin', 'yan', 'on', 'tur', 'kenar'];
 // Geniş çekimde kadraja sığan ön grup (gelin arabası ve arkasındaki ilk sıralar); kuyruk uzağa akabilir.
-const GRUP = { drone: 6, kus: 7, arka: 8, yanust: 8, vinc: 6 };
+// kalabalıkta gelin arabası ve ilk on bir araba; az arabada hepsi (yakından)
+const GRUP = { drone: 5, kus: 5, arka: 5, ucsol: 5, ucsag: 5, vinc: 5 };
 const genisMi = c => !!c && GENIS.includes(c.ad) && (c.ad !== 'vinc' || B - c.b0 > 9);
 // Hangi çekimden hangisine yumuşak geçilebilir (2–4 vuruş): yönü ve yüksekliği birbirine akabilen çiftler.
-const YUMUSAK = { 'drone>yan': 4, 'drone>on': 4, 'kus>drone': 4, 'vinc>kus': 2, 'kus>vinc': 4, 'tur>on': 2, 'on>tur': 2, 'yan>yakin': 2, 'tur>yakin': 2 };
+const YUMUSAK = { 'drone>yan': 4, 'drone>on': 4, 'kus>drone': 4, 'vinc>kus': 2, 'kus>vinc': 4, 'arka>kus': 4, 'kus>arka': 4, 'tur>on': 2, 'on>tur': 2, 'yan>yakin': 2, 'tur>yakin': 2 };
 Object.assign(D, { reji: { cekim: null, gecis: null, zorla: null, olay: null, konu: null, gecmis: [], rnd: rastgeleUret(4242), yakinSira: new Map(), sonKesme: -99 } });
 // testler ve öbür dallar (süper araba) olayı aynı kapıdan verir: CanliOyun._test.D.reji.olayAt('super', k)
 D.reji.olayAt = (tur, k) => rejiOlay(tur, k);
+D.reji.genisOlc = () => genisOlc();
 const OLCER = new THREE.PerspectiveCamera(50, GW / GH, 0.3, 1400);
+
+/* ---- geniş çekim: yol yukarı akar, konvoyun başı bandı doldurur ---- */
+// psi: kameranın yönü, yolun gerisine göre (0 arkadan, π önden; artı sol), el: yükseklik açısı. Konu: gelin arabası
+// ve ilk "adet" araba; kamera bu grubun köşeleri bandı dolduracak en yakın uzaklığa gelir (az arabada yakından).
+function genisPoz(c, z, psi, el, adet) {
+  const grup = z.on.slice(0, adet), n = [];
+  for (const k of grup)
+    arabaKoseleri(k, n);
+  if (!n.length)
+    n.push(yN(z.SL, 0, 0));
+  const sSon = grup.length ? D.yol + grup[grup.length - 1].gs : z.SL, sOrta = (sSon + z.SL) / 2, h = yN(sOrta, 0, 0.6), T = ileriYon(sOrta);
+  const yon = new THREE.Vector3(-T.x, 0, -T.z).applyAxisAngle(rejiV0.set(0, 1, 0), psi).multiplyScalar(Math.cos(el));
+  yon.y = Math.sin(el);
+  // geniş çekimde konu bandı neredeyse kenarına kadar doldurur (pay eksi: kenar boşluğu dar)
+  const d = yakinlas(c, 'd', sigdir(h, yon, n, 40, 6, 220, MERKEZ_Y, -12), 2);
+  return { p: h.clone().addScaledVector(yon, d), h, fov: 40 };
+}
+// Geniş çekimin ölçüsü (testler için, şimdiki kameradan): yolun ekrandaki açısı (dikeyden derece), konvoyun başının
+// bandın boyunca kapladığı pay, ilk altı arabanın en kısasının ekrandaki boyu (720×1280 piksel), bandın ne kadarının yol
+// ve kaldırım olduğu (ızgara noktalarından yere ışın).
+const _go1 = new THREE.Vector3(), _go2 = new THREE.Vector3(), _goE = { x: 0, y: 0, ok: false }, _goE2 = { x: 0, y: 0, ok: false }, _goR = new THREE.Raycaster(), _goP = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), _goN = new THREE.Vector2();
+function genisOlc() {
+  const kam = DUNYA.kamera, z = konvoyOzet(), c = D.reji.cekim;
+  if (!kam || !genisMi(c))
+    return null;
+  const grup = z.on.slice(0, GRUP[c.ad]);
+  if (!grup.length)
+    return null;
+  const sSon = D.yol + grup[grup.length - 1].gs;
+  ekranNokta(kam, yN(z.SL + 2, 0, 0), _goE);
+  ekranNokta(kam, yN(Math.min(sSon - 2, z.SL - 6), 0, 0), _goE2);
+  const aci = Math.atan2(Math.abs(_goE.x - _goE2.x), Math.abs(_goE.y - _goE2.y)) * 180 / Math.PI;
+  let y0 = Infinity, y1 = -Infinity;
+  for (const k of grup)
+    for (const v of arabaKoseleri(k, [])) {
+      ekranNokta(kam, v, _goE);
+      y0 = Math.min(y0, _goE.y);
+      y1 = Math.max(y1, _goE.y);
+    }
+  const kaplama = grup.length > 1 ? (Math.min(y1, SERIT_ALT) - Math.max(y0, SERIT_UST)) / (SERIT_ALT - SERIT_UST) : null;
+  let enKisa = Infinity;
+  for (const k of grup.slice(0, 6)) {
+    const K = KASA[k.ar.tip], s = D.yol + k.gs + k.os, l = k.gl + k.ox;
+    ekranNokta(kam, yN(s + K.tampon.on, l, 0.7), _goE);
+    ekranNokta(kam, yN(s + K.tampon.arka, l, 0.7), _goE2);
+    enKisa = Math.min(enKisa, Math.hypot(_goE.x - _goE2.x, _goE.y - _goE2.y));
+  }
+  let yol = 0, top = 0;
+  for (let i = 0; i < 12; i++)
+    for (let j = 0; j < 16; j++) {
+      const x = 30 + i * 660 / 11, y = SERIT_UST + 5 + j * (SERIT_ALT - SERIT_UST - 10) / 15;
+      _goN.set(x / GW * 2 - 1, 1 - y / GH * 2);
+      _goR.setFromCamera(_goN, kam);
+      top++;
+      if (!_goR.ray.intersectPlane(_goP, _go1))
+        continue;
+      let s = _go1.z + DUNYA.kz, l = 0;
+      for (let q = 0; q < 2; q++) {
+        const e = yolEgim(s), nn = 1 / Math.sqrt(1 + e * e);
+        l = (_go1.x + DUNYA.kx - yolX(s)) * nn;
+        s = _go1.z + DUNYA.kz + l * e * nn;
+      }
+      if (Math.abs(l) <= YOL_OLCU.kaldirimDis)
+        yol++;
+    }
+  return { cekim: c.ad, aci: +aci.toFixed(1), kaplama: kaplama === null ? null : +kaplama.toFixed(2), enKisa: +enKisa.toFixed(0), yol: +(yol / top).toFixed(2), adet: grup.length, uzun: +(z.SL - sSon).toFixed(1), gecis: !!D.reji.gecis };
+}
 
 /* ---- konvoyun özeti ---- */
 function konvoyOzet() {
@@ -59879,7 +59950,7 @@ function konvoyOzet() {
   return { SL: D.yol + (L ? L.gs + L.os : 0), ST: D.yol + mn - 2.4, SO: D.yol + mx + 2.4, uzun: mx - mn + 4.8, n, on: onGrup() };
 }
 // Geniş çekimlerin konusu: gelin arabası ve arkasındaki ilk sıralar (en çok 9 araba). Kuyruk uzağa akabilir.
-const ON_GRUP = 9;
+const ON_GRUP = 12;
 function onGrup() {
   return [...D.oy.values()].filter(k => k.ar && !k.cikiyor && k.yer > 0.3).sort((a, b) => (b.gs + b.os) - (a.gs + a.os)).slice(0, ON_GRUP);
 }
@@ -59916,13 +59987,13 @@ function kadrajda(kam, noktalar, pay) {
   return true;
 }
 // Hedefe yon doğrultusundan bakan kamerayı, bütün noktalar şeride sığacak en yakın uzaklığa koyar (ikiye bölme).
-function sigdir(hedef, yon, noktalar, fov, dMin, dMax, merkezY) {
+function sigdir(hedef, yon, noktalar, fov, dMin, dMax, merkezY, pay) {
   kameraHazirla(OLCER, fov, merkezY);
   const dene = d => {
     OLCER.position.copy(hedef).addScaledVector(yon, d);
     OLCER.lookAt(hedef);
     OLCER.updateMatrixWorld();
-    return kadrajda(OLCER, noktalar);
+    return kadrajda(OLCER, noktalar, pay);
   };
   if (dene(dMin))
     return dMin;
@@ -59964,22 +60035,10 @@ const yakinlas = (c, ad, deger, hiz) => (c[ad] = c[ad] === undefined ? deger : l
 // Her çekim: taraf ve yükseklik (art arda tekrarı önlemek için), gok (gökyüzü görünür mü; havai fişekte gerekir),
 // sure (vuruş), kur(c) (çekim başında bir kez), poz(c, t, z) → { p: kamera, h: bakılan nokta, fov, merkezY }.
 const CEKIM = {
+  // önden yüksekten: gelin arabası kameraya doğru gelir, konvoy arkasında yukarı doğru uzanır
   drone: { taraf: 'on', yuk: 'yuksek', gok: true, sure: [12, 16],
     kur(c) { c.yan = c.rnd() < 0.5 ? -1 : 1; },
-    poz(c, t, z) {
-      // yüksekten, önden çaprazdan: gelin arabası ve ilk sıralar okunur büyüklükte, konvoyun kuyruğu virajla birlikte
-      // uzağa akar. Kamera yavaşça yana kayar ve alçalır.
-      const u = t / c.sure, el = 0.72 - 0.1 * u, psi = c.yan * (0.22 + 0.2 * u);
-      const n = [];
-      const grup = z.on.slice(0, 6);
-      for (const k of grup)
-        arabaKoseleri(k, n);
-      const sOrta = grup.length ? (D.yol + grup[grup.length - 1].gs + z.SL) / 2 : z.SL, h = yN(sOrta, 0, 0.6), T = ileriYon(sOrta);
-      const yon = T.applyAxisAngle(rejiV0.set(0, 1, 0), psi).multiplyScalar(Math.cos(el));
-      yon.y = Math.sin(el);
-      const d = yakinlas(c, 'd', sigdir(h, yon, n, 40, 12, 160), 1.5);
-      return { p: h.clone().addScaledVector(yon, d), h, fov: 40 };
-    } },
+    poz(c, t, z) { const u = t / c.sure; return genisPoz(c, z, Math.PI + c.yan * (0.06 + 0.14 * u), 0.78 - 0.08 * u, GRUP.drone); } },
   yan: { taraf: 'sag', yuk: 'alcak', gok: true, sure: [12, 16],
     kur(c, z) {
       // konu: sağ şeritteki (tek sırada herhangi) bir araba; kamera onun yanında, tekerlek hizasında, onunla birlikte
@@ -60021,22 +60080,10 @@ const CEKIM = {
       const s = z.SL + 8.6 + 0.8 * Math.sin(t / 8 * Math.PI), l = c.yan * (0.7 + 0.5 * Math.sin(t / 12 * Math.PI));
       return { p: yN(s, l, 1.05), h: yN(z.SL - 1.2, 0, 0.85), fov: 46 };
     } },
+  // tepeden, yol dikey: konvoy bandı aşağıdan yukarı doldurur, kamera çok yavaş döner
   kus: { taraf: 'ust', yuk: 'tepe', gok: false, sure: [12, 16],
     kur(c) { c.yan = c.rnd() < 0.5 ? -1 : 1; },
-    poz(c, t, z) {
-      // tepeden: gelin arabası ve ilk sıralar kadrajda, kuyruk kadrajın kenarından akıp gider; kamera yavaşça döner
-      // (konvoy ekranda yatay kalsın diye yandan bakar)
-      const n = [];
-      const grup = z.on.slice(0, 7);
-      for (const k of grup)
-        arabaKoseleri(k, n);
-      const sm = grup.length ? (D.yol + grup[grup.length - 1].gs + z.SL) / 2 : z.SL, h = yN(sm, 0, 0), L = solYon(sm), u = t / c.sure;
-      const el = 1.2, psi = 0.5 * (u - 0.5) * c.yan;
-      const yon = L.multiplyScalar(c.yan).applyAxisAngle(rejiV0.set(0, 1, 0), psi).multiplyScalar(Math.cos(el));
-      yon.y = Math.sin(el);
-      const d = yakinlas(c, 'd', sigdir(h, yon, n, 40, 14, 200), 1.5);
-      return { p: h.clone().addScaledVector(yon, d), h, fov: 40 };
-    } },
+    poz(c, t, z) { const u = t / c.sure; return genisPoz(c, z, c.yan * 0.18 * (u - 0.5), 1.3, GRUP.kus); } },
   tur: { taraf: 'on', yuk: 'orta', gok: true, sure: [12, 16],
     kur(c) { c.yon = c.rnd() < 0.5 ? -1 : 1; c.a0 = -c.yon * (1.25 + c.rnd() * 0.2); },
     poz(c, t, z) {
@@ -60107,14 +60154,15 @@ const CEKIM = {
       return { p: rejiV2.set(c.wx - DUNYA.kx, 1.6, c.wz - DUNYA.kz).clone(), h: yN(hs, hl, 0.8), fov: 50 };
     },
     bitti(c, z) { return z.ST > c.s - 9; } },
-  vinc: { taraf: 'on', yuk: 'yuksek', gok: false, sure: [16, 16],
+  vinc: { taraf: 'on', yuk: 'vinc', gok: false, sure: [16, 16],
     kur(c) { c.yan = c.rnd() < 0.5 ? -1 : 1; },
     poz(c, t, z) {
-      // vinç: gelin arabasının kaputundan başlar, yükselip geniş bir kadraja açılır
+      // vinç: gelin arabasının kaputundan başlar, yükselip önden yüksek geniş çekime açılır (yol dikey)
       const u = yumusak(t / c.sure), L = D.lider, sl = D.yol + L.gs;
-      const p = yN(sl + lerp(6.8, 30, u), c.yan * lerp(0.6, 7, u), lerp(2.0, 36, u));
-      const h = yN(lerp(sl + 1.1, lerp(z.ST, z.SL, 0.55), u), 0, lerp(1.0, 0, u));
-      return { p: t < 9 ? sigacakKadar(c, p, h, L, lerp(48, 44, u)) : p, h, fov: lerp(48, 44, u) };
+      const p0 = yN(sl + 6.8, c.yan * 0.6, 2.0), h0 = yN(sl + 1.1, 0, 1.0);
+      const g = genisPoz(c, z, Math.PI + c.yan * 0.12, 0.8, GRUP.vinc);
+      const p = p0.clone().lerp(g.p, u), h = h0.clone().lerp(g.h, u);
+      return { p: t < 9 ? sigacakKadar(c, p, h, L, lerp(48, 40, u)) : p, h, fov: lerp(48, 40, u) };
     } },
   // olay çekimleri
   sov: { taraf: 'on', yuk: 'orta', gok: true, sure: [24, 24], merkezY: 720,
@@ -60136,33 +60184,17 @@ const CEKIM = {
       return { p: sigacakKadar(c, p, merkez, k, 46, 720), h: merkez, fov: 46, merkezY: 720 };
     },
     bitti(c) { return !D.drift || D.drift.k !== c.k; } },
+  // arkadan yüksekten: konvoy önümüzde yukarı doğru akar, gelin arabası en üstte; kamera yavaşça alçalıp yana kayar
   arka: { taraf: 'arka', yuk: 'yuksek', gok: true, sure: [12, 20],
     kur(c) { c.yan = c.rnd() < 0.5 ? -1 : 1; },
-    poz(c, t, z) {
-      // yüksekten, arkadan çaprazdan: ön grup okunur büyüklükte, kamera alçalarak yana kayar
-      const u = t / c.sure, grup = z.on.slice(0, GRUP.arka), n = [];
-      for (const k of grup)
-        arabaKoseleri(k, n);
-      const sOrta = grup.length ? (D.yol + grup[grup.length - 1].gs + z.SL) / 2 : z.SL, h = yN(sOrta, 0, 0.6), T = ileriYon(sOrta);
-      const el = 0.68 - 0.12 * u;
-      const yon = new THREE.Vector3(-T.x, 0, -T.z).applyAxisAngle(rejiV0.set(0, 1, 0), c.yan * (0.3 + 0.25 * u)).multiplyScalar(Math.cos(el));
-      yon.y = Math.sin(el);
-      const d = yakinlas(c, 'd', sigdir(h, yon, n, 40, 12, 160), 1.5);
-      return { p: h.clone().addScaledVector(yon, d), h, fov: 40 };
-    } },
-  yanust: { taraf: 'yan', yuk: 'yuksek', gok: true, sure: [12, 20],
-    kur(c) { c.yan = c.rnd() < 0.5 ? -1 : 1; },
-    poz(c, t, z) {
-      // yüksekten, yandan: ön grup soldan sağa dizilir, kamera yavaşça konvoyla birlikte döner
-      const u = t / c.sure, grup = z.on.slice(0, GRUP.yanust), n = [];
-      for (const k of grup)
-        arabaKoseleri(k, n);
-      const sOrta = grup.length ? (D.yol + grup[grup.length - 1].gs + z.SL) / 2 : z.SL, h = yN(sOrta, 0, 0.6);
-      const yon = solYon(sOrta).multiplyScalar(c.yan).applyAxisAngle(rejiV0.set(0, 1, 0), c.yan * (0.5 * u - 0.25)).multiplyScalar(Math.cos(0.6));
-      yon.y = Math.sin(0.6);
-      const d = yakinlas(c, 'd', sigdir(h, yon, n, 40, 12, 160), 1.5);
-      return { p: h.clone().addScaledVector(yon, d), h, fov: 40 };
-    } },
+    poz(c, t, z) { const u = t / c.sure; return genisPoz(c, z, c.yan * (0.05 + 0.13 * u), 0.82 - 0.1 * u, GRUP.arka); } },
+  // dörtte üç, arkadan soldan / sağdan: yol hâlâ yukarı akar (dikeyden ~30°), arabaların yanı da görünür
+  ucsol: { taraf: 'sol', yuk: 'yuksek', gok: true, sure: [12, 16],
+    kur(c) { c.yan = 1; },
+    poz(c, t, z) { const u = t / c.sure; return genisPoz(c, z, 0.34 + 0.06 * Math.sin(u * Math.PI), 0.8, GRUP.ucsol); } },
+  ucsag: { taraf: 'sag', yuk: 'yuksek', gok: true, sure: [12, 16],
+    kur(c) { c.yan = -1; },
+    poz(c, t, z) { const u = t / c.sure; return genisPoz(c, z, -0.34 - 0.06 * Math.sin(u * Math.PI), 0.8, GRUP.ucsag); } },
   // süper araba: bir izleyicinin toplam hediyesi 1000 jetonu geçip arabası süper arabaya dönüştüğünde (olay 'super';
   // modeli başka dal ekler). Yakın çekimin aynısı, büyük kartta "SÜPER ARABA".
   super: { taraf: 'yan', yuk: 'orta', gok: true, sure: [12, 12], merkezY: 712,
@@ -60227,7 +60259,7 @@ function siradakiSec(z) {
       continue;
     if ((ad === 'tur' || ad === 'vinc' || ad === 'on') && !D.lider)
       continue;
-    let w = { drone: 1, kus: 0.8, arka: 1, yanust: 1, vinc: 0.5, yan: 1, on: 0.8, tur: 0.8, yakin: 2, kenar: 0.6 }[ad];
+    let w = { drone: 1, kus: 0.7, arka: 1, ucsol: 0.9, ucsag: 0.9, vinc: 0.5, yan: 1, on: 0.8, tur: 0.8, yakin: 2, kenar: 0.6 }[ad];
     const once = R.gecmis.lastIndexOf(ad);
     if (once >= 0 && R.gecmis.length - once <= 3)
       w *= 0.25;
