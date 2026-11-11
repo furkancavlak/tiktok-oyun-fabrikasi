@@ -36,6 +36,18 @@ Gerekenler: Node.js 18 veya üstü (https://nodejs.org, LTS sürümü).
 4. Açılan siyah pencere oyunların motorudur: açık kalsın, kapatınca oyunlar durur. Oyundan ana sayfaya
    **← Oyunlar** bağlantısıyla dönülür.
 
+### Mac / Linux
+
+Aynı ana sayfa Mac'te `BASLAT.command`, Linux'ta `BASLAT.sh` ile açılır (Node.js yine gerekli). Mac'te
+`BASLAT.command` dosyasına Finder'da çift tıkla; motorun penceresi Terminal penceresidir, açık kalsın. Linux'ta
+terminalde klasöre girip `sh BASLAT.sh` yaz. Bu iki başlatıcı henüz gerçek bir Mac ya da Linux masaüstünde
+denenmedi; yalnız Windows'taki testlerden geçti.
+
+Mac'te ilk açılış: internetten inen bir betiği macOS ilk seferde engelleyebilir ("geliştiricisi doğrulanamadı"
+gibi bir uyarı). macOS engellerse Sistem Ayarları → Gizlilik ve Güvenlik altında **Yine de Aç** düğmesini ara;
+eski sürümlerde dosyaya sağ tıklayıp **Aç** de. Her zaman çalışan yol Terminal'dir: klasöre `cd` ile gir ve
+`sh BASLAT.command` yaz.
+
 Komut satırından aynısı ve tek oyunla doğrudan açılış:
 
 ```

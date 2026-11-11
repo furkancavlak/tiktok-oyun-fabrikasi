@@ -27,6 +27,7 @@ node araclar/kare-cek.js <ad>                 # sahne kareleri → test/cikti/<a
 node araclar/test.js <ad>                     # çekirdek testleri + oyunun kendi testi
 node araclar/test.js                          # bütün oyunlar + köprü testleri
 node kopru.js --ana-sayfa --ac                # ana sayfa (oyun salonu): Dene / Yayın / Durdur (BASLAT.bat bunu açar)
+                                              # macOS: BASLAT.command, Linux: BASLAT.sh aynısını yapar
 node kopru.js --deneme --oyun <ad> --ac       # köprü + oyun, TikTok'suz, sahte olaylarla
 node kopru.js <tiktok_adi> --oyun <ad> --ac   # gerçek yayın (yalnız okur)
 node araclar/paket.js <ad>                    # yayıncıya verilecek klasör → dist/<ad>/
@@ -59,10 +60,12 @@ docs/YAYIN.md         yayıncı için: nasıl yayına verilir
 
 1. **İzleyici metni asla HTML olarak yazılmaz.** Ad ve yorum yabancıdan gelir: sayfaya `textContent`, tuvale
    `fillText`. `innerHTML`, `insertAdjacentHTML`, `document.write` yok.
+   Hediyenin adı (`hediye.ad`, `docs/OLAYLAR.md`) da yabancıdan gelir; aynı kural geçer.
 2. **Köprü salt okur.** Hesaba giriş, oturum bilgisi, çerez, yayına mesaj gönderme eklenmez; kolaylaştıran
    seçenek de açılmaz. Köprü yalnız `127.0.0.1` dinler, her istekte `Host`'a, soketlerde `Origin`'e bakar
    (`docs/OLAYLAR.md`); başka bir site olay akışını ve yayıncının adını okuyamaz. Ana sayfa kipinde kütüphaneyi
-   kendisi indirir (sabit komut, `npm install --omit=dev`); testler bunun yerine `KOPRU_KURULUM_BETIGI` taklidini kullanır.
+   kendisi indirir (sabit komut, `npm install --omit=dev`); testler bunun yerine `--kurulum-betigi <yol>` bayrağıyla taklidi kullanır (ortam değişkeni okunmaz).
+   Komut satırı kiplerinde olay akışı yalnız her açılışta yeni bir kimlikle açılır (`/olay/<kimlik>`).
 3. **Dışarıdan gelen her şey `olay(o)` üzerinden girer.** Sahte izleyici, köprü ve testler aynı kapıyı kullanır.
 4. **Gerçek yayında sahte ad görünmez.** Köprüden açılan sayfada otomatik kalabalık kapalıdır.
 5. **Ses ve görsel üretimdir.** Depoya ses dosyası, görsel, hazır model eklenmez; karakterler kodla çizilir.

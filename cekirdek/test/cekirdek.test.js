@@ -596,6 +596,68 @@ const { sonuc, kontrol } = kontrolcu();
   kontrol('Müzik saati: 0,9 sn kilitten sonra vuruş saati donmaz, hemen eski hızında yürür', kilit.enDurmaSn < 0.2 && kilit.kilittenSonra1sn > kilit.onceHiz * 0.7 && !kilit.geri, kilit);
   await e.close();
 
+  // ==== HEDİYE KİMLİĞİ (hediye: { id, ad }) — başı ====
+  // Oyunun oyunHediye kancası sarılır (derlenmiş sayfanın geçici kopyasında): kancanın dördüncü bilgisi kaydedilir,
+  // oyunun kendi kancası değişmeden çalışır. Ayrı sayfa; oyunun kendisine dokunulmaz.
+  {
+    const os = require('os'), path = require('path'), { pathToFileURL } = require('url');
+    const asil = fs.readFileSync(require('./ortak').OYUN_HTML, 'utf8'), kac = asil.split('function oyunHediye(').length - 1;
+    const sarili = asil.replace('function oyunHediye(', 'function oyunHediye(...__h) { (window.__kanca = window.__kanca || []).push({ n: __h.length, jeton: __h[1], hediye: __h[3] === undefined ? \'yok\' : __h[3] }); return __oyunHediyeAsil(...__h); }\nfunction __oyunHediyeAsil(');
+    const gk = fs.mkdtempSync(path.join(os.tmpdir(), 'canli-hediye-')), gy = path.join(gk, 'oyun.html');
+    fs.writeFileSync(gy, sarili);
+    const hp = await b.newPage({ viewport: { width: 1280, height: 800 } });
+    hp.on('pageerror', e => hatalar.push('SAYFA HATASI (hediye): ' + e.message));
+    await hp.goto(pathToFileURL(gy).href); await hp.waitForTimeout(600);
+    const hk = await hp.evaluate(async () => {
+      const O = CanliOyun.olay, T = CanliOyun._test, son = () => (window.__kanca || []).slice(-1)[0];
+      document.getElementById('bosalt').click(); window.__kanca = [];
+      const r = {};
+      O({ tip: 'hediye', kullanici: { id: 'h1', ad: 'Gülsüm' }, jeton: 1, adet: 3, hediye: { id: '5655', ad: 'Rose' } }); r.tam = son();
+      O({ tip: 'hediye', kullanici: { id: 'h2', ad: 'Hasan' }, jeton: 1, adet: 3 }); r.yok = son();
+      r.jetonAyni = T.D.oy.get('h1').jeton === 3 && T.D.oy.get('h2').jeton === 3;
+      O({ tip: 'hediye', kullanici: { id: 'h3', ad: 'Halil' }, jeton: 1, hediye: { id: 5655 } }); r.sayi = son();
+      O({ tip: 'hediye', kullanici: { id: 'h3', ad: 'Halil' }, jeton: 1, hediye: { ad: '  Gül\u0007  ' } }); r.adOnly = son();
+      O({ tip: 'hediye', kullanici: { id: 'h3', ad: 'Halil' }, jeton: 1, hediye: { id: '', ad: '   ' } }); r.bos = son();
+      O({ tip: 'hediye', kullanici: { id: 'h3', ad: 'Halil' }, jeton: 1, hediye: { id: { x: 1 }, ad: ['a'] } }); r.bozuk = son();
+      O({ tip: 'hediye', kullanici: { id: 'h3', ad: 'Halil' }, jeton: 1, hediye: '5655' }); r.metin = son();
+      O({ tip: 'hediye', kullanici: { id: 'h4', ad: 'Hüma' }, jeton: 2, hediye: { id: '9'.repeat(50), ad: '<img src=x onerror="window.__xss=1">' + 'ş'.repeat(60) } }); r.uzun = son();
+      O({ tip: 'hediye', kullanici: { id: 'h5', ad: 'Hilmi' }, jeton: 2, hediye: { id: '1', ad: '<b>x</b>' } });
+      await new Promise(z => setTimeout(z, 400)); await new Promise(z => { const t0 = Date.now(); (function k() { if (document.querySelectorAll('#gunluk li.t-h').length >= 6 || Date.now() - t0 > 4000) z(); else setTimeout(k, 100); })(); });
+      const g = document.getElementById('gunluk');
+      r.satir = [...g.querySelectorAll('li.t-h .metin')].map(x => x.textContent);
+      r.etiket = g.querySelectorAll('img, b, script').length + document.querySelectorAll('img[src="x"]').length;
+      r.xss = !!window.__xss;
+      // sayfa tarafındaki çeviri (köprü iletisi → olay)
+      const c = CanliOyun.cevir;
+      r.cv = {
+        kendi: c({ tip: 'hediye', kullanici: { id: 'a' }, jeton: 1, hediye: { id: '5655', ad: '  Rose  ', fazla: 'x' } }),
+        kendiBozuk: c({ tip: 'hediye', kullanici: { id: 'a' }, jeton: 1, hediye: { id: '' } }),
+        kendiYok: c({ tip: 'hediye', kullanici: { id: 'a' }, jeton: 1 }),
+        duz: c({ event: 'gift', data: { uniqueId: 'a', id: 'kullanici-no', name: 'kullanici-adi', giftId: 5655, giftName: 'Rose', diamondCount: 1, repeatCount: 3, giftType: 1, repeatEnd: true } }),
+        duzKimliksiz: c({ event: 'gift', data: { uniqueId: 'a', id: 'kullanici-no', name: 'kullanici-adi', diamondCount: 1, giftType: 2 } }),
+        ayrinti: c({ event: 'gift', data: { user: { uniqueId: 'a' }, giftId: 5655, giftDetails: { id: '5655', giftName: 'Rose', diamondCount: 1, giftType: 1 }, repeatCount: 3, repeatEnd: 1 } }),
+        yeni: c({ event: 'gift', data: { user: { uniqueId: 'a' }, giftId: '5655', gift: { id: '5655', name: 'Rose', diamondCount: 1, type: 1 }, repeatCount: 3, repeatEnd: 1 } }),
+        seri: c({ event: 'gift', data: { user: { uniqueId: 'a' }, giftId: '5655', gift: { id: '5655', name: 'Rose', diamondCount: 1, type: 1 }, repeatCount: 2, repeatEnd: 0 } })
+      };
+      // paneldeki Deneme düğmeleri sahte, "deneme-" önekli kimlik yollar: en küçük kademe Gül, sonraki Kalp
+      const dug = [...document.getElementById('hediyeler').children];
+      dug[0].click(); r.dugme0 = son();
+      if (dug[1]) { dug[1].click(); r.dugme1 = son(); }
+      r.dugmeSayi = dug.length; r.dugmeBaslik = dug[0].title;
+      return r;
+    });
+    await hp.close(); fs.rmSync(gk, { recursive: true, force: true });
+    const J = x => JSON.stringify(x);
+    kontrol('Hediye kimliği: oyunun kancası dördüncü bilgi olarak { id, ad } alır; kimliksiz hediyede null; jeton aynı sayılır', kac === 1 && hk.tam && hk.tam.n === 4 && J(hk.tam.hediye) === '{"id":"5655","ad":"Rose"}' && hk.tam.jeton === 3 && hk.yok && hk.yok.hediye === null && hk.jetonAyni, { kac, tam: hk.tam, yok: hk.yok, jetonAyni: hk.jetonAyni });
+    kontrol('Hediye kimliği: sayı id metne çevrilir, yalnız ad kırpılıp geçer; boş, bozuk türde ve nesne olmayan kimlik null olur', J(hk.sayi.hediye) === '{"id":"5655"}' && J(hk.adOnly.hediye) === '{"ad":"Gül"}' && hk.bos.hediye === null && hk.bozuk.hediye === null && hk.metin.hediye === null, { sayi: hk.sayi, ad: hk.adOnly, bos: hk.bos, bozuk: hk.bozuk, metin: hk.metin });
+    kontrol('Hediye kimliği: uzun ad 40, uzun id 32 karaktere kısalır; HTML ad düz metindir, akışta öğe olmaz, betik çalışmaz', hk.uzun && Array.from(hk.uzun.hediye.ad).length === 40 && hk.uzun.hediye.ad.startsWith('<img src=x') && hk.uzun.hediye.id.length === 32 && hk.etiket === 0 && !hk.xss && hk.satir.some(x => x.startsWith('2 jeton · <b>x</b> → ')), { uzun: hk.uzun, etiket: hk.etiket, xss: hk.xss });
+    kontrol('Hediye kimliği: paneldeki olay akışında ad jetonun yanında yazılır; kimliksiz hediye eskisi gibi', hk.satir.some(x => /^3 jeton · Rose → /.test(x)) && hk.satir.some(x => /^3 jeton → /.test(x)), hk.satir.slice(0, 8));
+    const cv2 = hk.cv, rose = o => o && J(o.hediye) === '{"id":"5655","ad":"Rose"}';
+    kontrol('Hediye kimliği, sayfa çevirisi: kendi biçim denetlenip geçer (bozuk alan düşer), düz / giftDetails / gift biçimleri okunur, düz veride kullanıcının id ve name alanı hediye sayılmaz, seri sürerken yok', rose(cv2.kendi) && J(Object.keys(cv2.kendi.hediye)) === '["id","ad"]' && cv2.kendiBozuk && !('hediye' in cv2.kendiBozuk) && cv2.kendiBozuk.jeton === 1 && !('hediye' in cv2.kendiYok) && rose(cv2.duz) && cv2.duzKimliksiz && !('hediye' in cv2.duzKimliksiz) && rose(cv2.ayrinti) && rose(cv2.yeni) && cv2.yeni.adet === 3 && cv2.seri === null, cv2);
+    kontrol('Hediye kimliği: Deneme düğmeleri sahte kimlik yollar (deneme-gul, sonra deneme-kalp), düğmenin açıklaması söyler', hk.dugme0 && J(hk.dugme0.hediye) === '{"id":"deneme-gul","ad":"Gül"}' && (hk.dugmeSayi < 2 || J(hk.dugme1.hediye) === '{"id":"deneme-kalp","ad":"Kalp"}') && /deneme hediyesi: Gül/.test(hk.dugmeBaslik), { d0: hk.dugme0, d1: hk.dugme1, baslik: hk.dugmeBaslik });
+  }
+  // ==== HEDİYE KİMLİĞİ — sonu ====
+
   // Oyun kodunda hata: döngü donmaz, hata bir kez bildirilir (ayrı sayfa; bilerek çıkarılan hata yukarıdaki
   // "sayfada hata çıkmadı" sayımına girmesin).
   const hs = await b.newPage({ viewport: { width: 720, height: 800 } }), hsHata = [];

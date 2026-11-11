@@ -44,7 +44,9 @@ function oyunGiris(k) {
 /* ---- olaylar ---- */
 // Hediye sayıldıktan sonra çağrılır. kademe = OYUN.kademe'den eşleşen kayıt. Zıplama süresini çekirdek
 // kendisi kurar (k.zip0 – k.zip1 vuruşları arası); burada yalnız ne kadar yükseğe zıplayacağını seçiyoruz.
-function oyunHediye(k, jeton, kademe) {
+// hediye: hangi hediye geldi, { id, ad } ya da bilinmiyorsa null (docs/KANCALAR.md). Ad düz metindir: yalnız fillText.
+// Örnek: if (hediye && hediye.id === 'deneme-gul') { … }  Deneme düğmeleri sahte kimlik yollar (en küçük kademe Gül).
+function oyunHediye(k, jeton, kademe, hediye) {
   k.buyukZip = kademe.tip === 'buyuk';
   if (k.buyukZip) {
     konfeti(60, 0.7);

@@ -42,12 +42,13 @@ if (!fs.existsSync(html)) {
 
 const kopruYol = path.join(KOK, 'kopru.js');
 const baslatYol = path.join(KOK, 'BASLAT.bat');
+const macYol = path.join(KOK, 'BASLAT.command'), linuxYol = path.join(KOK, 'BASLAT.sh'); // macOS ve Linux başlatıcıları
 const anaSayfaYol = path.join(KOK, 'cekirdek', 'ana-sayfa.html'); // BASLAT.bat bunu açar: tek oyunlu ana sayfa
 const nodeYokYol = path.join(KOK, 'cekirdek', 'node-yok.html'); // Node.js kurulu değilse BASLAT.bat bu yardım sayfasını açar
 const kokPaket = JSON.parse(fs.readFileSync(path.join(KOK, 'package.json'), 'utf8').replace(/^﻿/, ''));
 const surum = (kokPaket.dependencies || {})['tiktok-live-connector'];
 if (!surum) dur('Kök package.json içinde tiktok-live-connector bağımlılığı bulunamadı.');
-for (const y of [kopruYol, baslatYol, anaSayfaYol, nodeYokYol]) if (!fs.existsSync(y)) dur('Eksik dosya: ' + y);
+for (const y of [kopruYol, baslatYol, macYol, linuxYol, anaSayfaYol, nodeYokYol]) if (!fs.existsSync(y)) dur('Eksik dosya: ' + y);
 
 const hedef = path.join(KOK, 'dist', ad);
 fs.mkdirSync(hedef, { recursive: true });
@@ -74,6 +75,12 @@ function klasorKopyala(kaynak, hedefKlasor, onek) {
 kopyala(html, 'oyun.html');
 kopyala(kopruYol, 'kopru.js');
 kopyala(baslatYol, 'BASLAT.bat');
+// Paket bir klasördür (arşiv yazılmaz). macOS / Linux başlatıcıları çalıştırılabilir kalsın diye izinleri açıkça
+// verilir (Windows'ta etkisizdir; klasör orada sıkıştırılırsa bu bit arşive girmeyebilir, OKU.txt Terminal yolunu anlatır).
+for (const [kaynak, ad2] of [[macYol, 'BASLAT.command'], [linuxYol, 'BASLAT.sh']]) {
+  kopyala(kaynak, ad2);
+  try { fs.chmodSync(path.join(hedef, ad2), 0o755); } catch (e) { }
+}
 kopyala(anaSayfaYol, 'ana-sayfa.html');
 kopyala(nodeYokYol, 'node-yok.html');
 // Ana sayfadaki kartın adı ve tek cümlesi. vitrin ayarı pakete geçmez: paket her zaman kendi tek oyununu gösterir.
@@ -100,16 +107,20 @@ const oku = [
   'Şifre istemez: köprü yayını yalnızca okur.',
   '',
   'Gerekenler',
-  '  1. Windows bilgisayar ve Node.js (https://nodejs.org adresinden LTS sürümü).',
+  '  1. Windows, Mac ya da Linux bilgisayar ve Node.js (https://nodejs.org adresinden LTS sürümü).',
   '  2. TikTok LIVE Studio erişimi olan bir hesap.',
   '',
   'Başlatma',
-  '  1. BASLAT.bat dosyasına çift tıkla.',
+  '  1. Windows: BASLAT.bat dosyasına çift tıkla. Mac: BASLAT.command dosyasına çift tıkla.',
+  '     Linux: terminalde bu klasöre gir ve sh BASLAT.sh yaz.',
+  '     Mac ilk açılışta: internetten inen bir betiği macOS ilk seferde engelleyebilir. macOS engellerse',
+  '     Sistem Ayarları > Gizlilik ve Güvenlik altında "Yine de Aç" düğmesini ara (eski sürümlerde dosyaya',
+  '     sağ tıklayıp "Aç"). Her zaman çalışan yol: Terminal\'i aç, cd ile bu klasöre gir ve sh BASLAT.command yaz.',
   '  2. Tarayıcıda bir açılış ekranı gelir. İlk seferde TikTok kütüphanesi orada iner',
   '     (yaklaşık bir dakika, internet gerekir; bir kez olur). Beklerken "Beklemeden dene"',
   '     ile oyunu sahte izleyicilerle açabilirsin.',
   '  3. Sonra tek kabinli ana sayfa açılır: oyunun canlı önizlemesi ve iki düğme. Siyah pencere',
-  '     oyunun motorudur: açık kalsın, kapatınca oyun durur.',
+  '     (Mac ve Linux\'ta Terminal penceresi) oyunun motorudur: açık kalsın, kapatınca oyun durur.',
   '  4. Denemek için sarı "Dene" düğmesine bas: TikTok\'a bağlanmadan, sahte izleyicilerle açılır.',
   '  5. Yayında oynatmak için sağ üstteki bilete TikTok kullanıcı adını yaz ve "Kaydet"e',
   '     (ya da Enter\'a) bas. Kırmızı "Yayın" düğmesi yanar; ona bas. Oyun sayfasındaki',
@@ -129,11 +140,11 @@ const oku = [
   '',
   'Sorun olursa',
   '  - "Node.js bulunamadı": tarayıcıda açılan yardım sayfasındaki adımları izle',
-  '    (https://nodejs.org, LTS sürümü), sonra BASLAT.bat dosyasına yeniden çift tıkla.',
+  '    (https://nodejs.org, LTS sürümü), sonra başlatıcıyı (BASLAT.bat, BASLAT.command ya da BASLAT.sh) yeniden aç.',
   '  - Açılış ekranı "İndirilemedi" diyor: internet bağlantını kontrol et, "Yeniden dene"ye bas.',
   '  - 403 hatası: bu klasörde komut satırı aç ve şunu çalıştır:',
   '      npm install tiktok-live-connector@latest',
-  '  - "Zaten açık": BASLAT.bat iki kez açıldı. Tarayıcıdaki sayfayı kullan.',
+  '  - "Zaten açık": başlatıcı iki kez açıldı. Tarayıcıdaki sayfayı kullan.',
   '  - Kapı dolu: başka bir program aynı kapıyı tutuyor. O programı kapatıp yeniden dene.',
   '',
   'Kodu çalıştıran yazılım TikTok ile bağlantılı değildir; resmî olmayan bir kütüphane kullanır.',

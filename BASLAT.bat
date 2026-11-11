@@ -21,17 +21,22 @@ exit /b 1
 echo.
 echo  Node.js bulunamadi. Oyunlarin motoru icin gerekli, ucretsiz bir program.
 echo  https://nodejs.org adresinden LTS surumunu kur, sonra BASLAT.bat dosyasina yeniden cift tikla.
-echo  Yardim sayfasi tarayicida aciliyor.
-echo.
 set "YARDIM=%~dp0node-yok.html"
 if not exist "%YARDIM%" set "YARDIM=%~dp0cekirdek\node-yok.html"
-if not exist "%YARDIM%" goto bekle
+if not exist "%YARDIM%" goto yardimyok
+echo  Yardim sayfasi tarayicida aciliyor.
+echo.
 rem FABRIKA_TEST_ACMA: yalniz testler icin; sayfayi acmak yerine yolunu yazar.
 if defined FABRIKA_TEST_ACMA goto testyaz
 start "" "%YARDIM%"
 goto bekle
 :testyaz
 echo ACILACAK: "%YARDIM%"
+goto bekle
+:yardimyok
+rem Yardim sayfasi yoksa (eksik kopya): yalniz kisa kurulum tarifi.
+echo  Kurulum: https://nodejs.org adresinden LTS yazan surumu indirip kur.
+echo.
 :bekle
 pause
 exit /b 1

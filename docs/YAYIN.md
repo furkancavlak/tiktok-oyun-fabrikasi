@@ -20,6 +20,10 @@ Bu rehber, programcı olmayan bir yayıncı içindir. Elinde bir oyun paketi kla
 
 1. Paket klasöründeki `BASLAT.bat` dosyasına çift tıkla. Node.js kurulu değilse tarayıcıda kısa bir yardım sayfası
    açılır (nodejs.org, LTS sürümü); kurduktan sonra yeniden çift tıkla.
+   Mac'te aynı işi `BASLAT.command` (Finder'da çift tıkla), Linux'ta `BASLAT.sh` (terminalde `sh BASLAT.sh`) yapar;
+   bu belgedeki "siyah pencere" orada Terminal penceresidir. macOS dosyayı ilk seferde engellerse Sistem Ayarları →
+   Gizlilik ve Güvenlik altında **Yine de Aç**'ı ara ya da Terminal'de klasöre girip `sh BASLAT.command` yaz
+   (Mac'te denenmedi).
 2. Tarayıcıda bir açılış ekranı gelir: motor çalışıyor mu, TikTok kütüphanesi kurulu mu, oyunlar hazır mı, satır satır
    yazar. İlk seferde kütüphane orada iner (yaklaşık bir dakika, internet ister; bir kez olur). Beklerken
    **Beklemeden dene** ile oyunu sahte izleyicilerle açabilirsin; kırmızı düğmeler kütüphane inince kendiliğinden yanar.
@@ -85,6 +89,10 @@ buna izin verip vermediği denenmedi.
 | --- | --- |
 | "Node.js bulunamadı" (ve tarayıcıda yardım sayfası) | Node.js kurulu değil ya da kurulumdan sonra bilgisayar yeniden başlatılmadı. https://nodejs.org adresinden LTS sürümünü kur, `BASLAT.bat` dosyasını yeniden aç. |
 | Açılış ekranı "İndirilemedi. İnternet bağlantını kontrol et." | TikTok kütüphanesi inemedi. İnterneti kontrol edip **Yeniden dene**'ye bas. O zamana kadar **Dene** çalışır. |
+| Açılış ekranı "İndirme programı bulunamadı" | Node.js kurulumu eksik (npm yok). nodejs.org adresinden Node.js'i yeniden kur. |
+| Açılış ekranı "Bu klasöre yazılamıyor" | Paket klasörü yazılamayan bir yerde (salt okunur sürücü, korunan klasör). Klasörü Masaüstü ya da Belgeler gibi bir yere taşı. |
+| Açılış ekranı "İndirme bitti ama kütüphane klasörde görünmüyor" | **Yeniden dene**'ye bas; düzelmezse paketi baştan aç. |
+| Diskten açtığım `oyun.html` köprüye bağlanmıyor | Köprü her açılışta yeni bir olay adresi üretir. Siyah pencerede yazan `Olay adresi: ws://127.0.0.1:…/olay/…` satırının tamamını Yayın sekmesindeki adres alanına yaz; yalnız `ws://127.0.0.1:8787` bağlanmaz. |
 | Köprü bağlanamıyor, 403 hatası | Kütüphane eski. Paket klasöründe bir komut satırı aç ve `npm install tiktok-live-connector@latest` yaz. Sonra `BASLAT.bat` dosyasını yeniden aç. |
 | "Yayın kapalı" ya da kullanıcı bulunamadı | Yayın açık değil ya da kullanıcı adı yanlış. Önce TikTok'ta yayını başlat, adı `@` olmadan yaz. |
 | Siyah pencere "zaten açık" deyip kapanıyor | `BASLAT.bat` iki kez açıldı. Sorun değil: tarayıcıda açılan ana sayfayı kullan. |

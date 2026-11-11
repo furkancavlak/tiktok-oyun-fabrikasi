@@ -320,7 +320,7 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
 <div class="zemin" aria-hidden="true"></div>
 <div class="ampuller" aria-hidden="true"><svg viewBox="0 0 1400 54" preserveAspectRatio="none"><path id="ip" d="M0 6 Q175 44 350 14 T700 14 T1050 14 T1400 8" fill="none" stroke="#0d0818" stroke-width="2.5"/><g id="ampul-dizi"></g></svg></div>
 
-<div class="acilis" id="acilis" role="dialog" aria-modal="true" aria-labelledby="acilis-baslik" aria-describedby="acilis-alt">
+<div class="acilis" id="acilis" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="acilis-baslik" aria-describedby="acilis-alt">
   <div class="acilis-ampul" id="acilis-ampul" aria-hidden="true"></div>
   <div class="acilis-ic">
     <div class="tabela"><span class="acilis-h" id="acilis-baslik">TikTok Oyun <b>Fabrikası</b></span></div>
@@ -658,7 +658,7 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
       }
       location.href = s.j.adres || ('/oyun/' + encodeURIComponent(k.id) + '/');
     }).catch(function () {
-      geriAl('Motora ulaşılamadı. Siyah pencere kapandıysa BASLAT.bat dosyasına yeniden çift tıkla.');
+      geriAl('Motora ulaşılamadı. ' + P().pencere + ' kapandıysa ' + P().yeniden);
       durumYaz(null);
     });
   }
@@ -702,8 +702,7 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
     if (d) kartlar.forEach(function (k) { if (/Motora ulaşılamadı/.test(k.ileti.textContent)) k.ileti.textContent = ''; });
     $('alt').classList.toggle('koptu', !d);
     $('lamba').textContent = d ? 'Motor çalışıyor' : 'Motora ulaşılamıyor';
-    $('yerel').textContent = d ? 'Siyah pencere oyunların motorudur; açık kalsın. Yalnızca bu bilgisayar erişebilir.'
-      : 'Siyah pencere kapanmış olabilir. BASLAT.bat dosyasına yeniden çift tıkla.';
+    yerelYaz(d);
     var a = d && d.aktif;
     kartlar.forEach(function (k) {
       var bu = !!a && a.oyun === k.id;
@@ -760,6 +759,22 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
   function imza(d) { return JSON.stringify((d.oyunlar || []).map(function (o) { return [o.id, o.ad, o.aciklama]; })) + d.paket; }
 
   // ---- TikTok kütüphanesi: hazır değilken kırmızı düğmeler sönük, altta sessiz bir not; inince kendiliğinden yanar
+  // Başlatıcının ve motor penceresinin adı platforma göre. Motor /api/oyunlar içinde platformu söyler; motora ulaşılamazken
+  // tarayıcının ipucu kullanılır (bilinmezse Windows). Testler window.FABRIKA_PLATFORM ile ipucunu ezer.
+  var PLATFORM_METIN = {
+    windows: { dosya: 'BASLAT.bat', pencere: 'Siyah pencere', yeniden: 'BASLAT.bat dosyasına yeniden çift tıkla.', ac: 'BASLAT.bat dosyasına çift tıkla.' },
+    mac: { dosya: 'BASLAT.command', pencere: 'Terminal penceresi', yeniden: 'BASLAT.command dosyasına yeniden çift tıkla.', ac: 'BASLAT.command dosyasına çift tıkla.' },
+    linux: { dosya: 'BASLAT.sh', pencere: 'Terminal penceresi', yeniden: 'BASLAT.sh dosyasını yeniden çalıştır.', ac: 'BASLAT.sh dosyasını çalıştır.' }
+  };
+  var platform = (function () {
+    var p = String(window.FABRIKA_PLATFORM || (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '');
+    return /mac/i.test(p) ? 'mac' : /linux|x11/i.test(p) && !/android/i.test(p) ? 'linux' : 'windows';
+  })();
+  function P() { return PLATFORM_METIN[platform] || PLATFORM_METIN.windows; }
+  function yerelYaz(d) {
+    $('yerel').textContent = d ? P().pencere + ' oyunların motorudur; açık kalsın. Yalnızca bu bilgisayar erişebilir.'
+      : P().pencere + ' kapanmış olabilir. ' + P().yeniden;
+  }
   var kutu = { durum: 'bilinmiyor', sure: 0, t: 0, neden: '' }, kutuSonDurum = '', tamamZaman = null;
   function kutuHazir() { return kutu.durum === 'hazir'; }
   function kutuSure() { return kutu.durum === 'iniyor' ? kutu.sure + Math.floor((Date.now() - kutu.t) / 1000) : 0; }
@@ -813,16 +828,17 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
   }
   function acilisYaz() {
     if (!motorVar) {
-      satir('a-motor', 'hata', 'Motor çalışmıyor. BASLAT.bat dosyasına çift tıkla.', 'Motor açılınca bu sayfa kendiliğinden devam eder.');
+      satir('a-motor', 'hata', 'Motor çalışmıyor. ' + P().ac, 'Motor açılınca bu sayfa kendiliğinden devam eder.');
       satir('a-kutu', 'bekliyor', 'TikTok kütüphanesi'); satir('a-oyun', 'bekliyor', 'Oyunlar');
-      $('acilis-alt').textContent = 'Siyah pencere kapalı görünüyor.';
+      $('acilis-alt').textContent = P().pencere + ' kapalı görünüyor.';
       $('beklemeden').hidden = $('yeniden').hidden = $('yalniz-dene').hidden = true;
+      acilisOdak();
       return;
     }
     satir('a-motor', 'tamam', 'Motor çalışıyor');
     if (kutu.durum === 'hazir') satir('a-kutu', 'tamam', 'TikTok kütüphanesi kurulu');
     else if (kutu.durum === 'iniyor') satir('a-kutu', 'suruyor', 'TikTok kütüphanesi iniyor', 'Yalnız ilk sefer; yaklaşık bir dakika sürer.', kutuSure() + ' sn');
-    else if (kutu.durum === 'hata') satir('a-kutu', 'hata', 'İndirilemedi. İnternet bağlantını kontrol et.', kutu.neden && !/İnternet bağlantını kontrol et\.$/.test(kutu.neden) ? kutu.neden : 'Dene yine çalışır; yalnız canlı yayın için gerekli.');
+    else if (kutu.durum === 'hata') satir('a-kutu', 'hata', kutu.neden || 'İndirilemedi. İnternet bağlantını kontrol et.', 'Dene yine çalışır; yalnız canlı yayın için gerekli.');
     else satir('a-kutu', 'suruyor', 'TikTok kütüphanesine bakılıyor');
     var n = kartlar.size;
     if (!salonKuruldu) satir('a-oyun', 'suruyor', 'Oyunlar hazırlanıyor');
@@ -832,15 +848,40 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
       : kutu.durum === 'hata' ? 'Canlı yayın parçası inemedi. Oyunları yine deneyebilirsin.' : 'Salon açılıyor…';
     $('beklemeden').hidden = kutu.durum !== 'iniyor' || !salonKuruldu;
     $('yeniden').hidden = $('yalniz-dene').hidden = kutu.durum !== 'hata' || !salonKuruldu;
+    acilisOdak();
     if (kutu.durum === 'hazir' && oyunlarHazir) {
       var kalan = 650 - (Date.now() - acilisBasi); // anlık parlama olmasın diye en az bu kadar
       setTimeout(salonuAc, Math.max(0, kalan));
     }
   }
+  // Açılış sahnesi kipli bir penceredir: açıkken odak onun içindedir (görünen eylem düğmesi, yoksa sahnenin kendisi),
+  // Tab içinde döner. Kapanınca odak salona geçer: ad kayıtlı değilse ad alanına, kayıtlıysa ilk kabinin Dene düğmesine.
+  function acilisDugmeleri() { return [].slice.call($('acilis').querySelectorAll('button')).filter(function (b) { return !b.hidden; }); }
+  function acilisOdak() {
+    if (!acilisAcik) return;
+    var a = $('acilis'), e = document.activeElement;
+    if (e && e !== document.body && e !== a && a.contains(e) && !e.hidden) return; // sahnenin kendisindeyse düğme gelince ona geçer
+    var d = acilisDugmeleri();
+    (d[0] || a).focus({ preventScroll: true });
+  }
+  document.addEventListener('keydown', function (e) {
+    if (!acilisAcik || e.key !== 'Tab') return;
+    var d = acilisDugmeleri(), i = d.indexOf(document.activeElement);
+    e.preventDefault();
+    if (!d.length) { $('acilis').focus({ preventScroll: true }); return; }
+    d[i < 0 ? 0 : (i + (e.shiftKey ? d.length - 1 : 1)) % d.length].focus({ preventScroll: true });
+  });
+  function salonOdak() {
+    var dene = document.querySelector('.kart .dene');
+    if (!document.body.classList.contains('kayitli') && !$('ad-form').hidden) $('kullanici').focus({ preventScroll: true });
+    else if (dene) dene.focus({ preventScroll: true });
+    else $('salon').focus({ preventScroll: true });
+  }
   function salonuAc() {
     if (!acilisAcik) return;
     acilisAcik = false;
     $('sayfa').removeAttribute('inert');
+    salonOdak();
     var a = $('acilis');
     a.classList.add('kalk');
     setTimeout(function () { a.hidden = true; }, 520);
@@ -851,6 +892,7 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
     var a = $('acilis'); a.hidden = false; a.classList.remove('kalk');
     $('sayfa').setAttribute('inert', '');
     acilisYaz();
+    acilisOdak();
   }
   $('beklemeden').addEventListener('click', salonuAc);
   $('yalniz-dene').addEventListener('click', salonuAc);
@@ -876,6 +918,7 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
     else if (++kopukSay >= 2) acilisiGoster();
   }
   function motorGeldi(d) {
+    if (d && PLATFORM_METIN[d.platform]) platform = d.platform;
     if (!motorVar && salonKuruldu && kopukSay >= 2) { location.reload(); return; } // motor yeniden açıldı: temiz başla
     motorVar = true; kopukSay = 0;
     if (!d.kutuphane) d.kutuphane = { durum: 'hazir' }; // kütüphane durumu bildirmeyen motor: eski davranış
@@ -888,6 +931,7 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
     if (acilisAcik) acilisYaz();
   }
   function yokla() { oku().then(motorGeldi).catch(motorYok); }
+  yerelYaz(true);
   yokla();
   // Saniyede bir: açılışta saniye sayacı ve kütüphane notu yerel olarak ilerler; iki saniyede bir motora sorulur.
   var tik = 0;

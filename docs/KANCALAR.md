@@ -55,7 +55,7 @@ Diğer komutlar: `node araclar/derle.js --hepsi` (ad verilmezse de böyle), `nod
 
 | Ad | Ne |
 | --- | --- |
-| `window.CanliOyun` | dışarıya açık arayüz: `olay`, `durum`, `baglan`, `kes`, `cevir`, `_test` |
+| `window.CanliOyun` | dışarıya açık arayüz: `olay`, `durum`, `baglan`, `kes`, `cevir`, `kopruBitti`, `_test` |
 | `window.OYUN_KOPRU` | köprünün sayfaya yazdığı WebSocket adresi |
 | `window.OYUN_MUZIK` | oyunun `muzik/liste.js` dosyasındaki hazır parça listesi (`oyunlar/<ad>/muzik/`) |
 | `window.OYUN_MUZIK_KAPALI` | doğruysa `muzik/` klasörü yok sayılır (testler kullanır) |
@@ -143,7 +143,7 @@ panelRenk: {}            // panel koyu kalsın
 | `oyunBosalt()` | "boşalt" düğmesinde, oyuncular silindikten sonra | Oyunun kendi durumunu sıfırlar |
 | `oyunGiris(k)` | yeni izleyici katıldığında (`siraGuncelle` sonrası) | Giriş konumunu verir (`k.x`, `k.z`); sahneye dışarıdan gelsin |
 | `oyunYerlesim()` | sıra her değiştiğinde | `D.sira` içindeki herkesin hedef yerini hesaplar |
-| `oyunHediye(k, jeton, kademe)` | hediye sayıldıktan, sıra güncellenmeden önce | Kademenin sahnedeki etkisini başlatır |
+| `oyunHediye(k, jeton, kademe, hediye)` | hediye sayıldıktan, sıra güncellenmeden önce | Kademenin sahnedeki etkisini başlatır. `hediye` hangi hediye olduğu: `{ id, ad }` ya da bilinmiyorsa `null` ("Hediyenin kimliği") |
 | `oyunLiderDegisti(eski, yeni)` | `D.lider` değişince | Rol devri: pankart, konfeti, işaretin el değiştirmesi |
 | `oyunGuncelle(dt)` | her kare, müzik saatinden sonra | Hareket ettirir, süreleri ilerletir, eklemleri kurar |
 | `oyunKamera()` | her kare | Kadraja girmesi gereken yer noktalarını döndürür: `[[x, z], …]` ya da seçenekli nesne ("Kamera") |
@@ -185,6 +185,20 @@ Ayrıntılar:
   açtırmaz; derleme adını söyleyip durur. Çekirdeğin adları aşağıda; kendi adlarını oyuna özgü seç.
 - `muzik.sov`'u çekirdek değiştirmez; oyun açıp kapatır (halay: `oyunHediye` ve `oyunGuncelle` içinde
   `muzik.sov = B < D.sovBit`).
+
+**Hediyenin kimliği.** `oyunHediye`'nin dördüncü bilgisi hangi hediyenin geldiğidir: `{ id, ad }` (biri eksik
+olabilir) ya da kimlik bilinmiyorsa `null` (eski köprü, elle `olay` çağrısı). Üç bilgiyle yazılmış kancalar
+değişmeden çalışır. `id` platformun hediye numarasıdır (metin), `ad` hediyenin adı (düz metin, en çok 40
+karakter). Ad yabancıdan gelir: sahnede göstereceksen yalnız `fillText`, sayfada yalnız `textContent`. Kurala
+numarayla bak; ad dile göre değişebilir. Gerçek numaraları bu depo doğrulamadı: önce gerçek yayında panelin olay
+akışına bak (jetonun yanında ad yazar). Deneme yolları `deneme-` önekli sahte kimlik yollar (docs/OLAYLAR.md).
+
+```js
+const GUL = ['deneme-gul', '5655'];           // 5655: örnek numara, canlı yayında doğrula
+function oyunHediye(k, jeton, kademe, hediye) {
+  D.ip += (hediye && GUL.includes(hediye.id) ? 1 : -1) * jeton;   // Gül sağa çeker, başka hediye sola
+}
+```
 
 ## Çekirdeğin oyuna sunduğu adlar
 
@@ -378,6 +392,7 @@ Ortak parçalar `cekirdek/test/ortak.js`'te: oyun adı ilk bağımsız değişke
 
 1. Dışarıdan gelen her şey `olay(o)` üzerinden girer; oyun `D`'yi başka girişten değiştirmez.
 2. İzleyici metni asla HTML olarak yazılmaz: sayfaya `textContent`, tuvale `fillText`.
+   Hediyenin adı (`hediye.ad`) da izleyici metnidir.
 3. Sahnenin `ALAN_UST`–`ALAN_ALT` şeridi oyuncularındır. Üstü sahne yazıları, altı (1024 ve sonrası)
    TikTok'un yorum alanıdır; oraya bir şey çizme.
 4. Hareket ve süreler vuruşla (`B`) ölçülür, saniyeyle değil. `B` geri gitmez.
