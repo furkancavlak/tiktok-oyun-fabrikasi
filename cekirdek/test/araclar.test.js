@@ -55,8 +55,8 @@ kontrol('Şablonun önerilen ayarlarıyla (etiket.ustSinir) tam kalabalıkta hi�
 
 // Node.js yoksa açılan yardım sayfası: depoda ve yayıncı paketinde
 const nodeYok = path.join(KOK, 'cekirdek', 'node-yok.html'), nyMetin = fs.existsSync(nodeYok) ? fs.readFileSync(nodeYok, 'utf8') : '';
-kontrol('Node.js yardım sayfası depoda var: nodejs.org bağlantısı, LTS, BASLAT.bat yeniden; dış betik yok', /href="https:\/\/nodejs\.org"/.test(nyMetin) && /LTS/.test(nyMetin) && /BASLAT\.bat/.test(nyMetin) && !/<script/i.test(nyMetin));
-for (const d of ['kopru.js', 'BASLAT.bat', 'package.json']) fs.copyFileSync(path.join(KOK, d), path.join(GECICI, d));
+kontrol('Node.js yardım sayfası depoda var: nodejs.org bağlantısı, LTS, BASLAT.bat yeniden; dış betik yok', /href="https:\/\/nodejs\.org"/.test(nyMetin) && /LTS/.test(nyMetin) && /BASLAT\.bat/.test(nyMetin) && !/<script[^>]*\ssrc=/i.test(nyMetin));
+for (const d of ['kopru.js', 'BASLAT.bat', 'BASLAT.command', 'BASLAT.sh', 'package.json']) fs.copyFileSync(path.join(KOK, d), path.join(GECICI, d));
 const pk = calis('araclar/paket.js', 'deneme-oyun'), pkKl = path.join(GECICI, 'dist', 'deneme-oyun');
 const pkDosya = fs.existsSync(pkKl) ? fs.readdirSync(pkKl).sort() : [];
 kontrol('paket: BASLAT.bat, köprü, ana sayfa ve Node.js yardım sayfası pakette; OKU.txt açılış ekranını anlatır', pk.status === 0 && ['BASLAT.bat', 'ana-sayfa.html', 'kopru.js', 'node-yok.html', 'oyun.html', 'oyun.json'].every(d => pkDosya.includes(d)) && /açılış ekranı/.test(fs.readFileSync(path.join(pkKl, 'OKU.txt'), 'utf8')), { kod: pk.status, dosyalar: pkDosya, hata: (pk.stderr || '').slice(0, 200) });
@@ -88,6 +88,62 @@ if (process.platform === 'win32') {
   kontrol('BASLAT.bat pakette node yokken paketin kendi yardım sayfasını bulur', y3.status === 1 && y3.stdout.includes('ACILACAK: "' + path.join(pkKl, 'node-yok.html') + '"'), y3.stdout.slice(0, 300));
   fs.rmSync(batKok, { recursive: true, force: true });
 }
+
+// ==== BAŞLATICILAR: BASLAT.bat yardım sayfası yokken (G), BASLAT.command / BASLAT.sh (Mac / Linux) — başı ====
+{
+  // G: yardım sayfası yoksa "açılıyor" demez, yalnız kısa nodejs.org tarifi yazar
+  if (process.platform === 'win32') {
+    const gk = fs.mkdtempSync(path.join(os.tmpdir(), 'canli-bat-g-')), sys = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32');
+    fs.copyFileSync(path.join(KOK, 'BASLAT.bat'), path.join(gk, 'BASLAT.bat'));
+    const env = { ...process.env, FABRIKA_TEST_ACMA: '1' }; for (const a of Object.keys(env)) if (a.toUpperCase() === 'PATH') delete env[a]; env.Path = sys;
+    const g = spawnSync('cmd.exe', ['/d', '/s', '/c', '""' + path.join(gk, 'BASLAT.bat') + '""'], { windowsVerbatimArguments: true, cwd: os.tmpdir(), env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 20000 });
+    kontrol('G: BASLAT.bat yardım sayfası bulunmayınca "açılıyor" demez, kısa nodejs.org tarifini yazar, hatayla biter', g.status === 1 && /Node\.js bulunamadi/.test(g.stdout) && !/aciliyor/.test(g.stdout) && !/ACILACAK/.test(g.stdout) && /Kurulum: https:\/\/nodejs\.org/.test(g.stdout), g.stdout.slice(0, 400));
+    fs.rmSync(gk, { recursive: true, force: true });
+  }
+  // Mac / Linux başlatıcıları: biçim denetimi (Windows'ta da çalışır)
+  const sh = { mac: 'BASLAT.command', linux: 'BASLAT.sh' };
+  for (const [ad, dosya] of Object.entries(sh)) {
+    const ham = fs.readFileSync(path.join(KOK, dosya)), metin = ham.toString('utf8'), kod = metin.split('\n').filter(x => !/^\s*#/.test(x)).join('\n');
+    const bashizm = [/\[\[/, /\bfunction\s/, /^\s*local\s/m, /^\s*source\s/m, /\$'/, /<<</, /echo\s+-e/, /=\(/, /\$\{[^}]*\/\//, /\bpushd\b/, /&>/, /\$RANDOM/, /\[ [^\]]*==/].filter(r => r.test(kod)).map(String);
+    kontrol(ad + ': ' + dosya + ' LF, BOM\'suz UTF-8, #!/bin/sh ile başlar, bash\'e özgü yazım yok, npm çağırmaz, motoru "--ana-sayfa --ac" ile açar', !metin.includes('\r') && !(ham[0] === 0xef && ham[1] === 0xbb) && Buffer.from(metin, 'utf8').equals(ham) && metin.startsWith('#!/bin/sh\n') && bashizm.length === 0 && !/npm/.test(kod) && /^\s*node kopru\.js --ana-sayfa --ac$/m.test(kod) && /cd "\$\(dirname "\$0"\)"/.test(kod), { bashizm });
+  }
+  const mod = spawnSync('git', ['ls-files', '-s', 'BASLAT.command', 'BASLAT.sh'], { cwd: KOK, encoding: 'utf8' }).stdout.trim().split('\n').map(x => x.split(/\s+/)[0] + ' ' + x.split('\t')[1]);
+  kontrol('Mac / Linux: git iki başlatıcıyı çalıştırılabilir (100755) kaydeder', JSON.stringify(mod) === JSON.stringify(['100755 BASLAT.command', '100755 BASLAT.sh']), mod);
+  // sh ile gerçekten çalıştır (Windows'ta Git'in sh'ı): sahte node yalnız çağrıyı ve klasörü yazar; node yokken yardım sayfası
+  const shYol = process.platform === 'win32' ? ['C:\\Program Files\\Git\\usr\\bin\\sh.exe', 'C:\\Program Files\\Git\\bin\\sh.exe'].find(y => fs.existsSync(y)) : '/bin/sh';
+  if (shYol) {
+    const shKok = fs.mkdtempSync(path.join(os.tmpdir(), 'canli-sh-')), stub = path.join(shKok, 'sahte-node'), araclarBin = path.dirname(shYol);
+    fs.mkdirSync(stub);
+    fs.writeFileSync(path.join(stub, 'node'), '#!/bin/sh\necho "ARGS $*" > "$(dirname "$0")/cagri.txt"\npwd >> "$(dirname "$0")/cagri.txt"\nexit 0\n');
+    try { fs.chmodSync(path.join(stub, 'node'), 0o755); } catch (e) { }
+    const depo = path.join(shKok, 'Oyun (deneme) & 100% şarkı');
+    fs.mkdirSync(path.join(depo, 'cekirdek'), { recursive: true });
+    fs.copyFileSync(path.join(KOK, 'cekirdek', 'node-yok.html'), path.join(depo, 'cekirdek', 'node-yok.html'));
+    const shCalis = (dosya, yol, ek) => {
+      const env = { ...process.env, ...ek }; for (const a of Object.keys(env)) if (a.toUpperCase() === 'PATH') delete env[a]; env.PATH = yol;
+      // Çift tıklama gibi: çalışma klasörü ev klasörü değil, başka bir yer; betik kendi klasörüne geçmeli
+      return spawnSync(shYol, [path.join(depo, dosya)], { cwd: os.tmpdir(), env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 20000 });
+    };
+    for (const dosya of Object.values(sh)) {
+      fs.copyFileSync(path.join(KOK, dosya), path.join(depo, dosya));
+      try { fs.unlinkSync(path.join(stub, 'cagri.txt')); } catch (e) { }
+      const v = shCalis(dosya, stub + path.delimiter + araclarBin, {}), cagri = fs.existsSync(path.join(stub, 'cagri.txt')) ? fs.readFileSync(path.join(stub, 'cagri.txt'), 'utf8') : '';
+      kontrol(dosya + ' sh ile, zor adlı klasörde (boşluk, ş, parantez, &, %) ve başka çalışma klasöründen: node bulunca tam olarak "node kopru.js --ana-sayfa --ac" çalıştırır, kendi klasöründe', v.status === 0 && /^ARGS kopru\.js --ana-sayfa --ac\n/.test(cagri) && /\/Oyun \(deneme\) & 100% şarkı\n?$/.test(cagri.split('\n').slice(1).join('\n').trim() + '\n'), { kod: v.status, cagri, hata: (v.stderr || '').slice(0, 200) });
+      const y = shCalis(dosya, araclarBin, { FABRIKA_TEST_ACMA: '1' });
+      const beklenen = path.join(depo, 'cekirdek', 'node-yok.html').replace(/\\/g, '/'), gelen = (/ACILACAK: "([^"]*)"/.exec(y.stdout) || [])[1] || '';
+      kontrol(dosya + ' node yokken düz bir ileti yazar, yardım sayfasının yolunu verir (test anahtarı açtırmaz), Enter bekler, hatayla biter', y.status === 1 && /Node\.js bulunamadı/.test(y.stdout) && new RegExp(dosya.replace('.', '[.]')).test(y.stdout) && /cekirdek\/node-yok\.html$/.test(gelen) && gelen.endsWith(beklenen.slice(beklenen.indexOf('Oyun ('))) && /Enter tuşuna bas/.test(y.stdout), { kod: y.status, cikti: y.stdout.slice(0, 400) });
+    }
+    fs.rmSync(path.join(depo, 'cekirdek'), { recursive: true, force: true });
+    const z = shCalis('BASLAT.command', araclarBin, { FABRIKA_TEST_ACMA: '1' });
+    kontrol('BASLAT.command yardım sayfası yokken "açılıyor" demez, kısa nodejs.org tarifini yazar', z.status === 1 && !/açılıyor/.test(z.stdout) && /Kurulum: https:\/\/nodejs\.org/.test(z.stdout), z.stdout.slice(0, 300));
+    fs.rmSync(shKok, { recursive: true, force: true });
+  } else kontrol('Mac / Linux başlatıcıları sh ile çalıştırılamadı: bu bilgisayarda sh yok (Git for Windows kur)', false);
+  // paket: iki başlatıcı da pakette, çalıştırılabilir; OKU.txt Mac başlatmasını ve ilk açılış engelini anlatır
+  const oku = fs.existsSync(path.join(pkKl, 'OKU.txt')) ? fs.readFileSync(path.join(pkKl, 'OKU.txt'), 'utf8') : '';
+  const izin = d => { try { return process.platform === 'win32' || (fs.statSync(path.join(pkKl, d)).mode & 0o111) !== 0; } catch (e) { return false; } };
+  kontrol('paket: BASLAT.command ve BASLAT.sh pakette (Windows dışında çalıştırılabilir); OKU.txt Mac / Linux başlatmasını ve "macOS engellerse" Terminal yolunu anlatır', ['BASLAT.command', 'BASLAT.sh'].every(d => pkDosya.includes(d) && izin(d)) && /BASLAT\.command/.test(oku) && /sh BASLAT\.sh/.test(oku) && /macOS engellerse/.test(oku) && /sh BASLAT\.command/.test(oku), pkDosya);
+}
+// ==== BAŞLATICILAR — sonu ====
 
 fs.rmSync(GECICI, { recursive: true, force: true });
 process.exit(raporla(sonuc) ? 1 : 0);

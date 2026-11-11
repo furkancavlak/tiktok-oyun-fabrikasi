@@ -9,6 +9,7 @@ işlevi çağırır. Sayfada `window.CanliOyun.olay(o)` olarak erişilir. Aşağ
 { tip: 'yorum',    kullanici: { id: 'ayse', ad: 'Ayşe' }, metin: 'halay!' }
 { tip: 'begeni',   kullanici: { id: 'ayse', ad: 'Ayşe' }, adet: 15 }
 { tip: 'hediye',   kullanici: { id: 'ayse', ad: 'Ayşe' }, jeton: 5, adet: 3 }   // 15 jeton sayılır
+{ tip: 'hediye',   kullanici: { id: 'ayse', ad: 'Ayşe' }, jeton: 1, adet: 3, hediye: { id: '5655', ad: 'Rose' } }  // hangi hediye
 { tip: 'takip',    kullanici: { id: 'ayse', ad: 'Ayşe' } }
 { tip: 'paylasim', kullanici: { id: 'ayse', ad: 'Ayşe' } }
 { tip: 'katilim',  kullanici: { id: 'ayse', ad: 'Ayşe' } }                      // yalnız günlüğe yazılır
@@ -21,6 +22,17 @@ işlevi çağırır. Sayfada `window.CanliOyun.olay(o)` olarak erişilir. Aşağ
 | `metin` | Yorum. Balonda 30 karaktere kısaltılır; bağlantı ve uzun rakam dizileri gizlenir. |
 | `jeton` | Tek hediyenin jeton değeri. Sayı değilse ya da 1'den küçükse 1 sayılır. |
 | `adet` | Hediye adedi (seri). Belirtilmezse 1. |
+| `hediye` | İsteğe bağlı: hangi hediye. `{ id, ad }`; ikisi de yoksa alan hiç olmaz. Olmasa da hediye eskisi gibi sayılır. |
+| `hediye.id` | Platformun hediye numarası, metin olarak (`'5655'`). En çok 32 karakter. Sayı gelirse metne çevrilir. Boş metin ve 0 "yok" sayılır. |
+| `hediye.ad` | Hediyenin adı, düz metin. Denetim karakterleri atılır, kırpılır, 40 karaktere kısaltılır. Yabancıdan gelir: izleyici adı gibi **asla HTML olarak yazılmaz** (sayfaya `textContent`, tuvale `fillText`). |
+
+Hediye kimliği oyuna `oyunHediye(k, jeton, kademe, hediye)` kancasının dördüncü bilgisi olarak gelir (bkz.
+KANCALAR.md); bilinmiyorsa `null`. Paneldeki olay akışında jetonun yanında hediyenin adı yazılır
+(`15 jeton · Rose → Zıpla`). Deneme yolları sahte, `deneme-` önekli kimlikler yollar (gerçek numarayla karışmasın):
+`{ id: 'deneme-gul', ad: 'Gül' }`, `{ id: 'deneme-kalp', ad: 'Kalp' }`, `{ id: 'deneme-yildiz', ad: 'Yıldız' }`.
+Köprünün deneme kipi bunları sırayla yollar; paneldeki Deneme düğmelerinin en küçük kademesi Gül, sonrakiler Kalp ve
+Yıldız (sonra yine baştan). Gerçek yayında hangi numaraların ve adların geldiği (ad yerel dilde mi gelir) bu depoda
+denenmedi; oyunun kuralını kurmadan önce gerçek yayında panelin olay akışına bak.
 
 Her olayın etkisi:
 
@@ -55,6 +67,34 @@ Oyun köprüye WebSocket ile bağlanır ve her iletiyi JSON olarak okur (tek nes
                              "giftDetails": { "diamondCount": 5, "giftType": 1 }, "repeatCount": 3, "repeatEnd": 1 } }
 ```
 
+Hediye kimliği her biçimde şuradan okunur (`CanliOyun.cevir` ve köprünün `cevir`'i aynı alanlara bakar):
+
+```js
+// 1. Oyunun kendi biçimi: hediye alanı denetlenip geçer (bozuksa düşer, hediye yine sayılır)
+{ "tip": "hediye", "kullanici": { "id": "ayse" }, "jeton": 1, "adet": 3, "hediye": { "id": "5655", "ad": "Rose" } }
+
+// 2. Düz alanlar (tiktok-live-connector 1.x, WebcastPushConnection): giftId, giftName
+{ "event": "gift", "data": { "uniqueId": "ayse", "giftId": 5655, "giftName": "Rose", "diamondCount": 1, "repeatCount": 3,
+                             "giftType": 1, "repeatEnd": true } }
+
+// 3a. İç içe, giftDetails (2.0–2.4, TikTokLiveConnection): giftId ya da giftDetails.id, giftDetails.giftName
+{ "event": "gift", "data": { "user": { "uniqueId": "ayse" }, "giftId": 5655,
+                             "giftDetails": { "id": "5655", "giftName": "Rose", "diamondCount": 1, "giftType": 1 }, "repeatCount": 3, "repeatEnd": 1 } }
+
+// 3b. İç içe, gift (2.5, TikTokLiveConnection): giftId ya da gift.id, gift.name
+{ "event": "gift", "data": { "user": { "uniqueId": "ayse" }, "giftId": "5655",
+                             "gift": { "id": "5655", "name": "Rose", "diamondCount": 1, "type": 1 }, "repeatCount": 3, "repeatEnd": 1 } }
+
+// Hepsi şuna çevrilir:
+{ "tip": "hediye", "kullanici": { "id": "ayse", "ad": "ayse" }, "jeton": 1, "adet": 3, "hediye": { "id": "5655", "ad": "Rose" } }
+```
+
+Sıra: kimlik için `giftId` → `giftDetails.id` / `gift.id` → `gift.gift_id`; ad için `giftName` → `giftDetails.giftName` →
+`gift.name`. Ayrıntı nesnesi yoksa düz verideki `id` ve `name` alanlarına bakılmaz (kullanıcıya ait olabilir).
+Kimlik de ad da yoksa olayda `hediye` alanı olmaz. Seri kuralı değişmez: seri sürerken gelen ileti kimliğiyle
+birlikte yok sayılır, seri bitince bir kez sayılır. Eski köprü alanı yollamaz (oyun eskisi gibi çalışır, kanca
+`null` alır); yeni köprüyle eski sayfa da çalışır, eski sayfa alanı yok sayar.
+
 **Seri hediyeler.** `giftType` 1 olan hediyelerde izleyici her tıkladığında bir ileti gelir ve
 `repeatCount` artar. Oyun yalnız seri bittiğinde (`repeatEnd` doğru / 1) sayar; yoksa aynı hediye defalarca
 sayılır. `repeatEnd` alanı hiç yoksa ileti tek seferlik kabul edilir.
@@ -85,6 +125,7 @@ sayılır. Yeni köprüyle eski sayfa da çalışır; eski sayfa alanı yok saya
 | --- | --- |
 | `olay(o)` | Bir olayı işler. |
 | `baglan(adres)` / `kes()` | Köprüye bağlanır / bağlantıyı keser. |
+| `kopruBitti(ileti)` | Bu sayfanın başlatması bitti: yeniden bağlanmayı bırakır, rozet ve Bağlantı hücresi **Durdu** der. Köprünün bekçisi örtüyü gösterirken çağırır; köprünün `durdu` iletisi de aynı işi yapar. Bekçi sayfayı yeni başlatmaya yenilerse sayfa yine bağlanır. |
 | `cevir(ileti)` | Dış iletiyi oyun olayına çevirir (işlemez); tanımazsa `null`. |
 | `durum()` | Çekirdeğin alanları (kişi sayısı, lider, coşku, vuruş, sıra, bağlantı durumu vb.) ve oyunun `oyunDurum(d)` kancasıyla eklediği alanlar. Tam liste için `cekirdek/js` altındaki `durum` işlevine bak. |
 | `_test` | Testler için iç durum (`D`, `muzik`, `Muzik`, `HAVALAR`, `ayar`, `zamanEkle`). Kararlı arayüz değildir. |
@@ -96,18 +137,18 @@ Köprü yalnız `127.0.0.1` dinler ve her kipte her isteğin `Host` başlığın
 
 | Adres | Yanıt |
 | --- | --- |
-| `GET /` | Oyun. Köprü sayfaya `window.OYUN_KOPRU` yazar; oyun bunu görünce kendiliğinden bağlanır. |
+| `GET /` | Oyun. Köprü sayfaya `window.OYUN_KOPRU` yazar (`ws://…/olay/<kimlik>`); oyun bunu görünce kendiliğinden bağlanır. |
 | `GET /#yayin` | Yalnız sahne (panel gizli). |
 | `GET /durum` | `{ durum, bagliSayfa, sayac }` JSON. |
 | `GET /muzik/<dosya>` | Oyunun isteğe bağlı hazır parçaları. `liste.js` yoksa boş bir betik döner (konsola 404 düşmesin). |
-| WebSocket | Olay akışı. Köprü yalnız yollar; istemciden veri beklemez. Kaynak (`Origin`) köprünün kendi adresi olmalı; bu kiplerde ayrıca kaynak bildirmeyen istemci ve diskten açılmış oyun sayfası (`null` ya da `file:`) kabul edilir, çünkü orada `oyun.html` dosyadan açılıp elle bağlanabilir. Başka bir sitenin kaynağı geri çevrilir. |
+| WebSocket `/olay/<kimlik>` | Kimlik her açılışta yeni ve tahmin edilemez; köprü tam adresi açılışta pencereye yazar (`Olay adresi: ws://127.0.0.1:<kapı>/olay/<kimlik>`). Başka yol, kimliksiz `/olay` ya da yanlış kimlik, kaynağına bakılmadan el sıkışmadan önce 403 alır (başka bir sitenin kum havuzlu iframe'i `Origin: null` yollasa da). Diskten açılan `oyun.html` ya da başka bir program bağlanacaksa Yayın sekmesindeki adres alanına bu tam adres yazılır; düz `ws://127.0.0.1:8787` artık bağlanmaz. Olay akışı. Köprü yalnız yollar; istemciden veri beklemez. Kaynak (`Origin`) köprünün kendi adresi olmalı; bu kiplerde ayrıca kaynak bildirmeyen istemci ve diskten açılmış oyun sayfası (`null` ya da `file:`) kabul edilir, çünkü orada `oyun.html` dosyadan açılıp elle bağlanabilir. Başka bir sitenin kaynağı geri çevrilir. |
 
 Ana sayfa kipinde (`node kopru.js --ana-sayfa`, `BASLAT.bat` böyle açar) adresler başkadır:
 
 | Adres | Yanıt |
 | --- | --- |
 | `GET /` | Ana sayfa (`cekirdek/ana-sayfa.html`; pakette köprünün yanında). Açılışta yükleme sahnesi. |
-| `GET /api/oyunlar` | `{ anaSayfa, paket, oyunlar: [{ id, ad, aciklama }], aktif: { oyun, ad, kip, kullanici, calistirma, baglanti } \| null, durum, kutuphane: { durum: "hazir" \| "iniyor" \| "hata", sure, neden } }`. |
+| `GET /api/oyunlar` | `{ anaSayfa, paket, platform: "windows" \| "mac" \| "linux", oyunlar: [{ id, ad, aciklama }], aktif: { oyun, ad, kip, kullanici, calistirma, baglanti } \| null, durum, kutuphane: { durum: "hazir" \| "iniyor" \| "hata", sure, neden } }`. |
 | `GET /durum` | `{ durum, bagliSayfa, sayac, aktif }` JSON. |
 | `POST /api/baslat` | Gövde `{ oyun, kip: "deneme" \| "canli", kullanici }`. Çalışanı durdurur, seçileni yeni bir başlatma kimliğiyle (`calistirma`) başlatır; eski başlatmanın soketleri kapatılır. Aynı oyun aynı kipte ve aynı adla yeniden istenirse bağlantı koparılmaz; TikTok'a henüz bağlı değilse hemen yeniden denenir. Yanıt `{ tamam, adres }` ya da `{ tamam: false, hata, alan }`. Kütüphane inmeden canlı istenirse 409 (`alan: "kutuphane"`). Kullanıcı adı: harf, rakam, `_`, `.`; 2-24 karakter; noktayla bitmez. |
 | `POST /api/durdur` | Gövde `{}`. Çalışan oyunun sahte olaylarını ya da TikTok bağlantısını kapatır; motor boşta bekler. |

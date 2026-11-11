@@ -146,6 +146,8 @@ function durumAl() {
     return ['canli', 'Canlı', sayi(Yayin.alinan) + ' olay alındı'];
   if (ws)
     return ['bekliyor', 'Bağlanıyor', 'köprü aranıyor'];
+  if (Yayin.bitti)
+    return KOPRU_HUCRE.durdu;
   if (Yayin.surekli)
     return ['koptu', 'Koptu', 'yeniden deniyor'];
   if ($('bag-rozet').classList.contains('hata'))
@@ -372,6 +374,8 @@ function sekmeSec(ad, odakla) {
   }
 }
 const yaziAlani = e => e && (/^(INPUT|TEXTAREA|SELECT)$/.test(e.tagName) || e.isContentEditable);
+// Deneme düğmelerinin hediye kimlikleri (köprünün deneme kipiyle aynı üçü, kopru.js denemeBaslat): en küçük kademe Gül.
+const DENEME_HEDIYE = [{ id: 'deneme-gul', ad: 'Gül' }, { id: 'deneme-kalp', ad: 'Kalp' }, { id: 'deneme-yildiz', ad: 'Yıldız' }];
 
 function baslat(kayit) {
   sayfaYaz();
@@ -397,8 +401,11 @@ function baslat(kayit) {
     const s = document.createElement('small');
     s.textContent = kd.ad;
     b.append(g, s);
-    b.title = kd.etki || kd.ad;
-    b.onclick = () => { ilkDokunus(); olay({ tip: 'hediye', kullanici: sahteKim(), jeton: kd.min }); };
+    // Her düğme sahte bir hediye kimliğiyle gelir ("deneme-" önekli, gerçek bir TikTok numarası değil): oyun yazarı
+    // hediye türüne bakan kuralını TikTok'suz dener (docs/KANCALAR.md, oyunHediye'nin dördüncü bilgisi).
+    const hd = DENEME_HEDIYE[i % DENEME_HEDIYE.length];
+    b.title = (kd.etki || kd.ad) + ' · deneme hediyesi: ' + hd.ad;
+    b.onclick = () => { ilkDokunus(); olay({ tip: 'hediye', kullanici: sahteKim(), jeton: kd.min, hediye: { id: hd.id, ad: hd.ad } }); };
     $('hediyeler').append(b);
   });
   HIZLAR.forEach((h, i) => {
@@ -621,7 +628,7 @@ function kareOlcum() {
 }
 // Dışarıya açık küçük arayüz: köprü yazanlar ve denemeler için.
 window.CanliOyun = {
-  olay, baglan: a => Yayin.baglan(a), kes: () => Yayin.kes(), cevir: m => Yayin.cevir(m),
+  olay, baglan: a => Yayin.baglan(a), kes: () => Yayin.kes(), cevir: m => Yayin.cevir(m), kopruBitti: ileti => Yayin.bitir(ileti),
   durum: () => {
     const d = { oyun: OYUN.id, kisi: D.sira.length, lider: D.lider && D.lider.ad, cosku: D.cosku, begeni: D.begeni, vurus: B, sira: D.sira.map(k => [k.ad, k.jeton]), kareMs: D.kareMs, parca: parca.length, bagli: !!(Yayin.ws && Yayin.ws.readyState === 1), alinan: Yayin.alinan, hava: muzik.hava.id, ses: muzik.acik };
     if (KANCA_DURUM)

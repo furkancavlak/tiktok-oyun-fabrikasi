@@ -8,7 +8,9 @@
 <!-- Yazı tipi sayfayı bekletmez: yanıt gelmese de (güvenlik duvarı, takılan ağ) sayfa yedek yazı tipiyle hemen açılır. -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Paytone+One&family=Rubik:wght@400;500;700;800&display=swap" media="print" onload="this.media='all'">
 <!--
-  BASLAT.bat bilgisayarda Node.js bulamayınca bu sayfayı tarayıcıda açar (dosyadan; motor çalışmadığı için sunucu yok).
+  BASLAT.bat (Windows), BASLAT.command (macOS) ya da BASLAT.sh (Linux) bilgisayarda Node.js bulamayınca bu sayfayı tarayıcıda
+  açar (dosyadan; motor çalışmadığı için sunucu yok). Başlatıcının adı tarayıcının platform ipucundan seçilir; emin
+  olunamazsa üçü birden yazılır. Satır içi küçük betik dışında betik yok.
   Tek dosya, dış bağımlılığı yok (yazı tipi yüklenmezse yedek yazı tipiyle görünür). Oyun salonunun renkleri.
 -->
 <style>
@@ -47,10 +49,22 @@ li b{font-weight:800}
   <a class="git" href="https://nodejs.org" target="_blank" rel="noopener">nodejs.org'u aç <small>ücretsiz</small></a>
   <ol>
     <li><span>Sitede <b>LTS</b> yazan sürümü indir ve kur. Kurulumda her şeyi olduğu gibi bırakıp <b>İleri</b>'ye basabilirsin.</span></li>
-    <li><span>Kurulum bitince <b>BASLAT.bat</b> dosyasına yeniden çift tıkla.</span></li>
-    <li><span>Yine bu sayfa açılırsa bilgisayarı bir kez yeniden başlat, sonra tekrar çift tıkla.</span></li>
+    <li><span id="yeniden">Kurulum bitince <b>BASLAT.bat</b> (Windows), <b>BASLAT.command</b> (Mac) ya da <b>BASLAT.sh</b> (Linux) dosyasını yeniden aç.</span></li>
+    <li><span>Yine bu sayfa açılırsa bilgisayarı bir kez yeniden başlat, sonra aynı dosyayı tekrar aç.</span></li>
   </ol>
   <p class="not">Bu sayfayı kapatabilirsin. Oyunlar ve TikTok bağlantısı Node.js kurulunca kendiliğinden hazırlanır.</p>
 </main>
+<script>
+(function () { // Windows: BASLAT.bat, Mac: BASLAT.command, Linux: BASLAT.sh; bilinmezse yukarıdaki üçlü yazı kalır.
+  var p = String(window.FABRIKA_PLATFORM || (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '');
+  var ad = /mac/i.test(p) ? ['BASLAT.command', ' dosyasına yeniden çift tıkla.'] : /win/i.test(p) ? ['BASLAT.bat', ' dosyasına yeniden çift tıkla.']
+    : /linux|x11/i.test(p) && !/android/i.test(p) ? ['BASLAT.sh', ' dosyasını yeniden çalıştır.'] : null;
+  if (!ad) return;
+  var y = document.getElementById('yeniden'), b = document.createElement('b');
+  b.textContent = ad[0];
+  y.textContent = 'Kurulum bitince ';
+  y.append(b, ad[1]);
+})();
+</script>
 </body>
 </html>

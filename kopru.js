@@ -36,7 +36,10 @@ const DENEME = args.includes('--deneme');
 const pi = args.indexOf('--port');
 const PORT = pi >= 0 ? parseInt(args[pi + 1], 10) || 8787 : 8787;
 const oi = args.indexOf('--oyun');
-const KULLANICI = (args.find((a, i) => !a.startsWith('--') && args[i - 1] !== '--port' && args[i - 1] !== '--oyun') || '').replace(/^@/, '').trim();
+// Değer alan seçenekler: değerleri kullanıcı adı sanılmaz. --kurulum-betigi ve --kurulum-sinir yalnız testler içindir
+// (npm yerine taklit kurulum betiği ve süre sınırı); BASLAT.bat bunları hiç vermez.
+const DEGERLI = ['--port', '--oyun', '--kurulum-betigi', '--kurulum-sinir'];
+const KULLANICI = (args.find((a, i) => !a.startsWith('--') && !DEGERLI.includes(args[i - 1])) || '').replace(/^@/, '').trim();
 function oyunlariBul() {
   const kl = path.join(__dirname, 'oyunlar');
   try { return fs.readdirSync(kl).filter(a => fs.existsSync(path.join(kl, a, 'oyun.html'))); } catch (e) { return []; }
@@ -66,6 +69,14 @@ function oyunSec(adlar, yanit) {
 }
 
 const yaz = (...a) => console.log(new Date().toTimeString().slice(0, 8), ...a);
+// Başlatıcı ve pencere adı platforma göre: Windows BASLAT.bat + siyah pencere, macOS BASLAT.command + Terminal penceresi,
+// Linux BASLAT.sh + terminal penceresi. Ana sayfa da aynı adları kullanır (/api/oyunlar içindeki platform alanı).
+const PLATFORM = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'mac' : 'linux';
+const METIN = {
+  windows: { baslatici: 'BASLAT.bat', pencere: 'siyah pencere', pencereyi: 'siyah pencereyi', yeniden: 'BASLAT.bat dosyasına yeniden çift tıkla' },
+  mac: { baslatici: 'BASLAT.command', pencere: 'Terminal penceresi', pencereyi: 'Terminal penceresini', yeniden: 'BASLAT.command dosyasına yeniden çift tıkla' },
+  linux: { baslatici: 'BASLAT.sh', pencere: 'terminal penceresi', pencereyi: 'terminal penceresini', yeniden: 'BASLAT.sh dosyasını yeniden çalıştır' }
+}[PLATFORM];
 
 /* ------------------------------------------------------------------ oyun sayfası + WebSocket sunucusu */
 const istemciler = new Set();
@@ -106,6 +117,10 @@ function soketleriKapat(kosul, ileti) {
 }
 // Yalnız bu köprünün kendi adresi: başka bir ad taşıyan istek (DNS yeniden bağlama) her kipte geri çevrilir.
 const IZINLI_HOST = ['127.0.0.1:' + PORT, 'localhost:' + PORT];
+// Komut satırı kiplerinde olay akışının adresi: her açılışta yeni, tahmin edilemez bir kimlik (/olay/<kimlik>). Köprü
+// kendi sunduğu sayfaya bunu yazar; diskten açılan sayfa ya da başka bir program siyah pencerede yazan tam adresi
+// kullanır. Kimliği bilmeyen (başka bir sitenin sayfası, kum havuzlu iframe'i dahil) el sıkışmadan önce 403 alır.
+const KIMLIK = crypto.randomBytes(12).toString('hex'), OLAY_YOL = '/olay/' + KIMLIK;
 const hostIyi = req => IZINLI_HOST.includes(String(req.headers.host || '').toLowerCase());
 
 const sunucu = http.createServer((req, res) => {
@@ -116,7 +131,7 @@ const sunucu = http.createServer((req, res) => {
     fs.readFile(OYUN, 'utf8', (hata, html) => {
       if (hata) { res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' }); res.end('oyun.html bulunamadı. Önce derle: node araclar/derle.js <ad>'); return; }
       // Oyuna "seni köprü açtı, şu adrese bağlan" bilgisini ver.
-      const ek = '<script>window.OYUN_KOPRU = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/olay";</script>';
+      const ek = '<script>window.OYUN_KOPRU = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "' + OLAY_YOL + '";</script>';
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
       res.end(html.replace('<body>', '<body>\n' + ek));
     });
@@ -159,6 +174,8 @@ sunucu.on('upgrade', (req, soket) => {
   // diskten açılmış oyun sayfası (null / file:) kabul edilir: orada oyun.html elle de bağlanabilir (docs/OLAYLAR.md).
   const kaynak = String(req.headers.origin || '').toLowerCase();
   const kendi = IZINLI_HOST.some(h => kaynak === 'http://' + h);
+  // Komut satırı kiplerinde yalnız /olay/<kimlik>; yanlış ya da eksik kimlik, kaynağına bakılmadan geri çevrilir.
+  if (!ANA && (req.url || '').split('?')[0] !== OLAY_YOL) { reddet(); return; }
   if (!hostIyi(req) || !(kendi || (!ANA && (!kaynak || kaynak === 'null' || kaynak.startsWith('file:'))))) { reddet(); return; }
   if (ANA) { // yalnız çalışan başlatmanın adresi: /olay/<oyun>/<calistirma>
     const m = /^\/olay\/([\w-]+)\/([a-f0-9]{12})$/.exec((req.url || '').split('?')[0]);
@@ -245,7 +262,7 @@ function dinle() {
   sunucu.listen(PORT, '127.0.0.1', () => {
     if (ANA) {
       console.log('\n  TikTok Oyun Fabrikası açık:  http://localhost:' + PORT + '/');
-      console.log('  Bu siyah pencere oyunların motorudur. Açık kalsın; kapatınca oyunlar durur.\n');
+      console.log('  Bu ' + METIN.pencere + ' oyunların motorudur. Açık kalsın; kapatınca oyunlar durur.\n');
       if (args.includes('--ac')) tarayicidaAc('http://localhost:' + PORT + '/');
       kutuphaneHazirla(); // sayfa açılırken kütüphane yoksa indirmeye başlar; sayfa durumu gösterir
       return;
@@ -253,6 +270,7 @@ function dinle() {
     console.log('\n  Köprü çalışıyor. Oyun: ' + path.relative(__dirname, OYUN));
     console.log('  Oyun (panelli):      http://localhost:' + PORT + '/');
     console.log('  Yalnızca sahne:      http://localhost:' + PORT + '/#yayin');
+    console.log('  Olay adresi:         ws://127.0.0.1:' + PORT + OLAY_YOL + '   (diskten açılan oyunda Yayın sekmesine bunu yaz)');
     let parca = [];
     try { parca = fs.readdirSync(MUZIK_KLASOR).filter(a => /\.(mp3|ogg|wav|m4a)$/i.test(a)); } catch (e) { }
     const mk = path.relative(__dirname, MUZIK_KLASOR) || 'muzik';
@@ -261,7 +279,10 @@ function dinle() {
     if (DENEME) denemeBaslat(); else tiktokBaslat();
     if (args.includes('--ac')) tarayicidaAc('http://localhost:' + PORT + '/'); // köprü dinlemeye başladıktan sonra
   });
-  process.on('SIGINT', () => { kurulumuKes(); console.log(ANA ? '\nMotor kapatıldı.' : '\nKöprü kapatıldı.'); process.exit(0); });
+  const kapat = () => { kurulumuKes(); console.log(ANA ? '\nMotor kapatıldı.' : '\nKöprü kapatıldı.'); process.exit(0); };
+  // SIGHUP: Windows'ta pencere kapatılınca gelir. 'exit': başka bir yoldan çıkılsa da kurulum ağacı arkada kalmaz.
+  for (const sinyal of ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK']) { try { process.on(sinyal, kapat); } catch (e) { } }
+  process.on('exit', kurulumuKes);
 }
 function tarayicidaAc(adres) { // varsayılan tarayıcıda açar
   const { exec } = require('child_process');
@@ -296,46 +317,103 @@ const paketMi = () => fs.existsSync(path.join(__dirname, 'oyun.html'));
 
 // TikTok kütüphanesi (yalnız ana sayfa kipinde): yoksa motor kendisi indirir; sayfa durumu /api/oyunlar'dan okur.
 // Komut sabittir (npm install --omit=dev, köprünün klasöründe); içine kullanıcıdan gelen hiçbir şey girmez, ayrı pencere
-// açılmaz. Testler ağa ve gerçek npm'e dokunmasın diye KOPRU_KURULUM_BETIGI verilirse npm yerine o betik node ile
-// çalıştırılır. Deneme kipi kütüphaneye hiç ihtiyaç duymaz; indirme sürerken ya da başarısız olunca da çalışır.
+// açılmaz. Testler ağa ve gerçek npm'e dokunmasın diye yalnız komut satırındaki --kurulum-betigi <yol> verilirse npm
+// yerine o betik node ile çalıştırılır (--kurulum-sinir <sn> süre sınırını kısaltır, yalnız betikle birlikte geçer);
+// ortam değişkeni okunmaz, BASLAT.bat bunları vermez. Deneme kipi kütüphaneye hiç ihtiyaç duymaz.
+// Aynı anda en çok bir kurulum yaşar: süre dolunca ya da motor kapanırken motorun başlattığı sürecin bütün ağacı
+// öldürülür (Windows'ta taskkill /T, başka yerde ayrı süreç grubu); ağaç gerçekten bitmeden durum "iniyor" kalır,
+// "Yeniden dene" ikinci bir kurulum başlatamaz.
+const secenekDeger = ad => { const i = args.indexOf(ad); return i >= 0 ? args[i + 1] : undefined; };
+const KURULUM_BETIGI = secenekDeger('--kurulum-betigi') || '';
+const KURULUM_SINIR = (KURULUM_BETIGI && +secenekDeger('--kurulum-sinir') > 0 ? +secenekDeger('--kurulum-sinir') : 600) * 1000;
+const KURULUM_NEDEN = {
+  internet: 'İndirilemedi. İnternet bağlantını kontrol et.',
+  sure: 'İndirme çok uzun sürdü. İnternet bağlantını kontrol edip yeniden dene.',
+  npmYok: 'İndirme programı bulunamadı: Node.js kurulumu eksik görünüyor. Node.js\'i nodejs.org adresinden yeniden kur.',
+  izin: 'Bu klasöre yazılamıyor. Oyun klasörünü Masaüstü ya da Belgeler gibi yazılabilir bir yere taşı.',
+  eksik: 'İndirme bitti ama kütüphane klasörde görünmüyor. Yeniden dene; düzelmezse paketi baştan aç.'
+};
 const kutuphane = { durum: 'bilinmiyor', basladi: 0, neden: '', cocuk: null };
 function kutuphaneVarMi() { try { require.resolve('tiktok-live-connector'); return true; } catch (e) { return false; } }
 function kutuphaneDurum() {
   if (kutuphane.durum === 'bilinmiyor' && kutuphaneVarMi()) kutuphane.durum = 'hazir';
   return { durum: kutuphane.durum, sure: kutuphane.durum === 'iniyor' ? Math.round((Date.now() - kutuphane.basladi) / 1000) : 0, neden: kutuphane.neden };
 }
+// Kurulumun başarısızlık nedeni: npm'in son satırlarından düz bir cümle seçilir (ham satırlar yalnız konsola yazılır).
+function kurulumNedeni(kod, cikti, baslamadi) {
+  if (baslamadi || kod === 127 || kod === 9009 || /is not recognized as an internal or external command|tanınmıyor|command not found|npm: not found|ENOENT[^\n]*npm/i.test(cikti)) return KURULUM_NEDEN.npmYok;
+  if (/EACCES|EPERM|EROFS|permission denied|operation not permitted|read-only file system/i.test(cikti)) return KURULUM_NEDEN.izin;
+  if (kod === 0) return KURULUM_NEDEN.eksik;
+  return KURULUM_NEDEN.internet;
+}
+// npm yolda (PATH) var mı? Yoksa kurulum hiç başlatılmaz. Windows'ta komut isteminin "tanınmıyor" iletisi dile göre
+// değiştiği için çıktıdan anlamak güvenilir değil; önce dosyaya bakılır.
+function npmVarMi() {
+  const adlar = process.platform === 'win32' ? ['npm.cmd', 'npm.exe', 'npm'] : ['npm'];
+  return String(process.env.PATH || process.env.Path || '').split(path.delimiter).filter(Boolean)
+    .some(k => adlar.some(a => { try { return fs.statSync(path.join(k.replace(/^"|"$/g, ''), a)).isFile(); } catch (e) { return false; } }));
+}
+const surecBitti = c => c.exitCode !== null || c.signalCode !== null;
+// Motorun başlattığı kurulum sürecini bütün ağacıyla öldürür; ağaç gidince sonra() çağrılır. platform ve oldur yalnız
+// testler içindir (Windows dışı yol sahte süreçle sınanır).
+function agacKes(c, sonra, platform = process.platform, oldur = (p, s) => process.kill(p, s)) {
+  const bekle = () => { if (surecBitti(c)) sonra(); else c.once('exit', () => sonra()); };
+  if (platform === 'win32') {
+    require('child_process').execFile('taskkill', ['/pid', String(c.pid), '/T', '/F'], { windowsHide: true }, () => bekle());
+  } else {
+    try { oldur(-c.pid, 'SIGKILL'); } catch (e) { try { c.kill('SIGKILL'); } catch (e2) { } }
+    bekle();
+  }
+}
 function kutuphaneHazirla() {
-  if (kutuphane.durum === 'iniyor' || kutuphane.durum === 'hazir') return;
+  if (kutuphane.durum === 'iniyor' || kutuphane.durum === 'hazir' || kutuphane.cocuk) return;
   if (kutuphaneVarMi()) { kutuphane.durum = 'hazir'; return; }
   kutuphane.durum = 'iniyor'; kutuphane.basladi = Date.now(); kutuphane.neden = '';
   console.log('  TikTok kütüphanesi iniyor (yalnız ilk sefer, yaklaşık bir dakika). Beklerken ana sayfada Dene çalışır.');
-  const { spawn } = require('child_process'), betik = process.env.KOPRU_KURULUM_BETIGI;
-  let son = '', bitti = false, c;
-  const bitir = (tamam, neden) => {
+  const { spawn } = require('child_process');
+  let son = '', bitti = false, c = null;
+  const bitir = (kod, neden) => {
     if (bitti) return;
     bitti = true; clearTimeout(sinir); kutuphane.cocuk = null;
-    if (tamam && kutuphaneVarMi()) { kutuphane.durum = 'hazir'; console.log('  TikTok kütüphanesi indi. Yayın düğmeleri hazır.\n'); return; }
+    if (kod === 0 && kutuphaneVarMi()) { kutuphane.durum = 'hazir'; console.log('  TikTok kütüphanesi indi. Yayın düğmeleri hazır.\n'); return; }
     kutuphane.durum = 'hata';
-    kutuphane.neden = neden || 'İndirilemedi. İnternet bağlantını kontrol et.';
+    kutuphane.neden = neden || kurulumNedeni(kod, son, false);
     const iz = son.trim().split(/\r?\n/).filter(Boolean).slice(-2).join(' | ').slice(0, 300);
     console.log('  TikTok kütüphanesi indirilemedi.' + (iz ? ' (' + iz + ')' : '') + ' Ana sayfadaki "Yeniden dene" ile yeniden denenir; Dene yine çalışır.\n');
   };
-  const sinir = setTimeout(() => { kurulumuKes(); bitir(false, 'İndirme çok uzun sürdü. İnternet bağlantını kontrol edip yeniden dene.'); }, 10 * 60e3);
+  // Süre dolunca: önce ağaç ölür, sonra durum "hata" olur (o zamana kadar yeniden deneme başlatılamaz).
+  const sinir = setTimeout(() => {
+    if (c && !surecBitti(c)) { c.kesiliyor = true; agacKes(c, () => bitir(null, KURULUM_NEDEN.sure)); }
+    else bitir(null, KURULUM_NEDEN.sure);
+  }, KURULUM_SINIR);
+  if (!KURULUM_BETIGI && !npmVarMi()) { bitir(null, KURULUM_NEDEN.npmYok); return; }
   try {
-    c = betik
-      ? spawn(process.execPath, [betik], { cwd: __dirname, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
-      : spawn('npm install --omit=dev --no-audit --no-fund', { cwd: __dirname, shell: true, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
-  } catch (e) { bitir(false, 'İndirme programı (npm) çalıştırılamadı. Node.js\'i yeniden kurmayı dene.'); return; }
+    const sec = { cwd: __dirname, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' };
+    c = KURULUM_BETIGI
+      ? spawn(process.execPath, [KURULUM_BETIGI], sec)
+      : spawn('npm install --omit=dev --no-audit --no-fund', { ...sec, shell: true });
+  } catch (e) { bitir(null, KURULUM_NEDEN.npmYok); return; }
   kutuphane.cocuk = c;
-  const topla = p => { son = (son + p).slice(-2000); };
+  const topla = p => { son = (son + p).slice(-4000); };
   c.stdout.on('data', topla); c.stderr.on('data', topla);
-  c.on('error', () => bitir(false, 'İndirme programı (npm) çalıştırılamadı. Node.js\'i yeniden kurmayı dene.'));
-  c.on('close', kod => bitir(kod === 0));
+  c.on('error', () => { if (!c.kesiliyor) bitir(null, kurulumNedeni(null, son, true)); });
+  // 'close' değil 'exit': torun süreç boruları açık tutsa da sonuç beklemez (son satırlar için kısa bir pay bırakılır).
+  // Kesilen kurulumun sonucunu kesen yazar.
+  c.on('exit', kod => { if (!c.kesiliyor) setTimeout(() => bitir(kod), 100); });
 }
-function kurulumuKes() { try { if (kutuphane.cocuk) kutuphane.cocuk.kill(); } catch (e) { } }
+// Motor kapanırken (Ctrl+C, pencere kapatılırken, process.exit): kurulum ağacını beklemeden, eşzamanlı öldürür.
+function kurulumuKes() {
+  const c = kutuphane.cocuk;
+  if (!c || surecBitti(c)) return;
+  c.kesiliyor = true;
+  try {
+    if (process.platform === 'win32') require('child_process').execFileSync('taskkill', ['/pid', String(c.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
+    else process.kill(-c.pid, 'SIGKILL');
+  } catch (e) { try { c.kill('SIGKILL'); } catch (e2) { } }
+}
 function anaDurum() {
   return {
-    anaSayfa: true, paket: paketMi(),
+    anaSayfa: true, paket: paketMi(), platform: PLATFORM,
     oyunlar: vitrindekiler().map(o => ({ id: o.id, ad: o.ad, aciklama: o.aciklama })),
     aktif: calisan ? { oyun: calisan.oyun, ad: calisan.ad, kip: calisan.kip, kullanici: calisan.kullanici, calistirma: calisan.calistirma, baglanti: sonBaglanti } : null,
     durum: sonDurum,
@@ -403,7 +481,8 @@ function oyunSayfasi(o, ek, res) {
 // Ana sayfadan açılan oyun sayfasına eklenen: masanın başına "← Oyunlar" bağlantısı (yalnız sahne görünümünde gizli) ve
 // başlatma bekçisi. Bekçi iki saniyede bir motorun durumuna bakar: aynı oyun yeniden başlatıldıysa (ör. denemeden canlıya)
 // sayfa kendini yeni başlatmaya yeniler; başka oyun açıldıysa ya da oyun durdurulduysa sessizce ölü kalmak yerine açık bir
-// örtü gösterir ("Oyunlar'a dön"). Metinler textContent ile yazılır.
+// örtü gösterir ("Oyunlar'a dön"); örtü gelince sayfa yeniden bağlanmayı bırakır (CanliOyun.kopruBitti, varsa), masa
+// "Durdu" der. Metinler textContent ile yazılır.
 const GERI_DON_EK = '<style>.ana-don{display:inline-flex;align-items:center;gap:7px;align-self:flex-start;margin:0 0 6px;padding:6px 13px 6px 10px;' +
   'border-radius:99px;border:1px solid var(--cizgi);background:var(--zemin-2);color:var(--acik);font-size:13px;font-weight:500;text-decoration:none;line-height:1.2}' +
   '.ana-don:hover{border-color:var(--soluk)}.ana-don:focus-visible{outline:2px solid var(--vurgu);outline-offset:2px}body.yayin .ana-don{display:none}' +
@@ -415,12 +494,12 @@ const GERI_DON_EK = '<style>.ana-don{display:inline-flex;align-items:center;gap:
   'a.href="/";a.className="ana-don";a.textContent="\\u2190 Oyunlar";y.insertBefore(a,y.firstChild);});' +
   '(function(){var C=window.OYUN_CALISTIRMA;if(!C)return;var ortu=null;function kapak(baslik,metin){if(!ortu){ortu=document.createElement("div");ortu.className="calistirma-ortu";' +
   'ortu.id="calistirma-ortu";var i=document.createElement("div"),b=document.createElement("b"),p=document.createElement("p"),a=document.createElement("a");p.style.margin="0";' +
-  'a.href="/";a.textContent="Oyunlar\'a d\\u00f6n";i.append(b,p,a);ortu.append(i);document.body.appendChild(ortu);}ortu.querySelector("b").textContent=baslik;ortu.querySelector("p").textContent=metin;}' +
+  'a.href="/";a.textContent="Oyunlar\'a d\\u00f6n";i.append(b,p,a);ortu.append(i);document.body.appendChild(ortu);}ortu.querySelector("b").textContent=baslik;ortu.querySelector("p").textContent=metin;try{if(window.CanliOyun&&CanliOyun.kopruBitti)CanliOyun.kopruBitti(metin);}catch(e){}}' +
   'function bak(){fetch("/api/oyunlar",{cache:"no-store"}).then(function(r){return r.json();}).then(function(d){var a=d&&d.aktif;' +
   'if(a&&a.oyun===C.oyun&&a.calistirma===C.kimlik){if(ortu){ortu.remove();ortu=null;}return;}' +
   'if(a&&a.oyun===C.oyun){location.reload();return;}' +
   'kapak("Bu oyun artık çalışmıyor",a?"Şu an başka bir oyun açık: "+a.ad+". Bu sayfa olay almıyor.":"Oyun ana sayfadan durduruldu. Bu sayfa olay almıyor.");}).catch(function(){});}' +
-  'setInterval(bak,2000);})();</script>';
+  'setInterval(bak,2000);addEventListener("kopru-durdu",function(){setTimeout(bak,150);});})();</script>';
 // Canlı yayına geçerken: oyun, köprüden açılınca tarayıcıda sakladığı jeton sırasını geri yükler. Az önce Dene ile
 // gelen sahte izleyiciler o kayıtta kalırsa gerçek yayında görünürdü; onlar silinir. Sahte izleyici kimliği "deneme:ad"
 // biçimindedir (TikTok adında iki nokta olamaz, gerçek biriyle karışmaz); eski sürümün sabit sekiz kimliği de silinir.
@@ -526,7 +605,7 @@ function zatenAcik() {
   sor('/api/oyunlar', j => {
     if (j && j.anaSayfa === true) return son('\n  Oyun fabrikası zaten açık: ' + adres + '\n  O sayfayı kullanabilirsin. Bu pencereyi kapatabilirsin.\n', 0, true);
     sor('/durum', d => {
-      if (d && d.sayac && typeof d.durum === 'string') return son('\n  Oyun motoru başka bir pencerede zaten açık (tek oyunla, eski yoldan başlatılmış).\n  O siyah pencereyi kapat, sonra BASLAT.bat dosyasına yeniden çift tıkla.\n', 1);
+      if (d && d.sayac && typeof d.durum === 'string') return son('\n  Oyun motoru başka bir pencerede zaten açık (tek oyunla, eski yoldan başlatılmış).\n  O ' + METIN.pencereyi + ' kapat, sonra ' + METIN.yeniden + '.\n', 1);
       yabanci();
     });
   });
@@ -552,9 +631,30 @@ function cevir(tur, d) {
     const giftTuru = d.giftType ?? g.giftType ?? g.type, bitti = d.repeatEnd;
     // Seri hediyelerde (tür 1) her tıklamada olay gelir; yalnızca seri bitince sayarız, yoksa aynı hediye defalarca sayılır.
     if (sayi(giftTuru) === 1 && bitti !== undefined && !sayi(bitti === true ? 1 : bitti === false ? 0 : bitti)) return null;
-    return { tip: 'hediye', kullanici: k, jeton: sayi(d.diamondCount ?? g.diamondCount ?? g.diamond_count) || 1, adet: sayi(d.repeatCount) || 1 };
+    const o = { tip: 'hediye', kullanici: k, jeton: sayi(d.diamondCount ?? g.diamondCount ?? g.diamond_count) || 1, adet: sayi(d.repeatCount) || 1 };
+    const hd = hediyeKimlik(d, g);
+    if (hd) o.hediye = hd;
+    return o;
   }
   return null;
+}
+// Hediyenin kimliği { id, ad } (docs/OLAYLAR.md); ikisi de yoksa null. Kütüphanenin biçimleri (alan adları kurulu
+// kütüphaneden ve şemasından okundu, tiktok-live-proto):
+//   1.x WebcastPushConnection: düz nesne, giftId (sayı) ve giftName (giftDetails üst düzeye açılır; gift = { gift_id, … })
+//   2.0–2.4 TikTokLiveConnection: giftId (sayı), giftDetails = { id, giftName, giftType, diamondCount }
+//   2.5 TikTokLiveConnection: giftId (metin), gift = { id, name, type, diamondCount }
+// Boş metin ve 0 şemanın "yok" değeridir, atlanır. Ad yabancıdan gelen düz metindir: denetim karakterleri atılır, 40
+// karaktere kısaltılır; köprü onu yalnız JSON olarak yollar, sayfa da hiçbir yerde HTML olarak yazmaz.
+function hediyeKimlik(d, g) {
+  const dolu = (...a) => a.find(v => (typeof v === 'string' && v.trim() !== '' && v.trim() !== '0') || ((typeof v === 'number' || typeof v === 'bigint') && v != 0));
+  const duz = v => v === undefined ? '' : String(v).replace(/[\u0000-\u001f\u007f​-‏‪-‮⁦-⁩]/g, ' ').replace(/\s+/g, ' ').trim();
+  const id = Array.from(duz(dolu(d.giftId, g.id, g.gift_id))).slice(0, 32).join('');
+  const tam = Array.from(duz(dolu(d.giftName, g.giftName, g.name))), ad = tam.length > 40 ? tam.slice(0, 39).join('') + '…' : tam.join('');
+  if (!id && !ad) return null;
+  const s = {};
+  if (id) s.id = id;
+  if (ad) s.ad = ad;
+  return s;
 }
 function ilet(tur, d) {
   let o; try { o = cevir(tur, d); } catch (e) { return; }
@@ -569,13 +669,13 @@ function tiktokBaslat(kullaniciAdi = KULLANICI) {
   try { Kutuphane = require('tiktok-live-connector'); }
   catch (e) {
     console.log('  "tiktok-live-connector" kurulu değil. Bu klasörde bir kez şunu çalıştır:\n\n      npm install\n\n  Sonra köprüyü yeniden başlat. (İnternet olmadan denemek için: node kopru.js --deneme)\n');
-    durumBildir('TikTok kütüphanesi kurulu değil. BASLAT.bat ile yeniden aç ya da klasörde "npm install" çalıştır.', 'hata');
+    durumBildir('TikTok kütüphanesi kurulu değil. ' + METIN.baslatici + ' ile yeniden aç ya da klasörde "npm install" çalıştır.', 'hata');
     return () => {};
   }
   const Sinif = Kutuphane.TikTokLiveConnection || Kutuphane.WebcastPushConnection; // yeni ve eski sürüm adları
   const E = Kutuphane.WebcastEvent || {}, K = Kutuphane.ControlEvent || {};
   if (typeof Sinif !== 'function') { durumBildir('TikTok kütüphanesinin bu sürümü tanınmadı.', 'hata'); return () => {}; }
-  let bekleme = 15, zamanlayici = null, baglanti = null, bagli = false, durdu = false;
+  let bekleme = 15, zamanlayici = null, baglanti = null, bagli = false, durdu = false, deneniyor = false; // deneniyor: bağlanma isteği yolda
   const KULLANICI = kullaniciAdi;
 
   const yenidenDene = neden => {
@@ -590,6 +690,7 @@ function tiktokBaslat(kullaniciAdi = KULLANICI) {
     try { baglanti = new Sinif(KULLANICI, { enableExtendedGiftInfo: false, processInitialData: false }); }
     catch (e) { durumBildir('Bağlantı kurulamadı: ' + e.message, 'hata'); return; }
     const bu = baglanti, gecerli = () => !durdu && bu === baglanti;
+    deneniyor = true;
     const dinle = (sabit, ad, fn) => { try { bu.on(E[sabit] || K[sabit] || ad, (...a) => { if (gecerli()) fn(...a); }); } catch (e) {} };
     dinle('CHAT', 'chat', d => ilet('chat', d));
     dinle('GIFT', 'gift', d => ilet('gift', d));
@@ -602,10 +703,11 @@ function tiktokBaslat(kullaniciAdi = KULLANICI) {
     dinle('ERROR', 'error', e => yaz('Uyarı:', (e && (e.info || e.message)) || e));
     Promise.resolve().then(() => bu.connect()).then(durum => {
       if (!gecerli()) { try { bu.disconnect(); } catch (e) {} return; }
-      bagli = true; bekleme = 15;
+      deneniyor = false; bagli = true; bekleme = 15;
       durumBildir('@' + KULLANICI + ' yayınına bağlandı. Yorum ve hediyeler oyuna akıyor.' + (durum && durum.roomId ? ' (oda ' + durum.roomId + ')' : ''), 'bagli');
     }).catch(e => {
       if (!gecerli()) return;
+      deneniyor = false;
       const m = String((e && e.message) || e);
       yenidenDene(/offline|not.*live|isn.t online|LIVE has ended/i.test(m) ? '@' + KULLANICI + ' şu an canlı yayında değil.' : 'TikTok\'a bağlanılamadı (' + m.slice(0, 140) + ').');
     });
@@ -617,8 +719,9 @@ function tiktokBaslat(kullaniciAdi = KULLANICI) {
     baglanti = null;
   };
   // Ana sayfadan aynı oyun için Yayın'a yeniden basıldı: bağlı değilsek beklemeden dene, bekleme süresini sıfırla.
+  // Bağlanma isteği hâlâ yoldaysa basış yok sayılır: her basış yeni bir bağlantı açıp TikTok'un sınırına takılmasın.
   durdur.simdiDene = () => {
-    if (durdu || bagli) return;
+    if (durdu || bagli || deneniyor) return;
     clearTimeout(zamanlayici); bekleme = 15;
     durumBildir('@' + KULLANICI + ' yayınına yeniden bağlanılıyor…', 'baglaniyor');
     baglan();
@@ -633,17 +736,20 @@ function denemeBaslat() {
   const sozler = ['selam!', 'ben de geldim', 'haydi haydi', 'selamlar', 'buradayım'];
   const sec = a => a[Math.floor(Math.random() * a.length)];
   durumBildir('Deneme kipi: olaylar sahte, TikTok\'a bağlanılmadı.', 'deneme');
+  // Sahte hediye kimlikleri "deneme-" öneklidir, gerçek bir TikTok numarasıyla karışmaz; sırayla gelir (paneldeki
+  // Deneme düğmeleriyle aynı üçü). Oyun yazarı hediye türüne bakan kuralı TikTok'suz böyle dener.
+  const hediyeler = [{ giftId: 'deneme-gul', giftName: 'Gül' }, { giftId: 'deneme-kalp', giftName: 'Kalp' }, { giftId: 'deneme-yildiz', giftName: 'Yıldız' }];
   let n = 0;
   const saat = setInterval(() => {
-    const ad = sec(adlar), u = { uniqueId: 'deneme:' + ad, nickname: 'D. ' + ad }, r = n++ % 10;
+    const ad = sec(adlar), u = { uniqueId: 'deneme:' + ad, nickname: 'D. ' + ad }, r = n++ % 10, hd = hediyeler[Math.floor(n / 10) % hediyeler.length];
     if (r < 5) ilet('chat', { ...u, comment: sec(sozler) });
     else if (r < 7) ilet('like', { ...u, likeCount: 12 });
-    else if (r === 7) ilet('gift', { ...u, giftType: 1, repeatEnd: false, repeatCount: 2, diamondCount: 5 }); // seri sürüyor: sayılmamalı
-    else if (r === 8) ilet('gift', { ...u, giftType: 1, repeatEnd: true, repeatCount: 3, diamondCount: 5 }); // seri bitti: 15 jeton
+    else if (r === 7) ilet('gift', { ...u, ...hd, giftType: 1, repeatEnd: false, repeatCount: 2, diamondCount: 5 }); // seri sürüyor: sayılmamalı
+    else if (r === 8) ilet('gift', { ...u, ...hd, giftType: 1, repeatEnd: true, repeatCount: 3, diamondCount: 5 }); // seri bitti: 15 jeton
     else ilet('follow', u);
   }, 400);
   return () => clearInterval(saat);
 }
 
-module.exports = { cevir, oyunSec }; // testler için
+module.exports = { cevir, oyunSec, agacKes, kurulumNedeni, KURULUM_NEDEN }; // testler için
 if (require.main === module) calistir();
