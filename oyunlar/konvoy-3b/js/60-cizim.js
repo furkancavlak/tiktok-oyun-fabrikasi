@@ -292,6 +292,7 @@ function oyunZemin() {
   rejiGuncelle(sonDt);
   arabalariYerlestir();
   parkGizle();
+  sokakGuncelle();
   efektleriGuncelle();
   golgeAyarla();
   DUNYA.r.render(DUNYA.sahne, DUNYA.kamera);

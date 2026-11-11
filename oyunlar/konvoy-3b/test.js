@@ -507,6 +507,42 @@ const CEKIMLER = ['drone', 'yan', 'on', 'kus', 'tur', 'yakin', 'kenar', 'vinc'];
   });
   kontrol('Yakın çekimin konusu çıkınca kart düşer, kamera hemen geniş çekime geçer', cik.yakin && cik.cikti && ['drone', 'kus', 'arka', 'yanust', 'vinc'].includes(cik.cekim) && cik.gecis < 400, cik);
 
+  // Kaldırımdaki insanlar ve sokak eşyası (hazır modeller, js/30-dunya.js SOKAK): yalnız kaldırımda, ağaç ve direk
+  // yuvalarının üstünde değil; çizilen örnekler havuzu aşmaz; kalite kademesine göre azalır, en düşük ikide hiç yok.
+  await bosalt();
+  await p.evaluate(() => { for (let i = 0; i < 36; i++) CanliOyun.olay({ tip: 'yorum', kullanici: { id: 'sk' + i, ad: 'sokak' + i }, metin: 'x' }); CanliOyun._test.D.reji.zorla = 'drone'; });
+  await p.waitForTimeout(2500);
+  const SD = () => p.evaluate(() => CanliOyun._test.D.sokakTest.durum());
+  // yük altında kalite kendiliğinden düşmüş olabilir: bu bölüm kademeyi kendisi kurar
+  await p.evaluate(() => CanliOyun._test.D.sokakTest.kalite(0));
+  // reji drone'a ölçü çizgisinde keser: geniş çekime geçip kalabalık kadraja girene kadar bekle (en çok 8 sn)
+  let sk = await SD();
+  for (let i = 0; i < 16 && !((await durum()).cekim === 'drone' && sk.cizilen > 20); i++) {
+    await p.waitForTimeout(500);
+    sk = await SD();
+  }
+  kontrol('Sokak: insanlar yalnız kaldırımda (çizilen örnek de aday da asfaltta ya da kaldırım dışında değil), ağaç ve direk yuvalarında değil', sk.hazir && sk.aday > 100 && sk.cizilen > 20 && sk.yolda === 0 && sk.disarida === 0 && sk.ornekYolda === 0 && sk.ornekDisarida === 0 && sk.agacta === 0, sk);
+  kontrol('Sokak: çizilen örnek sayısı havuzu aşmaz (kademe 0: ' + sk.kap + ')', sk.ornek === sk.cizilen && sk.ornek <= sk.havuz && sk.havuz === sk.kap, { ornek: sk.ornek, havuz: sk.havuz });
+  const kad = [];
+  for (let n = 0; n < 5; n++) {
+    await p.evaluate(k => CanliOyun._test.D.sokakTest.kalite(k), n);
+    await p.waitForTimeout(600);
+    const d = await SD();
+    kad.push({ kademe: d.kademe, havuz: d.havuz, ornek: d.ornek, gorunen: d.gorunenMesh });
+  }
+  await p.evaluate(() => CanliOyun._test.D.sokakTest.kalite(0));
+  kontrol('Sokak: kalabalık kalite kademesiyle azalır (200, 130, 70), en düşük iki kademede hiç kimse çizilmez', kad.every((x, n) => x.kademe === n && x.havuz === [200, 130, 70, 0, 0][n] && x.ornek <= x.havuz) && kad[0].ornek >= kad[1].ornek && kad[1].ornek >= kad[2].ornek && kad[2].ornek > 0 && kad[3].ornek === 0 && kad[4].ornek === 0 && kad[4].gorunen === 0, kad);
+  // alçak çekimlerde kameranın dibinde dev görünen kişi çizilmez (konuyu örten de; o kural sokakGuncelle'de)
+  const ort = [];
+  for (const ad of ['kenar', 'yan', 'yakin']) {
+    await p.evaluate(a => { CanliOyun._test.D.reji.zorla = a; }, ad);
+    await p.waitForTimeout(2500);
+    const d = await SD();
+    ort.push({ cekim: (await durum()).cekim, cizilen: d.cizilen, gizlenen: d.gizlenen, dev: d.dev, yolda: d.ornekYolda });
+  }
+  await p.evaluate(() => { CanliOyun._test.D.reji.zorla = null; });
+  kontrol('Sokak: kenar, yan ve yakın çekimde ön planda dev kişi yok, kimse yolda değil', ort.every(x => x.dev === 0 && x.yolda === 0), ort);
+
   kontrol('Konvoy 3B testlerinde sayfada hata çıkmadı', hatalar.length === 0, hatalar.slice(0, 4).join(' | '));
   await b.close();
 

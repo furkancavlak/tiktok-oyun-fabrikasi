@@ -565,6 +565,7 @@ function parcaKur(i) {
   // yol kenarı ve kasaba
   const kenar = { '-1': new Yigin(), '1': new Yigin() }, bina = new Yigin(), cam = new Yigin(), tabela = new Yigin(true), bayrak = new Yigin(), park = new Yigin(), uzak = new Yigin();
   kenarDiz(i, s0, s1, ox, oz, kenar, bayrak, r);
+  const insan = sokakDiz(i, s0, s1, ox, oz, kenar);
   binaDiz(i, s0, s1, ox, oz, bina, cam, tabela, r, uzak);
   parkDiz(i, s0, s1, ox, oz, park);
   // ağaç ve direk sırası her yanda ayrı parça: alçak kamera o yanın ağaç sırasına girince o sıra gizlenir (reji)
@@ -588,7 +589,7 @@ function parcaKur(i) {
   DUNYA.sahne.add(grup);
   // arka sıralar, bahçeler, cami: kalite düşünce (zayıf ekran kartı) gizlenir
   const uzakMesh = uzak.bos() ? null : ekle(uzak.bitir(), MALZ.renkli, false);
-  DUNYA.parcalar.set(i, { grup, wx: ox, wz: oz, s0, park: parkMesh, kenar: kenarM, uzak: uzakMesh });
+  DUNYA.parcalar.set(i, { grup, wx: ox, wz: oz, s0, park: parkMesh, kenar: kenarM, uzak: uzakMesh, insan });
 }
 
 /* ---- yol kenarı: ağaçlar, direkler, bayraklı ipler ---- */
@@ -607,7 +608,10 @@ function kenarDiz(pi, s0, s1, ox, oz, YY, BY, r) {
     for (const yan of [-1, 1]) {
       const ne = yuvaNe(n, yan), rr = rastgeleUret(ozet('k' + n + yan)), Y = YY[String(yan)];
       cerceveMatris(s, yan * AGAC_L, KALDIRIM_Y, ox, oz, true, M);
-      if (ne === 'direk') {
+      if (ne === 'direk' && SOKAK_HAZIR)
+        // hazır sokak lambası (Kenney City Kit Roads): kolu yola uzanır; boyu kodla çizilenin aynısı (bayraklı ip asılır)
+        sokakEsya(Y, M, 'lamba', 0);
+      else if (ne === 'direk') {
         // sokak lambası: gri boru direk, yola uzanan kol, lamba başı
         parcaEkle(Y, M, 'silindir8', 0, 3.3, 0, 0.16, 6.6, 0.16, '#7d8288');
         parcaEkle(Y, M, 'silindir8', 0, 0.35, 0, 0.3, 0.7, 0.3, '#5f646b');
@@ -820,3 +824,353 @@ function caminin(Y, M) {
 function parkDiz() {
   // Park etmiş arabalar kaldırıldı: asfaltın kenarında duruyorlardı, konvoyun şeridine taşıyorlardı (çarpışma kuralı).
 }
+
+/* ---- SOKAK: kaldırımdaki insanlar ve sokak eşyası (hazır modeller) ----
+ * Modeller kitaplik/sokak-modelleri.js'ten gelir (genel SOKAK_MODELLERI; üreten araclar/kitaplik-sokak.js; Kenney, CC0):
+ * altı karakter, beş poz (ayakta, kollar havada, alkışın iki karesi, el sallama) ve altı eşya (lamba, trafik ışığı,
+ * çöp konteyneri, sokak tabelası, bank, saksılık). Dosya yoksa (oyun.json'da değilse) kasaba eskisi gibi kodla kurulur.
+ * Eşya yol kenarının parçasıdır: kenarDiz'in yanındaki birleşik geometriye eklenir (o yanın ağaçlarıyla birlikte
+ * alçak kamerada gizlenir). İnsanlar: karakter × poz başına bir InstancedMesh; iskelet hiç oynatılmaz, pozlar
+ * yüklenirken bir kez uygulanır. Hareket vuruşla (B) kodda: zıplama, poz değişimi (alkış), gelin arabasına dönme;
+ * coşku (gaz, hediye, korna, havai fişek) artınca daha çok kişi katılır. Yerleri parçanın tohumundan türer:
+ * yalnız kaldırımda (YOL_OLCU.bordurDis ile kaldirimDis arasında), ağaç, direk ve eşyanın üstünde değil.
+ * Havuz sabittir (SOKAK_KAP); kalite kademesi düştükçe küçülür (SOKAK_KADEME), en düşük iki kademede hiç yoktur.
+ * Kamerayla konu arasına girip kadrajda konuyu örten kişi o karede çizilmez; alt beşte birdekiler (TikTok'un
+ * yorum alanı) sakin durur.
+ */
+const SOKAK_HAZIR = typeof SOKAK_MODELLERI !== 'undefined';
+const SOKAK_KAP = 200;
+const SOKAK_KADEME = [1, 0.65, 0.35, 0, 0];
+// oyuncu şeridi (AGENTS.md: oyuncular 505–1006 satırlarında yaşar)
+const SOKAK_SERIT = [505, 1006];
+const SOKAK_POZ = ['ayakta', 'cosku', 'alkisA', 'alkisB', 'salla'];
+const SOKAK = { kur: false, esya: {}, ins: [], havuz: 0, cizilen: 0, gizlenen: 0, sakin: 0, ms: 0, ucgen: { insan: [], esya: {} } };
+function sokakDizi(s, Tur) {
+  const ham = atob(s), u = new Uint8Array(ham.length);
+  for (let i = 0; i < ham.length; i++)
+    u[i] = ham.charCodeAt(i);
+  return new Tur(u.buffer);
+}
+// Paketlenmiş veriyi çözer: konum (Int16, kutuya göre), normal (Int8), renk (paletten, sRGB → doğrusal), dizin.
+function sokakCoz(d) {
+  const P = sokakDizi(d.p, Int16Array), N = sokakDizi(d.n, Int8Array), C = sokakDizi(d.c, Uint8Array), pal = sokakDizi(d.pal, Uint8Array);
+  const n = P.length / 3, p = new Float32Array(n * 3), nn = new Float32Array(n * 3), c = new Float32Array(n * 3), palR = [];
+  for (let k = 0; k < pal.length / 3; k++)
+    palR.push(new THREE.Color().setRGB(pal[k * 3] / 255, pal[k * 3 + 1] / 255, pal[k * 3 + 2] / 255, THREE.SRGBColorSpace));
+  for (let i = 0; i < n * 3; i++) {
+    const [a, b] = d.kutu[i % 3];
+    p[i] = a + (P[i] + 32768) / 65535 * (b - a);
+    nn[i] = N[i] / 127;
+  }
+  for (let k = 0; k < n; k++) {
+    const r = palR[C[k]];
+    c[k * 3] = r.r;
+    c[k * 3 + 1] = r.g;
+    c[k * 3 + 2] = r.b;
+  }
+  return { p, n: nn, c, i: sokakDizi(d.i, Uint16Array), j: d.j ? sokakDizi(d.j, Uint8Array) : null };
+}
+function sokakGeo(p, n, c, i) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(p, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(n, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(c, 3));
+  g.setIndex(new THREE.BufferAttribute(i, 1));
+  g.computeBoundingSphere();
+  return g;
+}
+// Pozlama: eklem dönüşleri ebeveynden çocuğa birikir; her köşe kendi ekleminin yerel uzayından yerine taşınır.
+const _sq = new THREE.Quaternion(), _sv = new THREE.Vector3();
+function sokakPozla(cz, ofs, poz) {
+  const E = SOKAK_MODELLERI.insan, Q = [], Pk = [];
+  for (let e = 0; e < E.eklem.length; e++) {
+    const pe = E.ebeveyn[e];
+    if (pe < 0) {
+      Q.push(new THREE.Quaternion());
+      Pk.push(new THREE.Vector3());
+      continue;
+    }
+    Pk.push(new THREE.Vector3().fromArray(ofs[e]).applyQuaternion(Q[pe]).add(Pk[pe]));
+    Q.push(Q[pe].clone().multiply(_sq.fromArray(poz[e])));
+  }
+  const n = cz.j.length, p = new Float32Array(n * 3), nn = new Float32Array(n * 3);
+  for (let k = 0; k < n; k++) {
+    const e = cz.j[k];
+    _sv.fromArray(cz.p, k * 3).applyQuaternion(Q[e]).add(Pk[e]).toArray(p, k * 3);
+    _sv.fromArray(cz.n, k * 3).applyQuaternion(Q[e]).toArray(nn, k * 3);
+  }
+  return sokakGeo(p, nn, cz.c, cz.i);
+}
+function sokakKur() {
+  if (SOKAK.kur || !SOKAK_HAZIR)
+    return;
+  SOKAK.kur = true;
+  for (const [ad, d] of Object.entries(SOKAK_MODELLERI.esya)) {
+    const cz = sokakCoz(d);
+    SOKAK.esya[ad] = sokakGeo(cz.p, cz.n, cz.c, cz.i);
+    SOKAK.ucgen.esya[ad] = cz.i.length / 3;
+  }
+  const E = SOKAK_MODELLERI.insan;
+  E.cesit.forEach((d, ci) => {
+    const cz = sokakCoz(d);
+    SOKAK.ucgen.insan.push(cz.i.length / 3);
+    SOKAK.ins.push(SOKAK_POZ.map(pz => {
+      // her (karakter, poz) havuzun tamamını alabilir: bütün kalabalık aynı kişi ve aynı pozda olsa da taşmaz
+      const m = new THREE.InstancedMesh(sokakPozla(cz, d.ofs, E.pozlar[pz]), MALZ.renkli, SOKAK_KAP);
+      m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      m.count = 0;
+      m.visible = false;
+      m.castShadow = true;
+      // örnekler bütün kasabaya dağılır: geometrinin küresi kırpmaya yaramaz (kırpmayı sokakGuncelle kendi yapar)
+      m.frustumCulled = false;
+      m.userData.sokak = { cesit: ci, poz: pz };
+      DUNYA.sahne.add(m);
+      return m;
+    }));
+  });
+}
+// Eşyayı yol kenarının birleşik geometrisine ekler: M yerel çerçeve (cerceveMatris), ry yerel dönüş.
+const _sm = new THREE.Matrix4();
+function sokakEsya(Y, M, ad, ry) {
+  sokakKur();
+  _e.set(0, ry || 0, 0);
+  _q.setFromEuler(_e);
+  _sm.compose(_v.set(0, 0, 0), _q, _s.set(1, 1, 1)).premultiply(M);
+  Y.geoBoyali(SOKAK.esya[ad], _sm, '#ffffff');
+}
+// Bir parçanın kaldırım eşyası ve insanları. Engeller (ağaç, direk, eşya) kaldırımın s / |l| düzleminde dikdörtgendir;
+// insan hiçbirinin üstüne ve birbirine 0,75 metreden yakın konmaz. Döner: insan adayları (mutlak dünya konumlarıyla).
+function sokakDiz(pi, s0, s1, ox, oz, YY) {
+  if (!SOKAK_HAZIR)
+    return [];
+  sokakKur();
+  const M = new THREE.Matrix4(), ic = YOL_OLCU.bordurDis, dis = YOL_OLCU.kaldirimDis, insanlar = [], sokak = araSokak(pi), ncesit = SOKAK_MODELLERI.insan.cesit.length;
+  for (const yan of [-1, 1]) {
+    const Y = YY[String(yan)], r = rastgeleUret(ozet('sokak' + pi + ':' + yan)), engel = [];
+    const bos = (a, b, l0, l1) => !engel.some(e => a < e[1] && b > e[0] && l0 < e[3] && l1 > e[2]);
+    // ağaç ve direk yuvaları (komşu parçalarınki de: sınırdaki kişi gövdeye girmesin)
+    for (let n = Math.floor((s0 - 2) / YUVA); n * YUVA <= s1 + 2; n++) {
+      const ne = yuvaNe(n, yan), s = n * YUVA, y = ne === 'selvi' ? 0.95 : ne === 'cinar' ? 0.75 : ne === 'direk' ? 0.45 : 0;
+      if (y)
+        engel.push([s - y, s + y, AGAC_L - y, AGAC_L + y]);
+    }
+    // en: yol boyunca, boy: yana doğru (metre); yer boşsa koyar
+    const koy = (ad, s, l, ry, yolaBak, en, boy) => {
+      if (s < s0 || s >= s1 || !bos(s - en / 2 - 0.2, s + en / 2 + 0.2, l - boy / 2 - 0.2, l + boy / 2 + 0.2))
+        return false;
+      cerceveMatris(s, yan * l, KALDIRIM_Y, ox, oz, yolaBak, M);
+      sokakEsya(Y, M, ad, ry);
+      engel.push([s - en / 2, s + en / 2, l - boy / 2, l + boy / 2]);
+      return true;
+    };
+    // ara sokağın ağzında: yaklaşan konvoya bakan trafik ışığı (kaldırımın yol kenarında) ve köşede sokak tabelası
+    if (sokak !== null) {
+      for (let d = 0; d < 4 && !koy('isik', sokak - SOKAK_YARI - 0.8 - d * 1.5, ic + 0.55, -HP, false, 0.8, 0.8); d++);
+      for (let d = 0; d < 4 && !koy('tabela', sokak + SOKAK_YARI + 0.7 + d * 1.5, dis - 0.5, 0, true, 0.6, 0.6); d++);
+    }
+    // kaldırımın dış kenarında bank, saksılık, çöp konteyneri (yola bakar)
+    for (let n = Math.ceil(s0 / YUVA); n * YUVA < s1; n++) {
+      const s = n * YUVA + YUVA / 2, q = r();
+      if (q < 0.22)
+        koy('bank', s, dis - 0.62, 0, true, 1.9, 1.05);
+      else if (q < 0.36)
+        koy('saksi', s, dis - 0.72, 0, true, 1.8, 1.35);
+      else if (q < 0.44)
+        koy('cop', s, dis - 0.72, 0, true, 1.75, 1.3);
+    }
+    // insanlar: öbek öbek (düğünü seyreden kalabalık), kaldırımın iki kenarı arasında
+    let s = s0 + r() * 2;
+    while (s < s1) {
+      const l = ic + 0.35 + r() * (dis - ic - 0.65);
+      if (bos(s - 0.38, s + 0.38, l - 0.38, l + 0.38)) {
+        engel.push([s - 0.38, s + 0.38, l - 0.38, l + 0.38]);
+        const f = cerceve(s, 0, 0);
+        insanlar.push({
+          s, l: yan * l, wx: f.x + f.lx * yan * l, wz: f.z + f.lz * yan * l,
+          // yola bakış: sol yandaki (artı l) sağa, sağdaki sola döner
+          yon0: Math.atan2(-f.lx * yan, -f.lz * yan), yon: null, uz: 0,
+          cesit: Math.floor(r() * ncesit), faz: r(), mizac: r(), tur: Math.floor(r() * 3), olcek: 0.94 + r() * 0.12
+        });
+      }
+      s += r() < 0.28 ? 3 + r() * 7 : 0.75 + r() * 0.9;
+    }
+  }
+  return insanlar;
+}
+
+/* ---- her kare: havuzu doldur, poz, zıplama, dönme ---- */
+const _sF = new THREE.Frustum(), _sPM = new THREE.Matrix4(), _sS = new THREE.Sphere(new THREE.Vector3(), 1.1), _sM = new THREE.Matrix4();
+const _sP = new THREE.Vector3(), _sK = new THREE.Vector3(), _sA = new THREE.Vector3(), _sB = new THREE.Vector3(), _sLM = new THREE.Matrix4(), _sSec = [];
+// Kalabalığın coşkusu: gaz (D.cosku), havai fişek, drift ve çalan kornalar (hediyeler bunları başlatır).
+function sokakCosku() {
+  let e = D.cosku || 0, korna = 0;
+  if (B < D.fisekBit)
+    e += 0.6;
+  if (D.drift)
+    e += 0.4;
+  if (typeof kornaCaliyor === 'function')
+    for (const k of D.oy.values())
+      if (kornaCaliyor(k))
+        korna++;
+  return clamp(e + Math.min(0.5, korna * 0.08), 0, 1);
+}
+function sokakGuncelle() {
+  if (!SOKAK.kur || !DUNYA.r)
+    return;
+  const t0 = performance.now();
+  const kap = Math.round(SOKAK_KAP * SOKAK_KADEME[KALITE.kademe]), kam = DUNYA.kamera;
+  for (const sira of SOKAK.ins)
+    for (const m of sira)
+      m.count = 0;
+  SOKAK.havuz = kap;
+  SOKAK.cizilen = SOKAK.gizlenen = SOKAK.sakin = 0;
+  if (kap) {
+    // kadrajdaki adaylar, kameraya yakından uzağa; havuz yetmezse uzaktakiler çizilmez (sis zaten örter)
+    kam.updateMatrixWorld();
+    _sF.setFromProjectionMatrix(_sPM.multiplyMatrices(kam.projectionMatrix, kam.matrixWorldInverse));
+    _sSec.length = 0;
+    const kx = DUNYA.kx, kz = DUNYA.kz, kp = kam.position;
+    for (const p of DUNYA.parcalar.values())
+      for (const o of p.insan || []) {
+        _sS.center.set(o.wx - kx, KALDIRIM_Y + 0.9, o.wz - kz);
+        if (!_sF.intersectsSphere(_sS))
+          continue;
+        o.uz = _sS.center.distanceToSquared(kp);
+        _sSec.push(o);
+      }
+    _sSec.sort((a, b) => a.uz - b.uz);
+    // konu: kamerayla arasına girip kadrajda onu örten kişi gizlenir. Konunun kadrajı ve kendisi rejiden.
+    let konuUz = Infinity, kad = null, lider = null;
+    const ck = D.reji && D.reji.cekim;
+    if (ck && D.reji.kadraj && typeof konuArabasi === 'function') {
+      const k = konuArabasi(ck);
+      if (k) {
+        arabaMatris(k, false, _sM);
+        konuUz = _sP.setFromMatrixPosition(_sM).distanceTo(kp);
+        kad = D.reji.kadraj;
+      }
+    }
+    // gelin arabası: yakınındaki kalabalık ona döner, coşar
+    if (D.lider && D.lider.ar) {
+      arabaMatris(D.lider, false, _sM);
+      lider = _sK.setFromMatrixPosition(_sM);
+    }
+    const e = sokakCosku(), dt = Math.min(0.1, sonDt || 0.016), n = Math.min(kap, _sSec.length), alcak = kp.y < 4.5;
+    for (let i = 0; i < n; i++) {
+      const o = _sSec[i], x = o.wx - kx, z = o.wz - kz;
+      // ayak ve baş ekranda nerede (sanal 720×1280)
+      _sA.set(x, KALDIRIM_Y, z).project(kam);
+      _sB.set(x, KALDIRIM_Y + 1.8, z).project(kam);
+      const ax = (_sA.x + 1) / 2 * GW, ay = (1 - _sA.y) / 2 * GH, by = (1 - _sB.y) / 2 * GH, yar = Math.abs(ay - by) * 0.35 + 6;
+      // Kameranın dibindeki kişi (alçak kenar ve yan çekimde kadrajın yarısını kaplayan dev bir ön plan) çizilmez. Alçak
+      // kamerada konudan öndeki kişi oyuncu şeridine (505–1006) düşüyorsa da çizilmez: kaldırımda kameranın önünde duran
+      // kalabalık arkadaki arabaları ve adlarını örtüyordu.
+      if (o.uz < 16 || ay - by > GH * 0.26 || alcak && Math.sqrt(o.uz) < konuUz - 1.2 && ay > SOKAK_SERIT[0] && by < SOKAK_SERIT[1] ||
+        kad && Math.sqrt(o.uz) < konuUz - 1.2 && ax + yar > kad[0] - 16 && ax - yar < kad[2] + 16 && ay > kad[1] - 16 && by < kad[3] + 16) {
+        SOKAK.gizlenen++;
+        continue;
+      }
+      // alt beşte bir (TikTok yorumları): başı oradaysa kıpırdamaz
+      const sakin = by > GH * 0.8;
+      let yakin = 0, hedefYon = o.yon0;
+      if (lider) {
+        const dx = lider.x - x, dz = lider.z - z, u = Math.hypot(dx, dz);
+        if (u < 22) {
+          yakin = 1 - u / 22;
+          hedefYon = Math.atan2(dx, dz);
+        }
+      }
+      const ek = clamp(e * 0.8 + yakin * 0.7, 0, 1), etkin = !sakin && o.mizac < 0.25 + ek * 0.75;
+      let poz = 0, hop = 0;
+      if (etkin) {
+        const v = B + o.faz;
+        if (o.tur === 0) {
+          // kollar havada, vuruşta zıplar
+          poz = 1;
+          hop = 0.22 * (0.4 + ek) * Math.max(0, Math.sin(Math.PI * (v % 1)));
+        }
+        else if (o.tur === 1)
+          // alkış: yarım vuruşta bir el çırpar
+          poz = Math.floor(v * 2) % 2 ? 3 : 2;
+        else
+          poz = 4;
+      }
+      else if (sakin)
+        SOKAK.sakin++;
+      // yön: sakinse yola bakar; değilse hedefe yumuşakça döner (en kısa yoldan)
+      if (o.yon === null || sakin)
+        o.yon = o.yon0;
+      else {
+        const d = hedefYon - o.yon;
+        o.yon += Math.atan2(Math.sin(d), Math.cos(d)) * Math.min(1, dt * 4);
+      }
+      const sal = poz === 4 ? Math.sin((B + o.faz) * TAU) * 0.12 : 0;
+      _sq.setFromAxisAngle(_sv.set(0, 1, 0), o.yon + sal);
+      _sLM.compose(_sP.set(x, KALDIRIM_Y + hop, z), _sq, _sA.set(o.olcek, o.olcek, o.olcek));
+      const m = SOKAK.ins[o.cesit][poz];
+      m.setMatrixAt(m.count++, _sLM);
+      SOKAK.cizilen++;
+    }
+  }
+  for (const sira of SOKAK.ins)
+    for (const m of sira) {
+      m.visible = m.count > 0;
+      if (m.count)
+        m.instanceMatrix.needsUpdate = true;
+    }
+  // bu işin kare başına süresi (yumuşatılmış; rapor ve test için)
+  SOKAK.ms += (performance.now() - t0 - SOKAK.ms) * 0.05;
+}
+// Testler ve rapor için (CanliOyun._test.D.sokakTest): havuz, sayılar ve yanlış yerdeki kişi (olmamalı). Adaylar ve
+// ÇİZİLEN her örnek yolun yerel eksenine (s, l) çevrilip denetlenir: asfaltta, kaldırımın ötesinde, ağaç ya da direk
+// yuvasında; ayrıca ekranda kadrajın dörtte birinden uzun görünen (kameranın dibindeki dev) kişi.
+function sokakDurum() {
+  const ic = YOL_OLCU.bordurDis, r = { hazir: SOKAK_HAZIR, kademe: KALITE.kademe, havuz: SOKAK.havuz, kap: SOKAK_KAP, cizilen: SOKAK.cizilen, gizlenen: SOKAK.gizlenen, sakin: SOKAK.sakin, ms: +SOKAK.ms.toFixed(3),
+    ucgen: SOKAK.ucgen, aday: 0, yolda: 0, disarida: 0, agacta: 0, ornek: 0, ornekYolda: 0, ornekDisarida: 0, dev: 0, gorunenMesh: 0 };
+  const yuvada = (s, l) => {
+    const n = Math.round(s / YUVA), ne = yuvaNe(n, Math.sign(l)), y = ne === 'selvi' ? 0.95 : ne === 'cinar' ? 0.75 : ne === 'direk' ? 0.45 : 0;
+    return y && Math.abs(s - n * YUVA) < y && Math.abs(Math.abs(l) - AGAC_L) < y;
+  };
+  for (const p of DUNYA.parcalar.values())
+    for (const o of p.insan || []) {
+      r.aday++;
+      const al = Math.abs(o.l);
+      if (al < ic + 0.3)
+        r.yolda++;
+      if (al > YOL_OLCU.kaldirimDis - 0.25)
+        r.disarida++;
+      if (yuvada(o.s, o.l))
+        r.agacta++;
+    }
+  if (!DUNYA.kamera)
+    return r;
+  const M = new THREE.Matrix4(), v = new THREE.Vector3(), u = new THREE.Vector3(), kam = DUNYA.kamera;
+  for (const sira of SOKAK.ins)
+    for (const m of sira) {
+      if (m.visible)
+        r.gorunenMesh++;
+      for (let i = 0; i < m.count; i++) {
+        r.ornek++;
+        m.getMatrixAt(i, M);
+        v.setFromMatrixPosition(M);
+        let s = v.z + DUNYA.kz, l = 0;
+        for (let k = 0; k < 3; k++) {
+          const e = yolEgim(s), n = 1 / Math.sqrt(1 + e * e);
+          // yanal vektör (n, -e·n): x farkı l·n'dir
+          l = (v.x + DUNYA.kx - yolX(s)) / n;
+          s = v.z + DUNYA.kz + l * e * n;
+        }
+        if (Math.abs(l) < ic + 0.2)
+          r.ornekYolda++;
+        if (Math.abs(l) > YOL_OLCU.kaldirimDis - 0.2)
+          r.ornekDisarida++;
+        u.copy(v).setY(v.y + 1.8).project(kam);
+        v.project(kam);
+        if ((u.y - v.y) / 2 * GH > GH * 0.27)
+          r.dev++;
+      }
+    }
+  return r;
+}
+// kalite(n): kademeyi kurar ve toparlanma saatini sıfırlar (yoksa birikmiş iyi süre kademeyi hemen geri çıkarır)
+D.sokakTest = { durum: sokakDurum, kalite: n => { kaliteKur(n); KALITE.iyiSn = 0; KALITE.deneme = 0; } };
