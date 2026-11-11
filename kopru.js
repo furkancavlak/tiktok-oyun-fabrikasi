@@ -70,8 +70,12 @@ const yaz = (...a) => console.log(new Date().toTimeString().slice(0, 8), ...a);
 /* ------------------------------------------------------------------ oyun sayfası + WebSocket sunucusu */
 const istemciler = new Set();
 let sonDurum = ANA ? 'Henüz bir oyun açılmadı.' : DENEME ? 'Deneme kipi: olaylar sahte.' : 'TikTok yayınına bağlanılıyor…';
+// Bağlantı durumu, oyun sayfasının masasındaki Bağlantı hücresi için (docs/OLAYLAR.md): deneme · baglaniyor · bekliyor
+// (yayın açık değil, yeniden denenecek) · bagli (TikTok'tan gerçekten olay geliyor) · durdu · hata. "Canlı" yalnız bagli.
+let sonBaglanti = ANA ? 'durdu' : DENEME ? 'deneme' : 'baglaniyor';
 const sayac = { yorum: 0, hediye: 0, begeni: 0, takip: 0, paylasim: 0, katilim: 0 };
-// Ana sayfa kipinde şu an çalışan: { oyun, ad, kip, kullanici, durdur }. Öbür kiplerde boş kalır.
+// Ana sayfa kipinde şu an çalışan: { oyun, ad, kip, kullanici, calistirma, durdur }. Öbür kiplerde boş kalır.
+// calistirma: her başlatmanın kimliği; oyun sayfası soketini bununla açar, yeni başlatmada eskiler kapatılır.
 let calisan = null;
 
 function cerceve(metin) { // sunucudan istemciye tek parça metin çerçevesi
@@ -82,18 +86,31 @@ function cerceve(metin) { // sunucudan istemciye tek parça metin çerçevesi
   else { bas = Buffer.alloc(10); bas[0] = 0x81; bas[1] = 127; bas.writeBigUInt64BE(BigInt(n), 2); }
   return Buffer.concat([bas, veri]);
 }
-// Ana sayfa kipinde her oyun sayfası kendi oyununun adıyla bağlanır (/olay/<ad>); olaylar yalnız şu an çalışan
-// oyunun sayfalarına gider. Başka sekmede açık kalmış eski oyun, yeni oyunun izleyicilerini görmez.
-const alici = s => !s.oyun || (calisan && s.oyun === calisan.oyun);
+// Ana sayfa kipinde her oyun sayfası çalışan başlatmanın kimliğiyle bağlanır (/olay/<ad>/<calistirma>); başka bir
+// soket kabul edilmez. Öbür kiplerde tek oyun vardır, bağlanan her sayfa (adres ve kaynak denetiminden geçtiyse) alır.
+const alici = s => !ANA || (calisan && s.calistirma === calisan.calistirma);
 function yayinla(nesne) {
   const c = cerceve(JSON.stringify(nesne));
   for (const s of istemciler) { if (!alici(s)) continue; try { s.write(c); } catch (e) { istemciler.delete(s); } }
 }
-function durumBildir(ileti) { sonDurum = ileti; yaz(ileti); yayinla({ tip: 'kopru', ileti }); }
-const BEKLEYEN_OYUN = 'Bu oyun şu an çalışmıyor. Ana sayfaya dönüp Dene ya da Yayın düğmesine bas.';
+function durumBildir(ileti, baglanti) { sonDurum = ileti; if (baglanti) sonBaglanti = baglanti; yaz(ileti); yayinla({ tip: 'kopru', ileti, baglanti: sonBaglanti }); }
+// Eski başlatmaların soketlerini kapatır (önce kısa bir ileti, sonra WebSocket kapanış çerçevesi).
+function soketleriKapat(kosul, ileti) {
+  const c = ileti ? cerceve(JSON.stringify({ tip: 'kopru', ileti, baglanti: 'durdu' })) : null;
+  for (const s of [...istemciler]) {
+    if (!kosul(s)) continue;
+    istemciler.delete(s);
+    try { if (c) s.write(c); s.end(Buffer.from([0x88, 0])); } catch (e) { }
+    setTimeout(() => { try { s.destroy(); } catch (e) { } }, 500);
+  }
+}
+// Yalnız bu köprünün kendi adresi: başka bir ad taşıyan istek (DNS yeniden bağlama) her kipte geri çevrilir.
+const IZINLI_HOST = ['127.0.0.1:' + PORT, 'localhost:' + PORT];
+const hostIyi = req => IZINLI_HOST.includes(String(req.headers.host || '').toLowerCase());
 
 const sunucu = http.createServer((req, res) => {
   const yol = (req.url || '/').split('?')[0];
+  if (!hostIyi(req)) { res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' }); res.end('Bu adres yalnız bu bilgisayardan, köprünün kendi adresiyle açılır.'); return; }
   if (ANA) { anaSayfaIstegi(req, res, yol); return; }
   if (yol === '/' || yol === '/index.html') {
     fs.readFile(OYUN, 'utf8', (hata, html) => {
@@ -117,6 +134,9 @@ function muzikSun(ad, req, res, klasor = MUZIK_KLASOR) {
   if (!tur || !klasor || !/^[\w.-]+$/.test(ad) || ad.includes('..')) { res.writeHead(404); res.end(); return; }
   const dosya = path.join(klasor, ad);
   fs.stat(dosya, (hata, bilgi) => {
+    // Oyunun hazır parçası yoksa sayfa her açılışta liste.js ister; konsola 404 düşmesin diye boş bir betik döner
+    // (çekirdek boş listede üretilen müzikle devam eder).
+    if ((hata || !bilgi.isFile()) && ad === 'liste.js') { res.writeHead(200, { 'content-type': tur, 'cache-control': 'no-store' }); res.end('/* bu oyunun hazır parçası yok */\n'); return; }
     if (hata || !bilgi.isFile()) { res.writeHead(404); res.end(); return; }
     // Ses öğesi parçanın içinde gezinebilsin diye aralık isteği desteklenir.
     const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
@@ -133,13 +153,23 @@ function muzikSun(ad, req, res, klasor = MUZIK_KLASOR) {
 sunucu.on('upgrade', (req, soket) => {
   const anahtar = req.headers['sec-websocket-key'];
   if (!anahtar || String(req.headers.upgrade).toLowerCase() !== 'websocket') { soket.destroy(); return; }
+  const reddet = () => { try { soket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n'); } catch (e) { } setTimeout(() => soket.destroy(), 200); };
+  // Kaynak (Origin) denetimi: başka bir site tarayıcıda açıkken olay akışını (ve yayıncının adını) okuyamasın.
+  // Ana sayfa kipinde yalnız köprünün kendi sayfası. Komut satırı kiplerinde ayrıca kaynak bildirmeyen istemci ve
+  // diskten açılmış oyun sayfası (null / file:) kabul edilir: orada oyun.html elle de bağlanabilir (docs/OLAYLAR.md).
+  const kaynak = String(req.headers.origin || '').toLowerCase();
+  const kendi = IZINLI_HOST.some(h => kaynak === 'http://' + h);
+  if (!hostIyi(req) || !(kendi || (!ANA && (!kaynak || kaynak === 'null' || kaynak.startsWith('file:'))))) { reddet(); return; }
+  if (ANA) { // yalnız çalışan başlatmanın adresi: /olay/<oyun>/<calistirma>
+    const m = /^\/olay\/([\w-]+)\/([a-f0-9]{12})$/.exec((req.url || '').split('?')[0]);
+    if (!m || !calisan || calisan.oyun !== m[1] || calisan.calistirma !== m[2]) { reddet(); return; }
+    soket.calistirma = m[2];
+  }
   const kabul = crypto.createHash('sha1').update(anahtar + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
   soket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ' + kabul + '\r\n\r\n');
-  const etiket = /^\/olay\/([\w-]+)$/.exec((req.url || '').split('?')[0]);
-  if (etiket) soket.oyun = etiket[1]; // ana sayfa kipindeki oyun sayfası: hangi oyunun olaylarını beklediği
   soket.setNoDelay(true); istemciler.add(soket);
   yaz('Oyun sayfası bağlandı (' + istemciler.size + ' sayfa).');
-  soket.write(cerceve(JSON.stringify({ tip: 'kopru', ileti: alici(soket) ? sonDurum : BEKLEYEN_OYUN })));
+  soket.write(cerceve(JSON.stringify({ tip: 'kopru', ileti: sonDurum, baglanti: sonBaglanti })));
   let tampon = Buffer.alloc(0);
   soket.on('data', parca => { // istemciden yalnızca kapanış ve ping beklenir
     tampon = Buffer.concat([tampon, parca]);
@@ -217,6 +247,7 @@ function dinle() {
       console.log('\n  TikTok Oyun Fabrikası açık:  http://localhost:' + PORT + '/');
       console.log('  Bu siyah pencere oyunların motorudur. Açık kalsın; kapatınca oyunlar durur.\n');
       if (args.includes('--ac')) tarayicidaAc('http://localhost:' + PORT + '/');
+      kutuphaneHazirla(); // sayfa açılırken kütüphane yoksa indirmeye başlar; sayfa durumu gösterir
       return;
     }
     console.log('\n  Köprü çalışıyor. Oyun: ' + path.relative(__dirname, OYUN));
@@ -230,7 +261,7 @@ function dinle() {
     if (DENEME) denemeBaslat(); else tiktokBaslat();
     if (args.includes('--ac')) tarayicidaAc('http://localhost:' + PORT + '/'); // köprü dinlemeye başladıktan sonra
   });
-  process.on('SIGINT', () => { console.log(ANA ? '\nMotor kapatıldı.' : '\nKöprü kapatıldı.'); process.exit(0); });
+  process.on('SIGINT', () => { kurulumuKes(); console.log(ANA ? '\nMotor kapatıldı.' : '\nKöprü kapatıldı.'); process.exit(0); });
 }
 function tarayicidaAc(adres) { // varsayılan tarayıcıda açar
   const { exec } = require('child_process');
@@ -239,8 +270,8 @@ function tarayicidaAc(adres) { // varsayılan tarayıcıda açar
 }
 
 /* ------------------------------------------------------------------ ana sayfa kipi */
-// TikTok kullanıcı adı: harf, rakam, alt çizgi, nokta; 2-24 karakter. Başka her şey geri çevrilir.
-const KULLANICI_DESEN = /^[A-Za-z0-9_.]{2,24}$/;
+// TikTok kullanıcı adı: harf, rakam, alt çizgi ve nokta; 2-24 karakter; noktayla bitmez. Başka her şey geri çevrilir.
+const KULLANICI_DESEN = /^(?!.*\.$)[A-Za-z0-9_.]{2,24}$/;
 const OYUN_DESEN = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
 const htmlCoz = s => String(s).replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
 function oyunBilgi(klasor, id) {
@@ -262,12 +293,53 @@ function vitrindekiler() {
   return oyunlariBul().filter(a => OYUN_DESEN.test(a)).sort().map(a => oyunBilgi(path.join(__dirname, 'oyunlar', a), a)).filter(o => o.vitrin);
 }
 const paketMi = () => fs.existsSync(path.join(__dirname, 'oyun.html'));
+
+// TikTok kütüphanesi (yalnız ana sayfa kipinde): yoksa motor kendisi indirir; sayfa durumu /api/oyunlar'dan okur.
+// Komut sabittir (npm install --omit=dev, köprünün klasöründe); içine kullanıcıdan gelen hiçbir şey girmez, ayrı pencere
+// açılmaz. Testler ağa ve gerçek npm'e dokunmasın diye KOPRU_KURULUM_BETIGI verilirse npm yerine o betik node ile
+// çalıştırılır. Deneme kipi kütüphaneye hiç ihtiyaç duymaz; indirme sürerken ya da başarısız olunca da çalışır.
+const kutuphane = { durum: 'bilinmiyor', basladi: 0, neden: '', cocuk: null };
+function kutuphaneVarMi() { try { require.resolve('tiktok-live-connector'); return true; } catch (e) { return false; } }
+function kutuphaneDurum() {
+  if (kutuphane.durum === 'bilinmiyor' && kutuphaneVarMi()) kutuphane.durum = 'hazir';
+  return { durum: kutuphane.durum, sure: kutuphane.durum === 'iniyor' ? Math.round((Date.now() - kutuphane.basladi) / 1000) : 0, neden: kutuphane.neden };
+}
+function kutuphaneHazirla() {
+  if (kutuphane.durum === 'iniyor' || kutuphane.durum === 'hazir') return;
+  if (kutuphaneVarMi()) { kutuphane.durum = 'hazir'; return; }
+  kutuphane.durum = 'iniyor'; kutuphane.basladi = Date.now(); kutuphane.neden = '';
+  console.log('  TikTok kütüphanesi iniyor (yalnız ilk sefer, yaklaşık bir dakika). Beklerken ana sayfada Dene çalışır.');
+  const { spawn } = require('child_process'), betik = process.env.KOPRU_KURULUM_BETIGI;
+  let son = '', bitti = false, c;
+  const bitir = (tamam, neden) => {
+    if (bitti) return;
+    bitti = true; clearTimeout(sinir); kutuphane.cocuk = null;
+    if (tamam && kutuphaneVarMi()) { kutuphane.durum = 'hazir'; console.log('  TikTok kütüphanesi indi. Yayın düğmeleri hazır.\n'); return; }
+    kutuphane.durum = 'hata';
+    kutuphane.neden = neden || 'İndirilemedi. İnternet bağlantını kontrol et.';
+    const iz = son.trim().split(/\r?\n/).filter(Boolean).slice(-2).join(' | ').slice(0, 300);
+    console.log('  TikTok kütüphanesi indirilemedi.' + (iz ? ' (' + iz + ')' : '') + ' Ana sayfadaki "Yeniden dene" ile yeniden denenir; Dene yine çalışır.\n');
+  };
+  const sinir = setTimeout(() => { kurulumuKes(); bitir(false, 'İndirme çok uzun sürdü. İnternet bağlantını kontrol edip yeniden dene.'); }, 10 * 60e3);
+  try {
+    c = betik
+      ? spawn(process.execPath, [betik], { cwd: __dirname, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
+      : spawn('npm install --omit=dev --no-audit --no-fund', { cwd: __dirname, shell: true, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (e) { bitir(false, 'İndirme programı (npm) çalıştırılamadı. Node.js\'i yeniden kurmayı dene.'); return; }
+  kutuphane.cocuk = c;
+  const topla = p => { son = (son + p).slice(-2000); };
+  c.stdout.on('data', topla); c.stderr.on('data', topla);
+  c.on('error', () => bitir(false, 'İndirme programı (npm) çalıştırılamadı. Node.js\'i yeniden kurmayı dene.'));
+  c.on('close', kod => bitir(kod === 0));
+}
+function kurulumuKes() { try { if (kutuphane.cocuk) kutuphane.cocuk.kill(); } catch (e) { } }
 function anaDurum() {
   return {
     anaSayfa: true, paket: paketMi(),
     oyunlar: vitrindekiler().map(o => ({ id: o.id, ad: o.ad, aciklama: o.aciklama })),
-    aktif: calisan ? { oyun: calisan.oyun, ad: calisan.ad, kip: calisan.kip, kullanici: calisan.kullanici } : null,
-    durum: sonDurum
+    aktif: calisan ? { oyun: calisan.oyun, ad: calisan.ad, kip: calisan.kip, kullanici: calisan.kullanici, calistirma: calisan.calistirma, baglanti: sonBaglanti } : null,
+    durum: sonDurum,
+    kutuphane: kutuphaneDurum()
   };
 }
 function jsonYaz(res, kod, nesne) {
@@ -300,6 +372,7 @@ function anaSayfaIstegi(req, res, yol) {
   }
   if (yol === '/api/baslat') { baslatIstegi(req, res); return; }
   if (yol === '/api/durdur') { durdurIstegi(req, res); return; }
+  if (yol === '/api/kutuphane') { postAl(req, res, () => { if (kutuphane.durum === 'hata') kutuphaneHazirla(); jsonYaz(res, 200, { tamam: true, ...anaDurum() }); }); return; }
   if (yol === '/durum') { jsonYaz(res, 200, { durum: sonDurum, bagliSayfa: istemciler.size, sayac, aktif: anaDurum().aktif }); return; }
   const m = /^\/(oyun|onizleme)\/([^/]+)(\/.*)?$/.exec(yol);
   const o = m && OYUN_DESEN.test(m[2]) ? vitrindekiler().find(x => x.id === m[2]) : null;
@@ -310,7 +383,9 @@ function anaSayfaIstegi(req, res, yol) {
     if (m[1] === 'onizleme') { oyunSayfasi(o, ONIZLEME_EK, res); return; }
     // Çalışmayan oyunun sayfası açılırsa (köprü yeniden başladı, eski sekme yenilendi) ana sayfaya gönder.
     if (!calisan || calisan.oyun !== o.id) { res.writeHead(302, { location: '/', 'cache-control': 'no-store' }); res.end(); return; }
-    const ek = '<script>window.OYUN_KOPRU = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/olay/' + o.id + '";</script>\n' +
+    // Kimlikler yalnız [\w-] ve onaltılık rakamdır: betiğin içine güvenle yazılır.
+    const ek = '<script>window.OYUN_KOPRU = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/olay/' + o.id + '/' + calisan.calistirma + '";' +
+      'window.OYUN_CALISTIRMA = { oyun: "' + o.id + '", kimlik: "' + calisan.calistirma + '" };</script>\n' +
       (calisan.kip === 'canli' ? DENEME_ADLARINI_SIL : '') + GERI_DON_EK;
     oyunSayfasi(o, ek, res);
     return;
@@ -325,16 +400,33 @@ function oyunSayfasi(o, ek, res) {
     res.end(html.replace('<body>', '<body>\n' + ek));
   });
 }
-// Ana sayfadan açılan oyun sayfasına eklenen: masanın başına "← Oyunlar" bağlantısı (yalnız sahne görünümünde gizli).
+// Ana sayfadan açılan oyun sayfasına eklenen: masanın başına "← Oyunlar" bağlantısı (yalnız sahne görünümünde gizli) ve
+// başlatma bekçisi. Bekçi iki saniyede bir motorun durumuna bakar: aynı oyun yeniden başlatıldıysa (ör. denemeden canlıya)
+// sayfa kendini yeni başlatmaya yeniler; başka oyun açıldıysa ya da oyun durdurulduysa sessizce ölü kalmak yerine açık bir
+// örtü gösterir ("Oyunlar'a dön"). Metinler textContent ile yazılır.
 const GERI_DON_EK = '<style>.ana-don{display:inline-flex;align-items:center;gap:7px;align-self:flex-start;margin:0 0 6px;padding:6px 13px 6px 10px;' +
   'border-radius:99px;border:1px solid var(--cizgi);background:var(--zemin-2);color:var(--acik);font-size:13px;font-weight:500;text-decoration:none;line-height:1.2}' +
-  '.ana-don:hover{border-color:var(--soluk)}.ana-don:focus-visible{outline:2px solid var(--vurgu);outline-offset:2px}body.yayin .ana-don{display:none}</style>\n' +
+  '.ana-don:hover{border-color:var(--soluk)}.ana-don:focus-visible{outline:2px solid var(--vurgu);outline-offset:2px}body.yayin .ana-don{display:none}' +
+  '.calistirma-ortu{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:16px;background:rgba(8,10,28,.86)}' +
+  '.calistirma-ortu>div{max-width:440px;padding:22px 24px;border-radius:16px;background:var(--zemin-2);border:1px solid var(--cizgi);color:var(--acik);text-align:center;font-size:15px;line-height:1.5}' +
+  '.calistirma-ortu b{display:block;font-family:var(--baslik);font-weight:400;font-size:22px;margin-bottom:6px}' +
+  '.calistirma-ortu a{display:inline-block;margin-top:14px;padding:9px 18px;border-radius:99px;background:var(--vurgu);color:var(--murekkep);font-weight:700;text-decoration:none}</style>\n' +
   '<script>addEventListener("DOMContentLoaded",function(){var y=document.querySelector(".masa-ad");if(!y)return;var a=document.createElement("a");' +
-  'a.href="/";a.className="ana-don";a.textContent="\\u2190 Oyunlar";y.insertBefore(a,y.firstChild);});</script>';
+  'a.href="/";a.className="ana-don";a.textContent="\\u2190 Oyunlar";y.insertBefore(a,y.firstChild);});' +
+  '(function(){var C=window.OYUN_CALISTIRMA;if(!C)return;var ortu=null;function kapak(baslik,metin){if(!ortu){ortu=document.createElement("div");ortu.className="calistirma-ortu";' +
+  'ortu.id="calistirma-ortu";var i=document.createElement("div"),b=document.createElement("b"),p=document.createElement("p"),a=document.createElement("a");p.style.margin="0";' +
+  'a.href="/";a.textContent="Oyunlar\'a d\\u00f6n";i.append(b,p,a);ortu.append(i);document.body.appendChild(ortu);}ortu.querySelector("b").textContent=baslik;ortu.querySelector("p").textContent=metin;}' +
+  'function bak(){fetch("/api/oyunlar",{cache:"no-store"}).then(function(r){return r.json();}).then(function(d){var a=d&&d.aktif;' +
+  'if(a&&a.oyun===C.oyun&&a.calistirma===C.kimlik){if(ortu){ortu.remove();ortu=null;}return;}' +
+  'if(a&&a.oyun===C.oyun){location.reload();return;}' +
+  'kapak("Bu oyun artık çalışmıyor",a?"Şu an başka bir oyun açık: "+a.ad+". Bu sayfa olay almıyor.":"Oyun ana sayfadan durduruldu. Bu sayfa olay almıyor.");}).catch(function(){});}' +
+  'setInterval(bak,2000);})();</script>';
 // Canlı yayına geçerken: oyun, köprüden açılınca tarayıcıda sakladığı jeton sırasını geri yükler. Az önce Dene ile
-// gelen sahte izleyiciler (köprünün deneme_ kimlikleri) o kayıtta kalırsa gerçek yayında görünürdü; onlar silinir.
-const DENEME_ADLARINI_SIL = '<script>try{for(var i=localStorage.length-1;i>=0;i--){var k=localStorage.key(i);if(!/-sira$/.test(k))continue;' +
-  'var v=JSON.parse(localStorage.getItem(k));if(v&&Array.isArray(v.oyuncular)){v.oyuncular=v.oyuncular.filter(function(x){return !/^deneme_/.test(String(x&&x.id));});' +
+// gelen sahte izleyiciler o kayıtta kalırsa gerçek yayında görünürdü; onlar silinir. Sahte izleyici kimliği "deneme:ad"
+// biçimindedir (TikTok adında iki nokta olamaz, gerçek biriyle karışmaz); eski sürümün sabit sekiz kimliği de silinir.
+const ESKI_DENEME = ['deneme_ayse', 'deneme_memo', 'deneme_zeyno', 'deneme_bekir', 'deneme_elif', 'deneme_cano', 'deneme_sude', 'deneme_baran'];
+const DENEME_ADLARINI_SIL = '<script>try{var E=' + JSON.stringify(ESKI_DENEME) + ';for(var i=localStorage.length-1;i>=0;i--){var k=localStorage.key(i);if(!/-sira$/.test(k))continue;' +
+  'var v=JSON.parse(localStorage.getItem(k));if(v&&Array.isArray(v.oyuncular)){v.oyuncular=v.oyuncular.filter(function(x){var id=String(x&&x.id);return !/^deneme:/.test(id)&&E.indexOf(id)<0;});' +
   'localStorage.setItem(k,JSON.stringify(v));}}}catch(e){}</script>\n';
 // Ana sayfadaki kartın canlı önizlemesi: köprüye bağlanmaz (oyun kendi sahte kalabalığıyla oynar), ses çıkarmaz
 // (ses aygıtı yok sayılır, hazır parçalar yüklenmez), ses ve panel düğmeleri gizli; kareler yarı hızda çizilir ki
@@ -368,9 +460,8 @@ function oyunDurdur() {
   const eski = calisan;
   calisan = null;
   try { if (eski.durdur) eski.durdur(); } catch (e) { }
-  const c = cerceve(JSON.stringify({ tip: 'kopru', ileti: 'Oyun ana sayfadan durduruldu. Yeniden başlatmak için ana sayfaya dön.' }));
-  for (const s of istemciler) if (s.oyun === eski.oyun) { try { s.write(c); } catch (e) { } }
-  sonDurum = 'Oyun durduruldu.';
+  soketleriKapat(s => s.calistirma === eski.calistirma, 'Oyun ana sayfadan durduruldu. Yeniden başlatmak için ana sayfaya dön.');
+  sonDurum = 'Oyun durduruldu.'; sonBaglanti = 'durdu';
   console.log('\n  Durduruldu: ' + eski.ad + '. Motor açık, ana sayfadan yeni oyun seçilebilir.');
 }
 function baslatIstegi(req, res) {
@@ -379,43 +470,66 @@ function baslatIstegi(req, res) {
     if (!o) { jsonYaz(res, 404, { tamam: false, hata: 'Bu oyun bulunamadı. Sayfayı yenileyip yeniden dene.' }); return; }
     if (g.kip !== 'deneme' && g.kip !== 'canli') { jsonYaz(res, 400, { tamam: false, hata: 'Kip "deneme" ya da "canli" olmalı.' }); return; }
     let ad = '';
+    if (g.kip === 'canli' && kutuphane.durum !== 'hazir') {
+      jsonYaz(res, 409, { tamam: false, alan: 'kutuphane', hata: kutuphane.durum === 'iniyor' ? 'TikTok kütüphanesi hâlâ iniyor. Bitince Yayın düğmesi kendiliğinden yanar; o zamana kadar Dene çalışır.' : 'TikTok kütüphanesi inmedi. Ana sayfada "Yeniden dene"ye bas; o zamana kadar Dene çalışır.' });
+      return;
+    }
     if (g.kip === 'canli') {
       ad = String(g.kullanici == null ? '' : g.kullanici).trim().replace(/^@/, '');
-      if (!KULLANICI_DESEN.test(ad)) { jsonYaz(res, 400, { tamam: false, alan: 'kullanici', hata: 'Kullanıcı adı geçersiz: yalnız harf, rakam, alt çizgi ve nokta olur (2-24 karakter).' }); return; }
+      if (!KULLANICI_DESEN.test(ad)) { jsonYaz(res, 400, { tamam: false, alan: 'kullanici', hata: 'Kullanıcı adı geçersiz: yalnız harf, rakam, alt çizgi ve nokta olur (2-24 karakter, noktayla bitmez).' }); return; }
     }
     oyunCalistir(o, g.kip, ad);
     jsonYaz(res, 200, { tamam: true, adres: '/oyun/' + o.id + '/', ...anaDurum() });
   });
 }
 // Çalışanı durdurur (sahte olay saati, TikTok bağlantısı, bekleyen yeniden deneme), seçilen oyunu seçilen kipte başlatır.
-// Aynı oyun aynı kipte ve aynı adla zaten çalışıyorsa dokunmaz: ana sayfaya dönüp yeniden basmak bağlantıyı koparmasın.
+// Her başlatmanın yeni bir kimliği olur; eski başlatmanın soketleri kapatılır, bir daha kabul edilmez (eski sekmede kalan
+// sayfa sahte ve gerçek izleyiciyi karıştırmasın; sayfadaki bekçi yenilenir ya da örtü gösterir).
+// Aynı oyun aynı kipte ve aynı adla zaten çalışıyorsa bağlantıyı koparmaz; TikTok'a henüz bağlı değilse (yayın açık
+// değildi, bekleme süresi işliyor) hemen yeniden dener ve bekleme süresini sıfırlar.
 function oyunCalistir(o, kip, ad) {
-  if (calisan && calisan.oyun === o.id && calisan.kip === kip && calisan.kullanici === ad) return;
+  if (calisan && calisan.oyun === o.id && calisan.kip === kip && calisan.kullanici === ad) {
+    if (calisan.durdur && calisan.durdur.simdiDene) calisan.durdur.simdiDene();
+    return;
+  }
   if (calisan && calisan.durdur) { try { calisan.durdur(); } catch (e) { } }
   for (const k of Object.keys(sayac)) sayac[k] = 0;
   oyunAta(o.klasor);
-  calisan = { oyun: o.id, ad: o.ad, kip, kullanici: ad, durdur: null };
+  calisan = { oyun: o.id, ad: o.ad, kip, kullanici: ad, calistirma: crypto.randomBytes(6).toString('hex'), durdur: null };
+  soketleriKapat(s => s.calistirma !== calisan.calistirma, 'Bu sayfanın oyunu kapandı; motor yeni bir oyun başlattı.');
   console.log('\n  Açılan oyun: ' + o.ad + (kip === 'canli' ? '  (@' + ad + ' yayınına bağlanıyor)' : '  (deneme: sahte izleyiciler)'));
-  if (kip === 'canli') sonDurum = '@' + ad + ' yayınına bağlanılıyor…';
-  // Başka oyunun sayfası açık kaldıysa artık olay almadığını söyle.
-  const c = cerceve(JSON.stringify({ tip: 'kopru', ileti: BEKLEYEN_OYUN }));
-  for (const s of istemciler) if (s.oyun && s.oyun !== o.id) { try { s.write(c); } catch (e) { } }
+  if (kip === 'canli') { sonDurum = '@' + ad + ' yayınına bağlanılıyor…'; sonBaglanti = 'baglaniyor'; }
   calisan.durdur = kip === 'deneme' ? denemeBaslat() : tiktokBaslat(ad);
 }
-// Kapı doluysa: orada zaten bizim ana sayfamız mı çalışıyor (iki kez çift tıklandı)? Öyleyse sakin bir dille söyle.
+// Kapı doluysa: orada bizim motorumuz mu çalışıyor? Ana sayfa kipindeyse (iki kez çift tıklandı) sakin bir dille söyle;
+// eski yoldan (tek oyunla) açılmışsa o pencereyi kapatmayı öner; başkasıysa öyle söyle. Yanıt hiç bitmezse (bayt bayt
+// yollayan yabancı sunucu) toplam 3 saniye sonra vazgeçilir; motor asılı kalmaz.
 function zatenAcik() {
   const adres = 'http://localhost:' + PORT + '/';
-  const r = http.get({ host: '127.0.0.1', port: PORT, path: '/api/oyunlar', headers: { host: '127.0.0.1:' + PORT }, timeout: 2000 }, y => {
-    let g = ''; y.setEncoding('utf8'); y.on('data', p => { g += p; }); y.on('end', () => {
-      let bizim = false; try { bizim = JSON.parse(g).anaSayfa === true; } catch (e) { }
-      if (!bizim) return dolu();
-      console.log('\n  Oyun fabrikası zaten açık: ' + adres + '\n  O sayfayı kullanabilirsin. Bu pencereyi kapatabilirsin.\n');
-      if (args.includes('--ac')) tarayicidaAc(adres);
-      setTimeout(() => process.exit(0), 600);
+  let bitti = false;
+  const son = (ileti, kod, ac) => {
+    if (bitti) return; bitti = true; clearTimeout(sinir);
+    console.log(ileti);
+    if (ac && args.includes('--ac')) tarayicidaAc(adres);
+    setTimeout(() => process.exit(kod), ac ? 600 : 0);
+  };
+  const yabanci = () => son('\n  ' + PORT + ' numaralı kapı başka bir program tarafından kullanılıyor (kapı dolu).\n  O programı kapatıp yeniden dene.\n', 1);
+  const sor = (yol, sonra) => {
+    const r = http.get({ host: '127.0.0.1', port: PORT, path: yol, headers: { host: '127.0.0.1:' + PORT } }, y => {
+      let g = ''; y.setEncoding('utf8'); y.on('data', p => { g += p; if (g.length > 65536) r.destroy(); }); y.on('end', () => { let j = null; try { j = JSON.parse(g); } catch (e) { } sonra(j); });
+    });
+    r.on('error', yabanci);
+    istekler.push(r);
+  };
+  const istekler = [];
+  const sinir = setTimeout(() => { istekler.forEach(r => { try { r.destroy(); } catch (e) { } }); yabanci(); }, 3000);
+  sor('/api/oyunlar', j => {
+    if (j && j.anaSayfa === true) return son('\n  Oyun fabrikası zaten açık: ' + adres + '\n  O sayfayı kullanabilirsin. Bu pencereyi kapatabilirsin.\n', 0, true);
+    sor('/durum', d => {
+      if (d && d.sayac && typeof d.durum === 'string') return son('\n  Oyun motoru başka bir pencerede zaten açık (tek oyunla, eski yoldan başlatılmış).\n  O siyah pencereyi kapat, sonra BASLAT.bat dosyasına yeniden çift tıkla.\n', 1);
+      yabanci();
     });
   });
-  const dolu = () => { console.log('\n  ' + PORT + ' numaralı kapı başka bir program tarafından kullanılıyor (kapı dolu).\n  O programı kapatıp yeniden dene.\n'); process.exit(1); };
-  r.on('timeout', () => r.destroy()); r.on('error', dolu);
 }
 
 /* ------------------------------------------------------------------ TikTok olaylarını oyunun biçimine çevir */
@@ -455,26 +569,26 @@ function tiktokBaslat(kullaniciAdi = KULLANICI) {
   try { Kutuphane = require('tiktok-live-connector'); }
   catch (e) {
     console.log('  "tiktok-live-connector" kurulu değil. Bu klasörde bir kez şunu çalıştır:\n\n      npm install\n\n  Sonra köprüyü yeniden başlat. (İnternet olmadan denemek için: node kopru.js --deneme)\n');
-    durumBildir('TikTok kütüphanesi kurulu değil. BASLAT.bat ile yeniden aç ya da klasörde "npm install" çalıştır.');
+    durumBildir('TikTok kütüphanesi kurulu değil. BASLAT.bat ile yeniden aç ya da klasörde "npm install" çalıştır.', 'hata');
     return () => {};
   }
   const Sinif = Kutuphane.TikTokLiveConnection || Kutuphane.WebcastPushConnection; // yeni ve eski sürüm adları
   const E = Kutuphane.WebcastEvent || {}, K = Kutuphane.ControlEvent || {};
-  if (typeof Sinif !== 'function') { durumBildir('TikTok kütüphanesinin bu sürümü tanınmadı.'); return () => {}; }
+  if (typeof Sinif !== 'function') { durumBildir('TikTok kütüphanesinin bu sürümü tanınmadı.', 'hata'); return () => {}; }
   let bekleme = 15, zamanlayici = null, baglanti = null, bagli = false, durdu = false;
   const KULLANICI = kullaniciAdi;
 
   const yenidenDene = neden => {
     if (durdu) return;
     bagli = false; clearTimeout(zamanlayici);
-    durumBildir(neden + ' ' + bekleme + ' saniye sonra yeniden denenecek.');
+    durumBildir(neden + ' ' + bekleme + ' saniye sonra yeniden denenecek.', 'bekliyor');
     zamanlayici = setTimeout(baglan, bekleme * 1000); bekleme = Math.min(120, Math.round(bekleme * 1.6));
   };
   function baglan() {
     if (durdu) return;
     try { if (baglanti && baglanti.disconnect) baglanti.disconnect(); } catch (e) {}
     try { baglanti = new Sinif(KULLANICI, { enableExtendedGiftInfo: false, processInitialData: false }); }
-    catch (e) { durumBildir('Bağlantı kurulamadı: ' + e.message); return; }
+    catch (e) { durumBildir('Bağlantı kurulamadı: ' + e.message, 'hata'); return; }
     const bu = baglanti, gecerli = () => !durdu && bu === baglanti;
     const dinle = (sabit, ad, fn) => { try { bu.on(E[sabit] || K[sabit] || ad, (...a) => { if (gecerli()) fn(...a); }); } catch (e) {} };
     dinle('CHAT', 'chat', d => ilet('chat', d));
@@ -489,7 +603,7 @@ function tiktokBaslat(kullaniciAdi = KULLANICI) {
     Promise.resolve().then(() => bu.connect()).then(durum => {
       if (!gecerli()) { try { bu.disconnect(); } catch (e) {} return; }
       bagli = true; bekleme = 15;
-      durumBildir('@' + KULLANICI + ' yayınına bağlandı. Yorum ve hediyeler oyuna akıyor.' + (durum && durum.roomId ? ' (oda ' + durum.roomId + ')' : ''));
+      durumBildir('@' + KULLANICI + ' yayınına bağlandı. Yorum ve hediyeler oyuna akıyor.' + (durum && durum.roomId ? ' (oda ' + durum.roomId + ')' : ''), 'bagli');
     }).catch(e => {
       if (!gecerli()) return;
       const m = String((e && e.message) || e);
@@ -497,22 +611,31 @@ function tiktokBaslat(kullaniciAdi = KULLANICI) {
     });
   }
   baglan();
-  return () => {
+  const durdur = () => {
     durdu = true; clearTimeout(zamanlayici);
     try { if (baglanti && baglanti.disconnect) baglanti.disconnect(); } catch (e) {}
     baglanti = null;
   };
+  // Ana sayfadan aynı oyun için Yayın'a yeniden basıldı: bağlı değilsek beklemeden dene, bekleme süresini sıfırla.
+  durdur.simdiDene = () => {
+    if (durdu || bagli) return;
+    clearTimeout(zamanlayici); bekleme = 15;
+    durumBildir('@' + KULLANICI + ' yayınına yeniden bağlanılıyor…', 'baglaniyor');
+    baglan();
+  };
+  return durdur;
 }
 
 /* ------------------------------------------------------------------ deneme kipi: TikTok yerine sahte olay */
 function denemeBaslat() {
-  const adlar = ['deneme_ayse', 'deneme_memo', 'deneme_zeyno', 'deneme_bekir', 'deneme_elif', 'deneme_cano', 'deneme_sude', 'deneme_baran'];
+  // Kimlik "deneme:ad": TikTok adında iki nokta olamaz, canlıya geçerken temizlenen sahte izleyici gerçek biriyle karışmaz.
+  const adlar = ['ayse', 'memo', 'zeyno', 'bekir', 'elif', 'cano', 'sude', 'baran'];
   const sozler = ['selam!', 'ben de geldim', 'haydi haydi', 'selamlar', 'buradayım'];
   const sec = a => a[Math.floor(Math.random() * a.length)];
-  durumBildir('Deneme kipi: olaylar sahte, TikTok\'a bağlanılmadı.');
+  durumBildir('Deneme kipi: olaylar sahte, TikTok\'a bağlanılmadı.', 'deneme');
   let n = 0;
   const saat = setInterval(() => {
-    const ad = sec(adlar), u = { uniqueId: ad, nickname: ad.replace('deneme_', 'D. ') }, r = n++ % 10;
+    const ad = sec(adlar), u = { uniqueId: 'deneme:' + ad, nickname: 'D. ' + ad }, r = n++ % 10;
     if (r < 5) ilet('chat', { ...u, comment: sec(sozler) });
     else if (r < 7) ilet('like', { ...u, likeCount: 12 });
     else if (r === 7) ilet('gift', { ...u, giftType: 1, repeatEnd: false, repeatCount: 2, diamondCount: 5 }); // seri sürüyor: sayılmamalı

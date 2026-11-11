@@ -41,7 +41,8 @@ Testler ve kareler bir tarayıcı ister. Kurulu Chrome'u göstermek en hızlıs�
 ```
 cekirdek/js/          çekirdek parçaları; başlarındaki yorum ne yaptıklarını söyler
 cekirdek/sayfa.html   sayfa iskeleti: solda 9:16 sahne, sağda deneme paneli
-cekirdek/ana-sayfa.html  BASLAT.bat'ın açtığı ana sayfa: oyun salonu, kabinlerde önizleme, bilet, Dene / Yayın
+cekirdek/ana-sayfa.html  BASLAT.bat'ın açtığı ana sayfa: açılış sahnesi (kütüphane orada iner), oyun salonu, bilet, Dene / Yayın
+cekirdek/node-yok.html   Node.js kurulu değilse BASLAT.bat'ın tarayıcıda açtığı yardım sayfası
 cekirdek/test/        her oyuna uygulanan testler ve köprü testleri
 oyunlar/halay/        tam örnek oyun: Mendil Kimde? (bütün kancaları kullanır)
 sablon/               en yalın oyun; yeni oyun bundan başlar
@@ -59,7 +60,9 @@ docs/YAYIN.md         yayıncı için: nasıl yayına verilir
 1. **İzleyici metni asla HTML olarak yazılmaz.** Ad ve yorum yabancıdan gelir: sayfaya `textContent`, tuvale
    `fillText`. `innerHTML`, `insertAdjacentHTML`, `document.write` yok.
 2. **Köprü salt okur.** Hesaba giriş, oturum bilgisi, çerez, yayına mesaj gönderme eklenmez; kolaylaştıran
-   seçenek de açılmaz. Köprü yalnız `127.0.0.1` dinler.
+   seçenek de açılmaz. Köprü yalnız `127.0.0.1` dinler, her istekte `Host`'a, soketlerde `Origin`'e bakar
+   (`docs/OLAYLAR.md`); başka bir site olay akışını ve yayıncının adını okuyamaz. Ana sayfa kipinde kütüphaneyi
+   kendisi indirir (sabit komut, `npm install --omit=dev`); testler bunun yerine `KOPRU_KURULUM_BETIGI` taklidini kullanır.
 3. **Dışarıdan gelen her şey `olay(o)` üzerinden girer.** Sahte izleyici, köprü ve testler aynı kapıyı kullanır.
 4. **Gerçek yayında sahte ad görünmez.** Köprüden açılan sayfada otomatik kalabalık kapalıdır.
 5. **Ses ve görsel üretimdir.** Depoya ses dosyası, görsel, hazır model eklenmez; karakterler kodla çizilir.

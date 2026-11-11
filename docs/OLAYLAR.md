@@ -62,8 +62,22 @@ sayılır. `repeatEnd` alanı hiç yoksa ileti tek seferlik kabul edilir.
 Köprü ayrıca durum iletisi yollar; oyun bunu panelde gösterir, olay saymaz:
 
 ```js
-{ "tip": "kopru", "ileti": "@ayse yayınına bağlandı. Yorum ve hediyeler oyuna akıyor." }
+{ "tip": "kopru", "ileti": "@ayse yayınına bağlandı. Yorum ve hediyeler oyuna akıyor.", "baglanti": "bagli" }
 ```
+
+`baglanti` alanı masadaki **Bağlantı** hücresini ve Yayın sekmesindeki rozeti belirler:
+
+| `baglanti` | Hücre | Ne demek |
+| --- | --- | --- |
+| `bagli` | **Canlı** (yanında alınan olay sayısı) | TikTok yayınına bağlanıldı, yorum ve hediyeler akıyor. |
+| `bekliyor` | **Yayın yok** (alt satır: yayın henüz açık değil; rozet: Yayın bekleniyor) | TikTok'ta yayın henüz açık değil; köprü kendisi yeniden dener. |
+| `baglaniyor` | **Bağlanıyor** | TikTok'a bağlanılıyor. |
+| `deneme` | **Deneme** | Köprü sahte izleyici yolluyor; TikTok'a bağlanılmadı. |
+| `durdu` | **Durdu** | Oyun ana sayfadan durduruldu. |
+| `hata` | **Bağlanamadı** | Kütüphane yok ya da bağlantı kurulamadı; ayrıntı Yayın sekmesinde. |
+
+`baglanti` alanı olmayan iletiler (eski köprüler) yeni sayfada eskisi gibi çalışır: köprüye bağlı olmak **Canlı**
+sayılır. Yeni köprüyle eski sayfa da çalışır; eski sayfa alanı yok sayar.
 
 ## `window.CanliOyun`
 
@@ -77,22 +91,31 @@ Köprü ayrıca durum iletisi yollar; oyun bunu panelde gösterir, olay saymaz:
 
 ## Köprünün adresleri
 
+Köprü yalnız `127.0.0.1` dinler ve her kipte her isteğin `Host` başlığına bakar: yalnız `127.0.0.1:<kapı>` ya da
+`localhost:<kapı>`. Başka bir ad taşıyan istek (DNS yeniden bağlama) 403 alır.
+
 | Adres | Yanıt |
 | --- | --- |
 | `GET /` | Oyun. Köprü sayfaya `window.OYUN_KOPRU` yazar; oyun bunu görünce kendiliğinden bağlanır. |
 | `GET /#yayin` | Yalnız sahne (panel gizli). |
 | `GET /durum` | `{ durum, bagliSayfa, sayac }` JSON. |
-| WebSocket (herhangi bir yol) | Olay akışı. Köprü yalnız yollar; istemciden veri beklemez. |
+| `GET /muzik/<dosya>` | Oyunun isteğe bağlı hazır parçaları. `liste.js` yoksa boş bir betik döner (konsola 404 düşmesin). |
+| WebSocket | Olay akışı. Köprü yalnız yollar; istemciden veri beklemez. Kaynak (`Origin`) köprünün kendi adresi olmalı; bu kiplerde ayrıca kaynak bildirmeyen istemci ve diskten açılmış oyun sayfası (`null` ya da `file:`) kabul edilir, çünkü orada `oyun.html` dosyadan açılıp elle bağlanabilir. Başka bir sitenin kaynağı geri çevrilir. |
 
 Ana sayfa kipinde (`node kopru.js --ana-sayfa`, `BASLAT.bat` böyle açar) adresler başkadır:
 
 | Adres | Yanıt |
 | --- | --- |
-| `GET /` | Ana sayfa (`cekirdek/ana-sayfa.html`; pakette köprünün yanında). |
-| `GET /api/oyunlar` | `{ anaSayfa, paket, oyunlar: [{ id, ad, aciklama }], aktif: { oyun, ad, kip, kullanici } \| null, durum }`. |
-| `POST /api/baslat` | Gövde `{ oyun, kip: "deneme" \| "canli", kullanici }`. Çalışanı durdurur, seçileni başlatır; yanıt `{ tamam, adres }` ya da `{ tamam: false, hata }`. Yalnız köprünün kendi sayfasından kabul edilir (Host, Origin, JSON gövde). Kullanıcı adı: harf, rakam, `_`, `.`; 2-24 karakter. |
-| `POST /api/durdur` | Gövde `{}`. Çalışan oyunun sahte olaylarını ya da TikTok bağlantısını kapatır; motor boşta bekler. Aynı kaynak denetimi. |
-| `GET /oyun/<id>/` | Çalışan oyunun sayfası, köprüye bağlı (`/olay/<id>`), masada "← Oyunlar" bağlantısı. Çalışmayan oyun için ana sayfaya yönlendirir. |
-| `GET /oyun/<id>/muzik/<dosya>` | O oyunun isteğe bağlı hazır parçaları. |
-| `GET /onizleme/<id>/` | Aynı oyun köprüsüz ve sessiz; ana sayfadaki kartın önizlemesi (`#yayin` ile). |
-| WebSocket `/olay/<id>` | O oyunun olayları; başka oyun çalışırken olay gelmez. |
+| `GET /` | Ana sayfa (`cekirdek/ana-sayfa.html`; pakette köprünün yanında). Açılışta yükleme sahnesi. |
+| `GET /api/oyunlar` | `{ anaSayfa, paket, oyunlar: [{ id, ad, aciklama }], aktif: { oyun, ad, kip, kullanici, calistirma, baglanti } \| null, durum, kutuphane: { durum: "hazir" \| "iniyor" \| "hata", sure, neden } }`. |
+| `GET /durum` | `{ durum, bagliSayfa, sayac, aktif }` JSON. |
+| `POST /api/baslat` | Gövde `{ oyun, kip: "deneme" \| "canli", kullanici }`. Çalışanı durdurur, seçileni yeni bir başlatma kimliğiyle (`calistirma`) başlatır; eski başlatmanın soketleri kapatılır. Aynı oyun aynı kipte ve aynı adla yeniden istenirse bağlantı koparılmaz; TikTok'a henüz bağlı değilse hemen yeniden denenir. Yanıt `{ tamam, adres }` ya da `{ tamam: false, hata, alan }`. Kütüphane inmeden canlı istenirse 409 (`alan: "kutuphane"`). Kullanıcı adı: harf, rakam, `_`, `.`; 2-24 karakter; noktayla bitmez. |
+| `POST /api/durdur` | Gövde `{}`. Çalışan oyunun sahte olaylarını ya da TikTok bağlantısını kapatır; motor boşta bekler. |
+| `POST /api/kutuphane` | Gövde `{}`. İndirme başarısız olduysa yeniden dener. |
+| `GET /oyun/<id>/` | Çalışan oyunun sayfası, köprüye bağlı (`/olay/<id>/<calistirma>`), masada "← Oyunlar" bağlantısı ve başlatma bekçisi: aynı oyun yeniden başlatılınca sayfa kendini yeniler; başka oyun açılır ya da oyun durdurulursa "Bu oyun artık çalışmıyor" örtüsü gösterir. Çalışmayan oyun için ana sayfaya yönlendirir. |
+| `GET /oyun/<id>/muzik/<dosya>` | O oyunun isteğe bağlı hazır parçaları (`liste.js` yoksa boş betik). |
+| `GET /onizleme/<id>/` | Aynı oyun köprüsüz ve sessiz; ana sayfadaki kabinin önizlemesi (`#yayin` ile). |
+| WebSocket `/olay/<id>/<calistirma>` | Yalnız çalışan başlatmanın olayları. Kaynak yalnız köprünün kendi sayfası; başka yol, başka kaynak, kaynaksız istemci ve eski başlatmanın kimliği geri çevrilir. |
+
+POST istekleri yalnız köprünün kendi sayfasından kabul edilir (`Host`, `Origin`, varsa `Sec-Fetch-Site`, JSON gövde,
+en çok 4 KB).

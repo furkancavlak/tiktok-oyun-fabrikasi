@@ -18,21 +18,33 @@ Bu rehber, programcı olmayan bir yayıncı içindir. Elinde bir oyun paketi kla
 
 ## Yayına başlama
 
-1. Paket klasöründeki `BASLAT.bat` dosyasına çift tıkla.
-2. İlk seferde gereken kütüphane iner. Bu bir kez olur, internet ister.
-3. Tarayıcıda ana sayfa açılır. Siyah pencere de açık kalır: o oyunun motorudur. Kapatırsan oyun durur; yayın
-   bitene kadar açık bırak (küçültebilirsin).
+1. Paket klasöründeki `BASLAT.bat` dosyasına çift tıkla. Node.js kurulu değilse tarayıcıda kısa bir yardım sayfası
+   açılır (nodejs.org, LTS sürümü); kurduktan sonra yeniden çift tıkla.
+2. Tarayıcıda bir açılış ekranı gelir: motor çalışıyor mu, TikTok kütüphanesi kurulu mu, oyunlar hazır mı, satır satır
+   yazar. İlk seferde kütüphane orada iner (yaklaşık bir dakika, internet ister; bir kez olur). Beklerken
+   **Beklemeden dene** ile oyunu sahte izleyicilerle açabilirsin; kırmızı düğmeler kütüphane inince kendiliğinden yanar.
+   İnemezse ekran "İndirilemedi. İnternet bağlantını kontrol et." der: **Yeniden dene** ya da **Şimdilik yalnız dene**.
+3. Hazır olunca ana sayfa (oyun salonu) açılır. Siyah pencere de açık kalır: o oyunun motorudur. Kapatırsan oyun durur;
+   yayın bitene kadar açık bırak (küçültebilirsin).
 4. Önce sarı **Dene** düğmesine bas: oyun TikTok'a bağlanmadan, sahte izleyicilerle açılır. Neye benzediğini gör.
 5. Yayına geçmek için masanın sol üstündeki **← Oyunlar** bağlantısıyla ana sayfaya dön. Sağ üstteki bilete TikTok
    kullanıcı adını yaz (başındaki `@` hazır durur) ve **Kaydet**'e ya da Enter'a bas. Bilet "Kayıtlı" yazar, kırmızı
    **Yayın** düğmesi yanar; ona bas. Ad bu bilgisayarda kayıtlı kalır, bir dahaki sefere yeniden yazman gerekmez.
    Ana sayfadaki şeritte açık oyun ve motorun son durumu yazar ("şu an canlı yayında değil" gibi); **Durdur**
    oyunu kapatır, **Oyuna dön** oyunun sayfasını açar. Sayfanın altındaki **Yayına nasıl alırım?** dört adımı gösterir.
-6. Oyun sayfasında solda sahne, sağda yayın masası (panel) vardır. Masanın en üstündeki şeritte Bağlantı kutusu
-   **Canlı** yazıyorsa yorumlar, beğeniler ve hediyeler oyuna akıyor demektir. Yanında kaç olay alındığı yazar.
+6. Oyun sayfasında solda sahne, sağda yayın masası (panel) vardır. Masanın en üstündeki şeritte **Bağlantı** kutusu
+   ne olduğunu söyler:
+   - **Canlı**: TikTok yayınına bağlanıldı; yorumlar, beğeniler ve hediyeler oyuna akıyor. Yanında kaç olay alındığı yazar.
+   - **Yayın yok** (altında "yayın henüz açık değil"): TikTok'ta yayın henüz açık değil. Yayını başlat; motor kendisi yeniden dener. Beklemek
+     istemezsen ana sayfada aynı oyunun **Yayın** düğmesine yeniden bas, hemen dener.
+   - **Bağlanıyor**: TikTok'a bağlanılıyor.
+   - **Deneme**: sahte izleyiciler; TikTok'a bağlanılmadı.
+   - **Durdu**: oyun ana sayfadan durduruldu.
 7. Sayfada bir kez herhangi bir yere tıkla ya da başlat düğmesine bas. Tarayıcılar, kullanıcı tıklamadan ses çalmaya izin vermez.
 
-Denemeden yayına geçince denemenin sahte izleyicileri sıralamadan silinir; gerçek yayında görünmezler.
+Denemeden yayına geçince denemenin sahte izleyicileri sıralamadan silinir; gerçek yayında görünmezler. Başka bir
+sekmede açık kalmış eski oyun sayfası da yeni başlatmaya kendiliğinden geçer; oyun durdurulduysa ya da başka oyun
+açıldıysa "Bu oyun artık çalışmıyor" der.
 
 ## TikTok LIVE Studio'ya ekleme
 
@@ -71,13 +83,16 @@ buna izin verip vermediği denenmedi.
 
 | Belirti | Neden ve çözüm |
 | --- | --- |
-| "Node.js bulunamadı" | Node.js kurulu değil ya da kurulumdan sonra bilgisayar yeniden başlatılmadı. https://nodejs.org adresinden LTS sürümünü kur, `BASLAT.bat` dosyasını yeniden aç. |
+| "Node.js bulunamadı" (ve tarayıcıda yardım sayfası) | Node.js kurulu değil ya da kurulumdan sonra bilgisayar yeniden başlatılmadı. https://nodejs.org adresinden LTS sürümünü kur, `BASLAT.bat` dosyasını yeniden aç. |
+| Açılış ekranı "İndirilemedi. İnternet bağlantını kontrol et." | TikTok kütüphanesi inemedi. İnterneti kontrol edip **Yeniden dene**'ye bas. O zamana kadar **Dene** çalışır. |
 | Köprü bağlanamıyor, 403 hatası | Kütüphane eski. Paket klasöründe bir komut satırı aç ve `npm install tiktok-live-connector@latest` yaz. Sonra `BASLAT.bat` dosyasını yeniden aç. |
 | "Yayın kapalı" ya da kullanıcı bulunamadı | Yayın açık değil ya da kullanıcı adı yanlış. Önce TikTok'ta yayını başlat, adı `@` olmadan yaz. |
 | Siyah pencere "zaten açık" deyip kapanıyor | `BASLAT.bat` iki kez açıldı. Sorun değil: tarayıcıda açılan ana sayfayı kullan. |
+| "Oyun motoru başka bir pencerede zaten açık" | Motor eski yoldan (komut satırından, tek oyunla) başka bir pencerede açık. O siyah pencereyi kapat, `BASLAT.bat` dosyasına yeniden çift tıkla. |
 | Kapı dolu (port meşgul) | Başka bir program aynı kapıyı tutuyor; onu kapat. Olmazsa komut satırında `node kopru.js --ana-sayfa --port 9000 --ac` çalıştır. |
-| Ana sayfa "Köprüye ulaşılamıyor" diyor | Siyah pencere kapanmış. `BASLAT.bat` dosyasına yeniden çift tıkla. |
-| Kullanıcı adı kabul edilmiyor | TikTok adında yalnız harf, rakam, alt çizgi ve nokta olur. Ekrandaki adını değil, profil adresindeki `@` ile başlayan adı yaz. |
+| Ana sayfa "Motor çalışmıyor" ya da "Motora ulaşılamıyor" diyor | Siyah pencere kapanmış. `BASLAT.bat` dosyasına yeniden çift tıkla; açık sayfa motor gelince kendiliğinden devam eder. |
+| Kullanıcı adı kabul edilmiyor | TikTok adında yalnız harf, rakam, alt çizgi ve nokta olur; en çok 24 karakter, noktayla bitmez. Ekrandaki adını değil, profil adresindeki `@` ile başlayan adı yaz. |
+| Bağlantı kutusu "Yayın yok" | TikTok'ta yayın henüz açık değil. Yayını başlat; motor kendisi dener ya da ana sayfada **Yayın**'a yeniden bas. |
 | Ses yok | Tarayıcılar tıklamadan ses açmaz. Sayfada başlat düğmesine bas. Pencere yakalama bilgisayar sesini ayrıca almıyorsa LIVE Studio'da ses kaynağını kontrol et. |
 | LIVE Studio'da oyun görünmüyor | Tarayıcı kaynağı yerine pencere yakalama kullan. Pencerenin küçültülmediğinden emin ol. |
 | Oyun açık ama yorumlar gelmiyor | Masanın üstündeki Bağlantı kutusuna bak; ayrıntı Yayın sekmesinde yazar. Yayın açıksa ve yorum yazılıyorsa kütüphaneyi güncelle (403 satırı). |

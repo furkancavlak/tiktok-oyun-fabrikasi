@@ -4,10 +4,13 @@
  * siraSakla / siraOku: jeton sıralamasını tarayıcıda 3 saat saklar · ayarOku / ayarYaz: balon, süzgeç ve
  * yayıncının çıkardığı / adını gizlediği izleyiciler
  * Bu dosya TikTok'a doğrudan bağlanmaz ve hiçbir kimlik bilgisi tutmaz.
+ * kopruBaglanti: köprünün durum iletisindeki "baglanti" alanı (deneme · baglaniyor · bekliyor · bagli · durdu · hata);
+ * masadaki Bağlantı hücresi bunu gösterir. Alanı yollamayan eski köprülerde null kalır, hücre eskisi gibi davranır.
  */
 const KOPRU = typeof window.OYUN_KOPRU === 'string' ? window.OYUN_KOPRU : null; // sayfayı köprü programı açtıysa dolu gelir
+const KOPRU_BAGLANTI = ['deneme', 'baglaniyor', 'bekliyor', 'bagli', 'durdu', 'hata'];
 const Yayin = {
-  ws: null, alinan: 0, yeniden: null,
+  ws: null, alinan: 0, yeniden: null, kopruBaglanti: null,
   cevir(m) {
     if (!m || typeof m !== 'object')
       return null;
@@ -67,6 +70,8 @@ const Yayin = {
       return;
     } for (const tek of Array.isArray(m) ? m : [m]) {
       if (tek && tek.tip === 'kopru') {
+        if (KOPRU_BAGLANTI.includes(tek.baglanti))
+          this.kopruBaglanti = tek.baglanti;
         bagDurum('acik', tek.ileti || '');
         continue;
       }
@@ -82,6 +87,7 @@ const Yayin = {
       if (this.ws !== ws)
         return;
       this.ws = null;
+      this.kopruBaglanti = null;
       $('bag-dugme').textContent = 'Bağlan';
       if (this.surekli) {
         bagDurum('hata', 'Köprüyle bağlantı koptu. 3 saniyede bir yeniden deniyorum.');
@@ -133,4 +139,6 @@ function ayarYaz() { try {
   localStorage.setItem(AYAR_SAKLA, JSON.stringify(ayar));
 }
 catch (e) { } }
-function bagDurum(sinif, ileti) { const r = $('bag-rozet'); r.className = 'rozet' + (sinif ? ' ' + sinif : ''); r.textContent = sinif === 'acik' ? 'Bağlı' : sinif === 'hata' ? 'Bağlanamadı' : 'Bağlı değil'; $('bag-ileti').textContent = ileti || ''; }
+// Rozet köprüye bağlı olunca da TikTok'un durumunu söyler (köprü bildirdiyse): "Bağlı" yalnız yayından olay gelirken.
+const ROZET_YAZI = { deneme: 'Deneme', baglaniyor: 'Bağlanıyor', bekliyor: 'Yayın bekleniyor', bagli: 'Bağlı', durdu: 'Durdu', hata: 'TikTok bağlı değil' };
+function bagDurum(sinif, ileti) { const r = $('bag-rozet'); r.className = 'rozet' + (sinif ? ' ' + sinif : ''); r.textContent = sinif === 'acik' ? (ROZET_YAZI[Yayin.kopruBaglanti] || 'Bağlı') : sinif === 'hata' ? 'Bağlanamadı' : 'Bağlı değil'; $('bag-ileti').textContent = ileti || ''; }

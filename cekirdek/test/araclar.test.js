@@ -53,5 +53,41 @@ const kesis = (a, b) => a && b && a[0] < b[0] + b[2] && a[0] + a[2] > b[0] && a[
 const girenler = od ? od.kisiler.filter(x => kesis(x.etiket, od.kutular.sira)).map(x => x.ad) : ['ölçüm yok'];
 kontrol('Şablonun önerilen ayarlarıyla (etiket.ustSinir) tam kalabalıkta hiçbir ad sıralama kutusuna girmez', girenler.length === 0 && !/sıralama kutusuna/.test(k.stdout), girenler);
 
+// Node.js yoksa açılan yardım sayfası: depoda ve yayıncı paketinde
+const nodeYok = path.join(KOK, 'cekirdek', 'node-yok.html'), nyMetin = fs.existsSync(nodeYok) ? fs.readFileSync(nodeYok, 'utf8') : '';
+kontrol('Node.js yardım sayfası depoda var: nodejs.org bağlantısı, LTS, BASLAT.bat yeniden; dış betik yok', /href="https:\/\/nodejs\.org"/.test(nyMetin) && /LTS/.test(nyMetin) && /BASLAT\.bat/.test(nyMetin) && !/<script/i.test(nyMetin));
+for (const d of ['kopru.js', 'BASLAT.bat', 'package.json']) fs.copyFileSync(path.join(KOK, d), path.join(GECICI, d));
+const pk = calis('araclar/paket.js', 'deneme-oyun'), pkKl = path.join(GECICI, 'dist', 'deneme-oyun');
+const pkDosya = fs.existsSync(pkKl) ? fs.readdirSync(pkKl).sort() : [];
+kontrol('paket: BASLAT.bat, köprü, ana sayfa ve Node.js yardım sayfası pakette; OKU.txt açılış ekranını anlatır', pk.status === 0 && ['BASLAT.bat', 'ana-sayfa.html', 'kopru.js', 'node-yok.html', 'oyun.html', 'oyun.json'].every(d => pkDosya.includes(d)) && /açılış ekranı/.test(fs.readFileSync(path.join(pkKl, 'OKU.txt'), 'utf8')), { kod: pk.status, dosyalar: pkDosya, hata: (pk.stderr || '').slice(0, 200) });
+
+// BASLAT.bat (yalnız Windows): yolunda boşluk, Türkçe harf, parantez, & ve % olan klasörde; sahte node.cmd ile ve node
+// hiç yokken. Hiçbir şey açılmaz: sahte node yalnız çağrıyı yazar, node yokken FABRIKA_TEST_ACMA sayfayı açtırmaz.
+const bat = fs.readFileSync(path.join(KOK, 'BASLAT.bat'), 'latin1');
+kontrol('BASLAT.bat yalnız ASCII ve CRLF; soru sormaz, kütüphane kurmaz, motoru ana sayfa kipinde açar', !/[^\x00-\x7f]/.test(bat) && !/[^\r]\n/.test(bat) && !/set \/p/i.test(bat) && !/npm/i.test(bat.replace(/^rem .*$/gim, '')) && /node kopru\.js --ana-sayfa --ac/.test(bat));
+if (process.platform === 'win32') {
+  const batKok = fs.mkdtempSync(path.join(os.tmpdir(), 'canli-bat-'));
+  const sys = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32'), stub = path.join(batKok, 'sahte-node');
+  fs.mkdirSync(stub);
+  fs.writeFileSync(path.join(stub, 'node.cmd'), '@echo ARGS %*> "%~dp0cagri.txt"\r\n@cd>> "%~dp0cagri.txt"\r\n@exit /b 0\r\n');
+  const batCalis = (kl, yol, ek) => {
+    const env = { ...process.env, ...ek }; delete env.PATH; delete env.Path; env.Path = yol;
+    return spawnSync('cmd.exe', ['/d', '/s', '/c', '""' + path.join(kl, 'BASLAT.bat') + '""'], { windowsVerbatimArguments: true, cwd: os.tmpdir(), env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 20000 });
+  };
+  // depo düzeni: yardım sayfası cekirdek/ içinde
+  const depo = path.join(batKok, 'Oyun (deneme) & 100% şarkı');
+  fs.mkdirSync(path.join(depo, 'cekirdek'), { recursive: true });
+  fs.copyFileSync(path.join(KOK, 'BASLAT.bat'), path.join(depo, 'BASLAT.bat'));
+  fs.copyFileSync(nodeYok, path.join(depo, 'cekirdek', 'node-yok.html'));
+  const v = batCalis(depo, stub + ';' + sys, {}), cagri = fs.existsSync(path.join(stub, 'cagri.txt')) ? fs.readFileSync(path.join(stub, 'cagri.txt'), 'utf8') : '';
+  kontrol('BASLAT.bat zor adlı klasörde (boşluk, ş, parantez, &, %) node bulunca soru sormadan "node kopru.js --ana-sayfa --ac" çalıştırır, klasörü doğru bulur', v.status === 0 && /ARGS kopru\.js --ana-sayfa --ac/.test(cagri) && cagri.includes(depo), { kod: v.status, cagri, cikti: (v.stdout + v.stderr).slice(0, 200) });
+  const y2 = batCalis(depo, sys, { FABRIKA_TEST_ACMA: '1' });
+  kontrol('BASLAT.bat node yokken düz bir ileti yazar, depodaki yardım sayfasını açacağını söyler, hatayla biter (pencere pause ile bekler)', y2.status === 1 && /Node\.js bulunamadi/.test(y2.stdout) && y2.stdout.includes('ACILACAK: "' + path.join(depo, 'cekirdek', 'node-yok.html') + '"') && /Press any key|Devam etmek/.test(y2.stdout), y2.stdout.slice(0, 400));
+  // paket düzeni: yardım sayfası BASLAT.bat'ın yanında
+  const y3 = fs.existsSync(pkKl) ? batCalis(pkKl, sys, { FABRIKA_TEST_ACMA: '1' }) : { status: -1, stdout: 'paket yok' };
+  kontrol('BASLAT.bat pakette node yokken paketin kendi yardım sayfasını bulur', y3.status === 1 && y3.stdout.includes('ACILACAK: "' + path.join(pkKl, 'node-yok.html') + '"'), y3.stdout.slice(0, 300));
+  fs.rmSync(batKok, { recursive: true, force: true });
+}
+
 fs.rmSync(GECICI, { recursive: true, force: true });
 process.exit(raporla(sonuc) ? 1 : 0);

@@ -25,8 +25,10 @@ Gerekenler: Node.js 18 veya üstü (https://nodejs.org, LTS sürümü).
 ### Yol 1: Çift tıkla, oyunu seç (Windows, komut yazmadan)
 
 1. Depoyu indir (GitHub'da **Code → Download ZIP**) ve klasörü aç.
-2. `BASLAT.bat` dosyasına çift tıkla. İlk seferde gereken kütüphane iner; bu bir kez olur.
-3. Tarayıcıda ana sayfa açılır: bir oyun salonu, her oyun bir kabin, ekranında oyunun canlı önizlemesi.
+2. `BASLAT.bat` dosyasına çift tıkla. Tarayıcıda bir açılış ekranı gelir; ilk seferde TikTok kütüphanesi orada iner
+   (yaklaşık bir dakika, bir kez olur). Beklerken **Beklemeden dene** ile oyunları deneyebilirsin. Node.js kurulu
+   değilse bunun yerine kısa bir yardım sayfası açılır.
+3. Sonra ana sayfa açılır: bir oyun salonu, her oyun bir kabin, ekranında oyunun canlı önizlemesi.
    - Sarı **Dene**: oyun sahte izleyicilerle açılır, hiçbir hesaba bağlanmaz, ad gerekmez.
    - Kırmızı **Yayın**: önce sağ üstteki bilete TikTok kullanıcı adını yaz, **Kaydet**'e (ya da Enter'a) bas;
      düğme yanar, basınca kendi canlı yayınına bağlanır. Köprü yayını yalnızca okur.

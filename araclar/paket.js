@@ -43,10 +43,11 @@ if (!fs.existsSync(html)) {
 const kopruYol = path.join(KOK, 'kopru.js');
 const baslatYol = path.join(KOK, 'BASLAT.bat');
 const anaSayfaYol = path.join(KOK, 'cekirdek', 'ana-sayfa.html'); // BASLAT.bat bunu açar: tek oyunlu ana sayfa
+const nodeYokYol = path.join(KOK, 'cekirdek', 'node-yok.html'); // Node.js kurulu değilse BASLAT.bat bu yardım sayfasını açar
 const kokPaket = JSON.parse(fs.readFileSync(path.join(KOK, 'package.json'), 'utf8').replace(/^﻿/, ''));
 const surum = (kokPaket.dependencies || {})['tiktok-live-connector'];
 if (!surum) dur('Kök package.json içinde tiktok-live-connector bağımlılığı bulunamadı.');
-for (const y of [kopruYol, baslatYol, anaSayfaYol]) if (!fs.existsSync(y)) dur('Eksik dosya: ' + y);
+for (const y of [kopruYol, baslatYol, anaSayfaYol, nodeYokYol]) if (!fs.existsSync(y)) dur('Eksik dosya: ' + y);
 
 const hedef = path.join(KOK, 'dist', ad);
 fs.mkdirSync(hedef, { recursive: true });
@@ -74,6 +75,7 @@ kopyala(html, 'oyun.html');
 kopyala(kopruYol, 'kopru.js');
 kopyala(baslatYol, 'BASLAT.bat');
 kopyala(anaSayfaYol, 'ana-sayfa.html');
+kopyala(nodeYokYol, 'node-yok.html');
 // Ana sayfadaki kartın adı ve tek cümlesi. vitrin ayarı pakete geçmez: paket her zaman kendi tek oyununu gösterir.
 yaz('oyun.json', JSON.stringify({ ad: gorunenAd, paket: paketAdi, aciklama: String(bilgi.aciklama || '') }, null, 2) + '\n');
 
@@ -103,13 +105,16 @@ const oku = [
   '',
   'Başlatma',
   '  1. BASLAT.bat dosyasına çift tıkla.',
-  '  2. İlk seferde kütüphane iner; internet gerekir. Bu bir kez olur.',
-  '  3. Tarayıcıda oyunun sayfası açılır. Siyah pencere oyunun motorudur: açık kalsın,',
-  '     kapatınca oyun durur.',
+  '  2. Tarayıcıda bir açılış ekranı gelir. İlk seferde TikTok kütüphanesi orada iner',
+  '     (yaklaşık bir dakika, internet gerekir; bir kez olur). Beklerken "Beklemeden dene"',
+  '     ile oyunu sahte izleyicilerle açabilirsin.',
+  '  3. Sonra tek kabinli ana sayfa açılır: oyunun canlı önizlemesi ve iki düğme. Siyah pencere',
+  '     oyunun motorudur: açık kalsın, kapatınca oyun durur.',
   '  4. Denemek için sarı "Dene" düğmesine bas: TikTok\'a bağlanmadan, sahte izleyicilerle açılır.',
   '  5. Yayında oynatmak için sağ üstteki bilete TikTok kullanıcı adını yaz ve "Kaydet"e',
-  '     (ya da Enter\'a) bas. Kırmızı "Yayın" düğmesi yanar; ona bas. Yayın açıksa yorumlar',
-  '     oyuna akmaya başlar. "Durdur" oyunu kapatır.',
+  '     (ya da Enter\'a) bas. Kırmızı "Yayın" düğmesi yanar; ona bas. Oyun sayfasındaki',
+  '     Bağlantı kutusu "Canlı" yazınca yorumlar akıyor; "Yayın yok" yazıyorsa TikTok\'ta',
+  '     yayın henüz açık değil. "Durdur" oyunu kapatır.',
   '     Oyundan ana sayfaya dönmek için masanın üstündeki "← Oyunlar" bağlantısına bas.',
   '',
   'Yayına alma',
@@ -123,7 +128,9 @@ const oku = [
   '  yasaklı kelime listesini doldur (ikisi de oyundaki panelde).',
   '',
   'Sorun olursa',
-  '  - "Node.js bulunamadı": Node.js kur, BASLAT.bat dosyasını yeniden aç.',
+  '  - "Node.js bulunamadı": tarayıcıda açılan yardım sayfasındaki adımları izle',
+  '    (https://nodejs.org, LTS sürümü), sonra BASLAT.bat dosyasına yeniden çift tıkla.',
+  '  - Açılış ekranı "İndirilemedi" diyor: internet bağlantını kontrol et, "Yeniden dene"ye bas.',
   '  - 403 hatası: bu klasörde komut satırı aç ve şunu çalıştır:',
   '      npm install tiktok-live-connector@latest',
   '  - "Zaten açık": BASLAT.bat iki kez açıldı. Tarayıcıdaki sayfayı kullan.',

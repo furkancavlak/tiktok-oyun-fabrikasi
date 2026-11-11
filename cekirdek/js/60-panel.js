@@ -128,8 +128,20 @@ const KISI_SINIR = 12; // listede en çok kaç satır (gerisi aramayla bulunur):
 const sayi = n => Math.round(n).toLocaleString('tr-TR');
 const yaz = (id, v) => { const e = $(id); v = String(v); if (e.textContent !== v)
   e.textContent = v; };
+// Bağlantı hücresi: köprü durumunu bildiriyorsa (Yayin.kopruBaglanti) onu olduğu gibi söyler; "Canlı" yalnız TikTok'a
+// gerçekten bağlıyken. Durum bildirmeyen eski köprülerde köprüye bağlı olmak "Canlı" sayılır (eski davranış).
+// Hücre dardır: ana yazılar kısa tutulur, ayrıntı alt satırda.
+const KOPRU_HUCRE = {
+  deneme: ['deneme', 'Deneme', 'motordan sahte izleyici'],
+  baglaniyor: ['bekliyor', 'Bağlanıyor', 'TikTok\'a bağlanılıyor'],
+  bekliyor: ['bekliyor', 'Yayın yok', 'yayın henüz açık değil'],
+  durdu: ['koptu', 'Durdu', 'oyun ana sayfadan durduruldu'],
+  hata: ['koptu', 'Bağlanamadı', 'Yayın sekmesine bak']
+};
 function durumAl() {
   const ws = Yayin.ws;
+  if (ws && ws.readyState === 1 && KOPRU_HUCRE[Yayin.kopruBaglanti])
+    return KOPRU_HUCRE[Yayin.kopruBaglanti];
   if (ws && ws.readyState === 1)
     return ['canli', 'Canlı', sayi(Yayin.alinan) + ' olay alındı'];
   if (ws)

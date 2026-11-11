@@ -213,7 +213,8 @@ input[type=range]{accent-color:var(--vurgu);flex:1;min-width:80px}
 .kisi-liste li.gizli .ad::after{content:"adı gizli";margin-left:7px;font-style:normal;font-size:10px;font-weight:700;letter-spacing:.08em;
   text-transform:uppercase;color:var(--serin)}
 .eylem{display:flex;gap:4px}
-.bos-satir{padding:14px 8px;color:var(--soluk);font-size:12.5px}
+/* boş liste yazısı satır ızgarasına girmez (yoksa 24 px'lik ilk sütuna sıkışıp kelime kelime kırılıyordu) */
+.bos-satir,.kisi-liste li.bos-satir{display:block;padding:14px 8px;color:var(--soluk);font-size:12.5px}
 
 /* olay akışı */
 .akis-dur{font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;background:var(--vurgu);color:var(--murekkep);white-space:nowrap}

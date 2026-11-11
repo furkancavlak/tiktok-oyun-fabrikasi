@@ -223,7 +223,8 @@ input[type=range]{accent-color:var(--vurgu);flex:1;min-width:80px}
 .kisi-liste li.gizli .ad::after{content:"adı gizli";margin-left:7px;font-style:normal;font-size:10px;font-weight:700;letter-spacing:.08em;
   text-transform:uppercase;color:var(--serin)}
 .eylem{display:flex;gap:4px}
-.bos-satir{padding:14px 8px;color:var(--soluk);font-size:12.5px}
+/* boş liste yazısı satır ızgarasına girmez (yoksa 24 px'lik ilk sütuna sıkışıp kelime kelime kırılıyordu) */
+.bos-satir,.kisi-liste li.bos-satir{display:block;padding:14px 8px;color:var(--soluk);font-size:12.5px}
 
 /* olay akışı */
 .akis-dur{font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;background:var(--vurgu);color:var(--murekkep);white-space:nowrap}
@@ -3117,10 +3118,13 @@ setInterval(() => { otoAdim(0.1); muzik.planla(document.hidden ? 1.6 : 0.2); }, 
  * siraSakla / siraOku: jeton sıralamasını tarayıcıda 3 saat saklar · ayarOku / ayarYaz: balon, süzgeç ve
  * yayıncının çıkardığı / adını gizlediği izleyiciler
  * Bu dosya TikTok'a doğrudan bağlanmaz ve hiçbir kimlik bilgisi tutmaz.
+ * kopruBaglanti: köprünün durum iletisindeki "baglanti" alanı (deneme · baglaniyor · bekliyor · bagli · durdu · hata);
+ * masadaki Bağlantı hücresi bunu gösterir. Alanı yollamayan eski köprülerde null kalır, hücre eskisi gibi davranır.
  */
 const KOPRU = typeof window.OYUN_KOPRU === 'string' ? window.OYUN_KOPRU : null; // sayfayı köprü programı açtıysa dolu gelir
+const KOPRU_BAGLANTI = ['deneme', 'baglaniyor', 'bekliyor', 'bagli', 'durdu', 'hata'];
 const Yayin = {
-  ws: null, alinan: 0, yeniden: null,
+  ws: null, alinan: 0, yeniden: null, kopruBaglanti: null,
   cevir(m) {
     if (!m || typeof m !== 'object')
       return null;
@@ -3180,6 +3184,8 @@ const Yayin = {
       return;
     } for (const tek of Array.isArray(m) ? m : [m]) {
       if (tek && tek.tip === 'kopru') {
+        if (KOPRU_BAGLANTI.includes(tek.baglanti))
+          this.kopruBaglanti = tek.baglanti;
         bagDurum('acik', tek.ileti || '');
         continue;
       }
@@ -3195,6 +3201,7 @@ const Yayin = {
       if (this.ws !== ws)
         return;
       this.ws = null;
+      this.kopruBaglanti = null;
       $('bag-dugme').textContent = 'Bağlan';
       if (this.surekli) {
         bagDurum('hata', 'Köprüyle bağlantı koptu. 3 saniyede bir yeniden deniyorum.');
@@ -3246,7 +3253,9 @@ function ayarYaz() { try {
   localStorage.setItem(AYAR_SAKLA, JSON.stringify(ayar));
 }
 catch (e) { } }
-function bagDurum(sinif, ileti) { const r = $('bag-rozet'); r.className = 'rozet' + (sinif ? ' ' + sinif : ''); r.textContent = sinif === 'acik' ? 'Bağlı' : sinif === 'hata' ? 'Bağlanamadı' : 'Bağlı değil'; $('bag-ileti').textContent = ileti || ''; }
+// Rozet köprüye bağlı olunca da TikTok'un durumunu söyler (köprü bildirdiyse): "Bağlı" yalnız yayından olay gelirken.
+const ROZET_YAZI = { deneme: 'Deneme', baglaniyor: 'Bağlanıyor', bekliyor: 'Yayın bekleniyor', bagli: 'Bağlı', durdu: 'Durdu', hata: 'TikTok bağlı değil' };
+function bagDurum(sinif, ileti) { const r = $('bag-rozet'); r.className = 'rozet' + (sinif ? ' ' + sinif : ''); r.textContent = sinif === 'acik' ? (ROZET_YAZI[Yayin.kopruBaglanti] || 'Bağlı') : sinif === 'hata' ? 'Bağlanamadı' : 'Bağlı değil'; $('bag-ileti').textContent = ileti || ''; }
 
 /* ── cekirdek/js/60-panel.js ── */
 /* PANEL VE AÇILIŞ — sayfa yazıları, yayın masası (panel), sahnenin boyutlandırılması, oyunun başlatılması.
@@ -3379,8 +3388,20 @@ const KISI_SINIR = 12; // listede en çok kaç satır (gerisi aramayla bulunur):
 const sayi = n => Math.round(n).toLocaleString('tr-TR');
 const yaz = (id, v) => { const e = $(id); v = String(v); if (e.textContent !== v)
   e.textContent = v; };
+// Bağlantı hücresi: köprü durumunu bildiriyorsa (Yayin.kopruBaglanti) onu olduğu gibi söyler; "Canlı" yalnız TikTok'a
+// gerçekten bağlıyken. Durum bildirmeyen eski köprülerde köprüye bağlı olmak "Canlı" sayılır (eski davranış).
+// Hücre dardır: ana yazılar kısa tutulur, ayrıntı alt satırda.
+const KOPRU_HUCRE = {
+  deneme: ['deneme', 'Deneme', 'motordan sahte izleyici'],
+  baglaniyor: ['bekliyor', 'Bağlanıyor', 'TikTok\'a bağlanılıyor'],
+  bekliyor: ['bekliyor', 'Yayın yok', 'yayın henüz açık değil'],
+  durdu: ['koptu', 'Durdu', 'oyun ana sayfadan durduruldu'],
+  hata: ['koptu', 'Bağlanamadı', 'Yayın sekmesine bak']
+};
 function durumAl() {
   const ws = Yayin.ws;
+  if (ws && ws.readyState === 1 && KOPRU_HUCRE[Yayin.kopruBaglanti])
+    return KOPRU_HUCRE[Yayin.kopruBaglanti];
   if (ws && ws.readyState === 1)
     return ['canli', 'Canlı', sayi(Yayin.alinan) + ' olay alındı'];
   if (ws)
