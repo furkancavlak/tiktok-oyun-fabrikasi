@@ -54,6 +54,7 @@ const hedef = path.join(KOK, 'dist', ad);
 fs.mkdirSync(hedef, { recursive: true });
 
 const yazilan = [];
+const { zipYaz } = require('./zip');
 function kopyala(kaynak, ad2) {
   fs.copyFileSync(kaynak, path.join(hedef, ad2));
   yazilan.push(ad2);
@@ -111,7 +112,9 @@ const oku = [
   '  2. TikTok LIVE Studio erişimi olan bir hesap.',
   '',
   'Başlatma',
-  '  1. Windows: BASLAT.bat dosyasına çift tıkla. Mac: BASLAT.command dosyasına çift tıkla.',
+  '  1. Windows: BASLAT.bat dosyasına çift tıkla.',
+  '     Mac: BASLAT.command dosyasına çift tıkla; açılmazsa Terminal\'i aç, cd ile bu klasöre gir ve',
+  '     sh BASLAT.command yaz (iki yol da aynı işi yapar).',
   '     Linux: terminalde bu klasöre gir ve sh BASLAT.sh yaz.',
   '     Mac ilk açılışta: internetten inen bir betiği macOS ilk seferde engelleyebilir. macOS engellerse',
   '     Sistem Ayarları > Gizlilik ve Güvenlik altında "Yine de Aç" düğmesini ara (eski sürümlerde dosyaya',
@@ -153,5 +156,10 @@ const oku = [
 yaz('OKU.txt', oku);
 
 console.log('\nPaket hazır: ' + hedef + '\n');
+// Paketin ZIP'i: Mac'e çalıştırma izni kaybolmadan gitsin diye BASLAT.command ve BASLAT.sh arşivde 0755 saklanır
+// (Windows'ta klasörü Explorer ile sıkıştırınca bu izin kaybolur). Yayıncıya bu ZIP verilir.
+const zipYolu = path.join(KOK, 'dist', ad + '.zip');
+zipYaz(zipYolu, hedef, ad, { calistirilabilir: ['BASLAT.command', 'BASLAT.sh'] });
 for (const y of yazilan) console.log('  yazıldı  ' + y);
+console.log('  ZIP      ' + path.relative(KOK, zipYolu) + '  (yayıncıya bunu ver: Mac başlatıcısının çalıştırma izni içinde saklı)');
 console.log('\nToplam ' + yazilan.length + ' dosya. Hiçbir şey silinmedi; yeniden çalıştırırsan üstüne yazılır.\n');

@@ -38,6 +38,10 @@ li{display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px;font-size:15.5
 li::before{content:counter(a);width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:#22143a;color:var(--krem);font:400 14px/1 var(--baslik)}
 li b{font-weight:800}
 .not{margin:18px 0 0;font-size:13.5px;color:#5c4f7a}
+section{margin:0 0 16px}
+section .not{margin:10px 0 0}
+ol.son{margin-top:8px}
+a{color:#5d3a86}
 </style>
 </head>
 <body>
@@ -46,9 +50,23 @@ li b{font-weight:800}
   <div class="et">TikTok Oyun Fabrikası</div>
   <h1>Önce Node.js gerekli</h1>
   <p>Node.js, oyunların motorunu çalıştıran ücretsiz bir programdır. Bir kez kurulur, sonra hiç uğraştırmaz.</p>
-  <a class="git" href="https://nodejs.org" target="_blank" rel="noopener">nodejs.org'u aç <small>ücretsiz</small></a>
-  <ol>
-    <li><span>Sitede <b>LTS</b> yazan sürümü indir ve kur. Kurulumda her şeyi olduğu gibi bırakıp <b>İleri</b>'ye basabilirsin.</span></li>
+  <section id="windows">
+    <p><b>En kolayı (Windows):</b> hiçbir şey kurmadan çalışan hazır paketi indir. ZIP'i bir klasöre çıkar, içindeki <b>BASLAT.bat</b> dosyasına çift tıkla.</p>
+    <a class="git" id="hazir-paket" href="https://github.com/furkancavlak/tiktok-oyun-fabrikasi/releases" target="_blank" rel="noopener">Hazır paketi indir <small>kurulum yok</small></a>
+    <p><b>Ya da Node.js'i kur:</b></p>
+    <ol>
+      <li><span><a id="msi" href="https://nodejs.org/dist/v24.15.0/node-v24.15.0-x64.msi">Node.js 24.15.0 kurulum dosyasını indir</a>. node.exe ya da Standalone Binary değil, .msi uzantılı kurulum dosyası.</span></li>
+      <li><span>İnen .msi dosyasını aç ve kur. Kurulumda her şeyi olduğu gibi bırakıp <b>İleri</b>'ye basabilirsin.</span></li>
+    </ol>
+    <p class="not">Bağlantı açılmazsa <a href="https://nodejs.org" target="_blank" rel="noopener">nodejs.org</a> adresinden <b>LTS</b> sürümünün Windows kurulum dosyasını (.msi) indir.</p>
+  </section>
+  <section id="diger">
+    <a class="git" href="https://nodejs.org" target="_blank" rel="noopener">nodejs.org'u aç <small>ücretsiz</small></a>
+    <ol>
+      <li><span>Sitede <b>LTS</b> yazan sürümün kurulum dosyasını indir ve kur (Mac'te .pkg; Linux'ta dağıtımının paket yöneticisi).</span></li>
+    </ol>
+  </section>
+  <ol class="son">
     <li><span id="yeniden">Kurulum bitince <b>BASLAT.bat</b> (Windows), <b>BASLAT.command</b> (Mac) ya da <b>BASLAT.sh</b> (Linux) dosyasını yeniden aç.</span></li>
     <li><span>Yine bu sayfa açılırsa bilgisayarı bir kez yeniden başlat, sonra aynı dosyayı tekrar aç.</span></li>
   </ol>
@@ -57,8 +75,10 @@ li b{font-weight:800}
 <script>
 (function () { // Windows: BASLAT.bat, Mac: BASLAT.command, Linux: BASLAT.sh; bilinmezse yukarıdaki üçlü yazı kalır.
   var p = String(window.FABRIKA_PLATFORM || (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '');
-  var ad = /mac/i.test(p) ? ['BASLAT.command', ' dosyasına yeniden çift tıkla.'] : /win/i.test(p) ? ['BASLAT.bat', ' dosyasına yeniden çift tıkla.']
+  var ad = /mac/i.test(p) ? ['BASLAT.command', ' dosyasına yeniden çift tıkla; açılmazsa Terminal\'de klasöre girip sh BASLAT.command yaz.'] : /win/i.test(p) ? ['BASLAT.bat', ' dosyasına yeniden çift tıkla.']
     : /linux|x11/i.test(p) && !/android/i.test(p) ? ['BASLAT.sh', ' dosyasını yeniden çalıştır.'] : null;
+  // Windows'ta hazır paket ve .msi, Mac / Linux'ta normal kurulum gösterilir; emin olunamazsa ikisi de görünür.
+  if (ad) document.getElementById(ad[0] === 'BASLAT.bat' ? 'diger' : 'windows').hidden = true;
   if (!ad) return;
   var y = document.getElementById('yeniden'), b = document.createElement('b');
   b.textContent = ad[0];

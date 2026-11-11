@@ -105,6 +105,21 @@ buna izin verip vermediği denenmedi.
 | LIVE Studio'da oyun görünmüyor | Tarayıcı kaynağı yerine pencere yakalama kullan. Pencerenin küçültülmediğinden emin ol. |
 | Oyun açık ama yorumlar gelmiyor | Masanın üstündeki Bağlantı kutusuna bak; ayrıntı Yayın sekmesinde yazar. Yayın açıksa ve yorum yazılıyorsa kütüphaneyi güncelle (403 satırı). |
 
+## Bağlanamıyorsa
+
+**Yayın**'a basınca TikTok'a bağlanılamazsa motor nedeni düz bir cümleyle yazar: ana sayfadaki "Şu an açık" şeridinde
+ve oyunun **Yayın** sekmesinde aynı cümle görünür. Motor her durumda kendisi yeniden dener; yayın yok ve oda bulunamadı durumlarında en geç 30 saniyede bir. Beklemek istemezsen ana sayfada **Yayın**'a yeniden bas: hemen dener. Kütüphanenin İngilizce
+asıl iletisi siyah pencerede ("TikTok bağlantı hatası (…)" satırı) kalır; sorun sürerse o pencerenin ekran görüntüsünü gönder.
+
+| Ekranda | Ne demek, ne yapmalı |
+| --- | --- |
+| "@ad şu an canlı yayında değil … yayın açılınca kendiliğinden bağlanır" | Yayın açık değil. TikTok'ta yayını başlat; bir şey yapmana gerek yok. Bağlantı kutusu **Yayın yok** der. |
+| "Yayın odası bulunamadı" ya da "@ad adında bir TikTok hesabı bulunamadı" | En sık görülen durum. Ad yanlış yazılmış olabilir, hesap hiç yayın açmamış olabilir ya da TikTok bu ağa yanıt vermiyordur. Ekrandaki adını değil, profil adresindeki adı `@` olmadan yaz. Ad doğruysa yayın henüz açılmamıştır. |
+| "imza hizmeti şu an isteği geri çevirdi ya da yanıt vermiyor" | Kütüphane TikTok'a bağlanmak için başka bir şirketin imza hizmetini kullanır; o hizmet şu an yoğun ya da kapalı. Senin hatan değil. Birkaç dakika bekle; motor kendisi yeniden dener. |
+| "internet bağlantısı yok ya da çok yavaş" | İnterneti kontrol et (ad çözümleme hatası, zaman aşımı). Bağlantı gelince motor kendisi bağlanır. |
+| "doğrulama (captcha) istedi ya da bu ağdan / bölgeden engelledi" | TikTok bu ağdan gelen isteği durdurdu. Biraz sonra yeniden dene ya da başka bir ağdan (ör. telefonun interneti) bağlan. |
+| "TikTok'a bağlanılamadı (…)" | Yukarıdakilerden biri değil; parantezde kütüphanenin kısa nedeni yazar. Siyah penceredeki satırın ekran görüntüsünü gönder. |
+
 ## Doğrulama durumu (10 Kasım 2026)
 
 Bu tablo neyin denendiğini dürüstçe gösterir. "Denenmedi" yazan adımların çalışacağı varsayılıyor, doğrulanmadı.

@@ -700,6 +700,7 @@ fs.appendFileSync('kurulum-sayac2.txt',mod[0]);fs.writeFileSync('cocuk.pid',Stri
 if(mod==='asili'){const t=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});fs.writeFileSync('torun.pid',String(t.pid));setInterval(()=>{},1000);}
 else if(mod==='eksik'){process.exit(0);}
 else if(mod==='izin'){console.error("npm ERR! code EACCES\\nnpm ERR! Error: EACCES: permission denied, mkdir 'node_modules'");process.exit(1);}
+else if(mod==='yavas'){const t=spawn(process.execPath,['-e',"setTimeout(()=>{const fs=require('fs'),p=require('path'),k=p.join('node_modules','tiktok-live-connector');fs.mkdirSync(k,{recursive:true});fs.writeFileSync(p.join(k,'index.js'),'module.exports={}');},7000)"],{detached:true,stdio:'ignore',windowsHide:true});fs.writeFileSync('torun.pid',String(t.pid));t.on('exit',()=>process.exit(0));}
 else if(mod==='npmyok'){console.error("'npm' is not recognized as an internal or external command,");process.exit(1);}
 else{console.error('npm ERR! network (taklit)');process.exit(1);}`);
     // Motor kapanışı: Windows'ta sinyal yollanamadığı için motora önden yüklenen küçük betik "dur" satırında motorun
@@ -910,6 +911,175 @@ else{console.error('npm ERR! network (taklit)');process.exit(1);}`);
       kontrol('Boş ya da hiç olmayan Host başlığı 403 alır (/api/oyunlar, /durum)', bos.every(x => /^HTTP\/1\.1 403/.test(x)), bos);
       m.kill('SIGKILL'); await bekle(300);
     }
+    // ==== DENETİM 3 (N1–N5, hazır paket) — başı ====
+    // N1: npm yalnız köprünün klasörüne kurar; üst klasördeki "workspaces" package.json'u onu çekemez (ağ gerekmez)
+    {
+      const ust = path.join(GECICI, 'n1-calisma-alani'), kl = path.join(ust, 'oyun-klasoru');
+      fs.mkdirSync(ust); fs.writeFileSync(path.join(ust, 'package.json'), JSON.stringify({ name: 'baska-proje', private: true, workspaces: ['*'] }));
+      fs.mkdirSync(kl);
+      const yeniKl = anaKur('n1-gecici'); // kopru.js + ana sayfa + oyun, sonra çalışma alanının içine taşınır
+      for (const d of fs.readdirSync(yeniKl)) fs.cpSync(path.join(yeniKl, d), path.join(kl, d), { recursive: true });
+      const bayrak = K.KURULUM_KOMUTU.split(' ').filter(x => /^--(prefix|workspaces)/.test(x) || x === '.');
+      const npmVar = cp.spawnSync('npm -v', { shell: true, encoding: 'utf8' }).status === 0;
+      const onek = a => npmVar ? cp.spawnSync('npm prefix ' + a.join(' '), { cwd: kl, shell: true, encoding: 'utf8' }).stdout.trim() : '';
+      const duz = onek([]), bizim = onek(bayrak);
+      kontrol('N1: üst klasörde "workspaces" varken düz npm üst klasöre kurardı; motorun bayraklarıyla (--prefix . --workspaces=false) kurulum yeri oyunun klasörü', !npmVar || (path.resolve(duz).toLowerCase() === path.resolve(ust).toLowerCase() && path.resolve(bizim).toLowerCase() === path.resolve(kl).toLowerCase()), { npmVar, duz, bizim, bayrak });
+      // Gerçek motor, sahte npm ile: komutu ve klasörü kaydeder; üst klasöre hiçbir şey yazılmaz
+      const sahteNpm = path.join(GECICI, 'n1-sahte-npm'); fs.mkdirSync(sahteNpm);
+      fs.writeFileSync(path.join(sahteNpm, 'npm.cmd'), '@echo ARGS %*> "%~dp0cagri.txt"\r\n@cd>> "%~dp0cagri.txt"\r\n@exit /b 1\r\n');
+      const sys = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32'), env = { ...process.env };
+      for (const a of Object.keys(env)) if (a.toUpperCase() === 'PATH') delete env[a];
+      env.PATH = sahteNpm + path.delimiter + sys;
+      if (process.platform === 'win32') {
+        const m = motor(kl, [], env); await acik(kp);
+        await bekleKosul(() => oku(sahteNpm, 'cagri.txt'), 6000); await bekle(300);
+        const cagri = oku(sahteNpm, 'cagri.txt');
+        kontrol('N1: motor kurulumu tam olarak "npm install --omit=dev --no-audit --no-fund --prefix . --workspaces=false" ile, oyunun kendi klasöründe başlatır', /^ARGS install --omit=dev --no-audit --no-fund --prefix \. --workspaces=false\s*$/m.test(cagri) && cagri.split(/\r?\n/)[1].trim().toLowerCase() === path.resolve(kl).toLowerCase(), cagri);
+        m.kill('SIGKILL'); await bekle(300);
+      }
+      if (npmVar) { // gerçek npm, ağsız ve kuru: klasör dışına bir şey yazmaz
+        cp.spawnSync('npm install --dry-run --offline ' + K.KURULUM_KOMUTU.replace(/^npm install /, ''), { cwd: kl, shell: true, encoding: 'utf8', timeout: 90000 });
+        const ustIc = fs.readdirSync(ust).sort();
+        kontrol('N1: gerçek npm (--dry-run --offline, motorun bayraklarıyla) üst projeye dokunmaz: orada node_modules ya da package-lock.json yok', JSON.stringify(ustIc) === JSON.stringify(['oyun-klasoru', 'package.json']), ustIc);
+      }
+      // Sözcük: package.json var ama kütüphane yalnız devDependencies altında
+      const dk = anaKur('n1-dev'); fs.writeFileSync(path.join(dk, 'package.json'), JSON.stringify({ private: true, devDependencies: { 'tiktok-live-connector': '^2.5.0' } }));
+      const m2 = motor(dk, ['--kurulum-betigi', T2]); await acik(kp);
+      await bekleKosul(async () => (await durumA()).kutuphane.durum === 'hata', 5000);
+      const dn = (await durumA()).kutuphane.neden;
+      kontrol('N1: package.json varken "dosya yok" denmez; kütüphanenin bağımlılık olarak istenmediği söylenir', /istemiyor/.test(dn) && !/dosyası yok/.test(dn), dn);
+      m2.kill('SIGKILL'); await bekle(300);
+    }
+    // N2: motor kurulum sırasında sert kapatılınca yeniden açılan motor ikinci kurulumu başlatmaz, öncekinin bitmesini bekler
+    {
+      const kl = anaKur('n2-kilit'); fs.writeFileSync(path.join(kl, 'kurulum-mod2.txt'), 'yavas');
+      const m1 = motor(kl, ['--kurulum-betigi', T2]); await acik(kp);
+      // Kilit, kurulumun alt sürecini de (npm gibi) kaydedene kadar beklenir; sonra motor sert kapatılır
+      await bekleKosul(() => { try { return (JSON.parse(oku(kl, '.kurulum-kilidi.json')).pidler || []).length > 0; } catch (e) { return false; } }, 6000);
+      const kurucu = +oku(kl, 'torun.pid');
+      m1.kill('SIGKILL'); await bekleKosul(() => m1.exitCode !== null || m1.signalCode !== null, 5000); await bekle(500);
+      const sagKurucu = yasiyor(kurucu);
+      const m2 = motor(kl, ['--kurulum-betigi', T2]); await acik(kp);
+      await bekle(800);
+      const d2 = await durumA(), sayac = oku(kl, 'kurulum-sayac2.txt');
+      await bekleKosul(async () => (await durumA()).kutuphane.durum === 'hazir', 20000);
+      const d3 = await durumA();
+      kontrol('N2: motor kurulum sürerken sert kapatıldı (kurulum sürüyor); yeniden açılan motor ikinci kurulum başlatmaz, "iniyor" der, o bitince "hazir" olur', sagKurucu && d2.kutuphane.durum === 'iniyor' && sayac === 'y' && d3.kutuphane.durum === 'hazir' && oku(kl, 'kurulum-sayac2.txt') === 'y', { sagKurucu, d2: d2.kutuphane, sayac, d3: d3.kutuphane, son: oku(kl, 'kurulum-sayac2.txt'), kilit: oku(kl, '.kurulum-kilidi.json') });
+      m2.kill('SIGKILL'); if (yasiyor(kurucu)) try { process.kill(kurucu); } catch (e) { } await bekle(300);
+      // Bayat kilit (süreç yok): yok sayılır, yeni kurulum başlar
+      const kb = anaKur('n2-bayat'); fs.writeFileSync(path.join(kb, 'kurulum-mod2.txt'), 'eksik');
+      fs.writeFileSync(path.join(kb, '.kurulum-kilidi.json'), JSON.stringify({ pid: 999999, basladi: Date.now() }));
+      const m3 = motor(kb, ['--kurulum-betigi', T2]); await acik(kp);
+      await bekleKosul(() => oku(kb, 'kurulum-sayac2.txt'), 5000);
+      kontrol('N2: süreci olmayan (bayat) kilit yok sayılır, kurulum başlar', oku(kb, 'kurulum-sayac2.txt') === 'e', oku(kb, 'kurulum-sayac2.txt'));
+      m3.kill('SIGKILL'); await bekle(300);
+    }
+    // N3: her kipte HTML yanıtları yalnız aynı kökenden çerçevelenebilir; başka sitenin iframe'i boş kalır
+    {
+      const basliklar = async yol => new Promise(res => http.get({ host: '127.0.0.1', port: kp, path: yol, headers: { host: '127.0.0.1:' + kp } }, y => { y.resume(); res({ kod: y.statusCode, xfo: y.headers['x-frame-options'], csp: y.headers['content-security-policy'] }); }).on('error', () => res({ kod: 0 })));
+      const yabanciCerceve = async src => {
+        const sv = http.createServer((q, s) => { s.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); s.end('<!doctype html><iframe id="f" src="' + src + '"></iframe>'); });
+        await new Promise(r => sv.listen(P + 11, '127.0.0.1', r));
+        const c = await b.newContext(), p = await c.newPage(); await p.goto('http://127.0.0.1:' + (P + 11) + '/'); await bekle(2500);
+        const f = p.frames().find(x => x !== p.mainFrame());
+        const icerik = f ? await f.evaluate(() => !!(window.CanliOyun || document.getElementById('acilis'))).catch(() => false) : false;
+        const sonuc = { url: f ? f.url() : 'yok', icerik };
+        await c.close(); await new Promise(r => sv.close(r));
+        return sonuc;
+      };
+      const kl = path.join(GECICI, 'n3-komut'); fs.mkdirSync(kl); fs.copyFileSync(path.join(KOK, 'kopru.js'), path.join(kl, 'kopru.js')); fs.copyFileSync(OYUN_HTML, path.join(kl, 'oyun.html'));
+      let c = baslat(kl, ['--deneme', '--port', String(kp)]); await bekle(700); await acik(kp);
+      const k1 = await basliklar('/'), kc = await yabanciCerceve('http://127.0.0.1:' + kp + '/');
+      c.kill('SIGKILL'); await bekle(400);
+      const ak = anaKur('n3-ana'); c = baslat(ak, ['--ana-sayfa', '--port', String(kp)]); await acik(kp);
+      const a1 = await basliklar('/'), a2 = await basliklar('/onizleme/a-oyun/');
+      await gonder(kp, '/api/baslat', { oyun: 'a-oyun', kip: 'deneme' }); await bekle(300);
+      const a3 = await basliklar('/oyun/a-oyun/'), ac = await yabanciCerceve('http://127.0.0.1:' + kp + '/oyun/a-oyun/');
+      // Ana sayfanın kendi önizlemeleri (aynı köken) yine açılır
+      const oc = await b.newContext({ viewport: { width: 1366, height: 768 } }), op = await sayfaAc(oc, 'http://127.0.0.1:' + kp + '/'); await bekle(3000);
+      const onz = op.frames().find(f => /\/onizleme\/a-oyun\//.test(f.url()));
+      const onzIc = onz ? await onz.evaluate(() => !!window.CanliOyun).catch(() => false) : false;
+      await oc.close(); c.kill('SIGKILL'); await bekle(300);
+      const iyi = h => h.kod === 200 && h.xfo === 'SAMEORIGIN' && h.csp === "frame-ancestors 'self'";
+      kontrol('N3: komut satırı ve ana sayfa kipinde her HTML yanıtı X-Frame-Options: SAMEORIGIN ve frame-ancestors \'self\' taşır', [k1, a1, a2, a3].every(iyi), { k1, a1, a2, a3 });
+      kontrol('N3: başka bir sitenin iframe\'i oyun sayfasını (iki kipte de) açamaz; ana sayfanın kendi önizlemeleri açılır', !kc.icerik && !ac.icerik && onzIc, { kc, ac, onzIc });
+    }
+    // N5 + adres alanı: görünmez / biçim karakterleri atılır, temizlenince boş kalan ad düşer
+    {
+      const g = ad => (K.cevir('gift', { uniqueId: 'a', giftId: '7', giftName: ad, giftType: 2, diamondCount: 1 }) || {}).hediye;
+      const s = { arap: g('Ro\u061Cse\u2060'), dolgu: g('\u3164\u3164 \u115F\uFFA0'), ansi: g('\u001b[31mKırmızı\u001b[0m'), bom: g('\uFEFFGül\u2800') };
+      kontrol('N5: köprü hediye adından U+061C, U+2060, U+FEFF, dolgu harflerini (U+3164, U+115F, U+FFA0, U+2800) ve ANSI kaçışlarını atar; boş kalan ad düşer', s.arap.ad === 'Rose' && JSON.stringify(s.dolgu) === '{"id":"7"}' && s.ansi.ad === 'Kırmızı' && s.bom.ad === 'Gül', s);
+      const kl = path.join(GECICI, 'adres-alani'); fs.mkdirSync(kl); fs.copyFileSync(path.join(KOK, 'kopru.js'), path.join(kl, 'kopru.js')); fs.copyFileSync(OYUN_HTML, path.join(kl, 'oyun.html'));
+      let c = baslat(kl, ['--deneme', '--port', String(kp)]); await bekle(700); await acik(kp);
+      const pc = await b.newContext({ viewport: { width: 1280, height: 800 } }), pp = await sayfaAc(pc, 'http://127.0.0.1:' + kp + '/'); await bekle(1500);
+      const once = await pp.evaluate(() => document.getElementById('bag-adres').value);
+      c.kill('SIGKILL'); await bekle(1500); c = baslat(kl, ['--deneme', '--port', String(kp)]); await acik(kp);
+      await pp.waitForFunction(o => CanliOyun.durum().bagli && document.getElementById('bag-adres').value !== o, once, { timeout: 15000 }).catch(() => { });
+      const yeni = (/Olay adresi: +(ws:\/\/\S+)/.exec(c.cikti) || [])[1], sonra = await pp.evaluate(() => ({ adres: document.getElementById('bag-adres').value, bagli: CanliOyun.durum().bagli }));
+      kontrol('Köprü yeniden açılınca sayfa yeni kimlikle bağlanır ve Yayın sekmesindeki adres alanı da yeni adresi gösterir', sonra.bagli && sonra.adres === yeni && sonra.adres !== once, { once, yeni, sonra });
+      await pc.close(); c.kill('SIGKILL'); await bekle(300);
+    }
+    // Hazır paket: paketin kendi node\node.exe'siyle çalışırken kütüphane eksikse "paket eksik" denir (npm aranmaz)
+    if (process.platform === 'win32') {
+      const kl = anaKur('paket-eksik'); fs.mkdirSync(path.join(kl, 'node'));
+      try { fs.linkSync(process.execPath, path.join(kl, 'node', 'node.exe')); } catch (e) { fs.copyFileSync(process.execPath, path.join(kl, 'node', 'node.exe')); }
+      const c = spawn(path.join(kl, 'node', 'node.exe'), ['kopru.js', '--ana-sayfa', '--port', String(kp)], { cwd: kl }); c.cikti = ''; c.stdout.on('data', d => c.cikti += d);
+      await acik(kp); await bekleKosul(async () => (await durumA()).kutuphane.durum === 'hata', 5000);
+      const pe = (await durumA()).kutuphane;
+      kontrol('Hazır paket: kendi Node\'uyla çalışan motorda kütüphane eksikse "Hazır paket eksik … ZIP\'i yeniden indir" der, "Node.js kurulumu eksik" demez, npm başlatmaz', pe.neden === K.KURULUM_NEDEN.paketEksik && !/Node\.js kurulumu/.test(pe.neden), pe);
+      c.kill('SIGKILL'); await bekle(300);
+    }
+    // Bağlanma hataları: kütüphanenin iki kuşağının hata sınıfları (taklit) → düz cümle ve durum; ham ileti konsolda
+    {
+      const ortak = "const E=require('events'),fs=require('fs');const tur=()=>fs.readFileSync('hata-tur.txt','utf8').trim();";
+      const v2 = ortak + "const ConnectError=class extends Error{};const UserOfflineError=class extends ConnectError{};const ConnectTimeoutError=class extends ConnectError{};const TikTokLiveError=class extends Error{};const SignAPIError=class extends TikTokLiveError{};const SignatureRateLimitError=class SignatureRateLimitError extends SignAPIError{};" +
+        "const InvalidResponseError=class extends Error{constructor(c,...a){super('['+c.routeId+'] '+a.join(' '));this.config=c;}};const InvalidResponseCompositeError=class extends Error{constructor(c,...a){super(...a);this.config=c;}};" +
+        "const yap=t=>({canli:()=>new UserOfflineError(\"The requested user isn't online :(\"),odaEngel:()=>new InvalidResponseCompositeError({routeId:'fetchRoomIdComposite',requestErrs:[new InvalidResponseError({routeId:'fetchRoomInfoFromHtmlRoute'},'Request failed with status code 403'),new InvalidResponseError({routeId:'fetchRoomIdFromEulerRoute'},'Failed to retrieve Room ID from Euler Stream, which was made as a last resort due to the previous methods failing. This happened due to a >>lack of permission<< for you to use Euler Stream')]},'Failed to retrieve Room ID from all sources.'),oda:()=>new InvalidResponseCompositeError({routeId:'fetchRoomIdComposite',requestErrs:[new InvalidResponseError({routeId:'fetchRoomInfoFromHtmlRoute'},'Failed to extract Room ID from HTML.'),new InvalidResponseError({routeId:'fetchRoomInfoFromApiLiveRoute'},'Failed to extract Room ID from API.')]},'Failed to retrieve Room ID from all sources.')," +
+        "imza:()=>new SignatureRateLimitError('[Rate Limited] (free) Too many connections started, try again later.'),imza2:()=>Object.assign(new SignAPIError('[Connect Error] Failed to connect to sign server. connect ECONNREFUSED 1.2.3.4:443'),{cause:Object.assign(new Error('connect ECONNREFUSED'),{code:'ECONNREFUSED'})})," +
+        "internet:()=>Object.assign(new Error('getaddrinfo ENOTFOUND www.tiktok.com'),{code:'ENOTFOUND'}),zaman:()=>new ConnectTimeoutError('Timed out whilst connecting to WebSocket')," +
+        "engel:()=>new InvalidResponseError({routeId:'fetchRoomInfoFromHtmlRoute'},'Failed to parse SIGI_STATE into JSON. Are you captcha-blocked by TikTok?'),diger:()=>new Error('Something odd happened')})[t]();" +
+        "const WebcastEvent={CHAT:'chat'};const ControlEvent={};class TikTokLiveConnection extends E{async connect(){throw yap(tur());}async disconnect(){}}module.exports={TikTokLiveConnection,WebcastEvent,ControlEvent};";
+      const v1 = ortak + "class ConnectError extends Error{};class UserOfflineError extends ConnectError{};class ExtractRoomIdError extends Error{};class InvalidResponseError extends Error{constructor(m,r){super(m);this.name='InvalidResponseError';this.requestErr=r;}};class SignatureError extends InvalidResponseError{constructor(m,r){super(m,r);this.name='SignatureError';}};" +
+        "const yap=t=>({canli:()=>new UserOfflineError('LIVE has ended'),oda1:()=>new ExtractRoomIdError('Failed to retrieve room_id from page source. User might be offline.'),engel:()=>new ExtractRoomIdError('Failed to retrieve room_id from page source. Your IP or country might be blocked by TikTok.')," +
+        "imza:()=>new SignatureError('Failed to sign request: Request failed with status code 429; URL: https://www.tiktok.com/'),internet:()=>Object.assign(new Error('getaddrinfo ENOTFOUND www.tiktok.com'),{code:'ENOTFOUND'}),diger:()=>new Error('Something odd happened')})[t]();" +
+        "class WebcastPushConnection extends E{connect(){return Promise.reject(yap(tur()));}disconnect(){}}module.exports={WebcastPushConnection};";
+      const beklenen = {
+        canli: [/^@Test_Kullanici şu an canlı yayında değil\. \d+ saniye sonra yeniden denenecek; yayın açılınca kendiliğinden bağlanır; hemen denemek için ana sayfada Yayın'a yeniden bas\.$/, 'bekliyor'],
+        oda: [/^Yayın odası bulunamadı\. Kullanıcı adını kontrol et \(profil linkindeki ad, @ olmadan\); ad doğruysa yayını TikTok'ta başlat, köprü kendiliğinden bağlanır\. \d+ saniye sonra yeniden denenecek; hemen denemek için ana sayfada Yayın'a yeniden bas\.$/, 'hata'],
+        oda1: [/^@Test_Kullanici şu an canlı yayında değil\./, 'bekliyor'], // 1.x: "Failed to retrieve room_id … User might be offline."
+        odaEngel: [/doğrulama \(captcha\) istedi ya da bu ağdan/, 'hata'],
+        imza: [/imza hizmeti .*başka bir şirketin hizmetidir; senin hatan değil\. Birkaç dakika bekle/, 'hata'], imza2: [/imza hizmeti/, 'hata'],
+        internet: [/internet bağlantısı yok ya da çok yavaş/, 'hata'], zaman: [/internet bağlantısı yok ya da çok yavaş/, 'hata'],
+        engel: [/doğrulama \(captcha\) istedi ya da bu ağdan \/ bölgeden engelledi/, 'hata'], diger: [/^TikTok'a bağlanılamadı \(Something odd happened\)\./, 'hata']
+      };
+      const ham = { canli: /isn't online|LIVE has ended/, oda: /Failed to retrieve Room ID from all sources\.[\s\S]*\n  html: \[fetchRoomInfoFromHtmlRoute\] Failed to extract Room ID from HTML\.\r?\n  api: \[fetchRoomInfoFromApiLiveRoute\] Failed to extract Room ID from API\./, oda1: /User might be offline/, odaEngel: /\n  html: .*status code 403[\s\S]*\n  euler: .*lack of permission/, imza: /Rate Limited|status code 429/, imza2: /sign server/, internet: /ENOTFOUND/, zaman: /Timed out/, engel: /captcha|IP or country/, diger: /Something odd/ };
+      const sonuc = {};
+      for (const [kusak, kod, turler] of [['2.x', v2, ['canli', 'oda', 'odaEngel', 'imza', 'imza2', 'internet', 'zaman', 'engel', 'diger']], ['1.x', v1, ['canli', 'oda1', 'engel', 'imza', 'internet', 'diger']]]) {
+        const kl = anaKur('hata-' + kusak.replace('.', ''));
+        fs.mkdirSync(path.join(kl, 'node_modules/tiktok-live-connector'), { recursive: true }); fs.writeFileSync(path.join(kl, 'node_modules/tiktok-live-connector/index.js'), kod);
+        fs.writeFileSync(path.join(kl, 'hata-tur.txt'), turler[0]);
+        const m = motor(kl, ['--kurulum-betigi', T2]); await acik(kp);
+        for (const t of turler) {
+          fs.writeFileSync(path.join(kl, 'hata-tur.txt'), t);
+          const once = m.cikti.length;
+          await gonder(kp, '/api/baslat', { oyun: 'a-oyun', kip: 'canli', kullanici: 'Test_Kullanici' });
+          await bekleKosul(async () => { const d = await durumA(); return d.aktif && d.aktif.baglanti !== 'baglaniyor' && m.cikti.length > once && /bağlantı hatası/.test(m.cikti.slice(once)); }, 6000);
+          const d = await durumA(), konsol = m.cikti.slice(once);
+          sonuc[kusak + ' ' + t] = { durum: d.durum, baglanti: d.aktif && d.aktif.baglanti, iyi: beklenen[t][0].test(d.durum) && d.aktif.baglanti === beklenen[t][1] && ham[t].test(konsol) };
+          if (kusak === '2.x' && t === 'imza') { // ana sayfanın şeridi ve oyunun Yayın sekmesi aynı cümleyi gösterir
+            const sc = await b.newContext({ viewport: { width: 1366, height: 768 } }), ap = await sayfaAc(sc, A + '/'), op = await sayfaAc(sc, A + '/oyun/a-oyun/'); await bekle(2500);
+            sonuc.serit = await ap.evaluate(() => document.getElementById('cal-durum').textContent);
+            sonuc.yayinSekmesi = await op.evaluate(() => document.getElementById('bag-ileti').textContent);
+            sonuc.ayni = sonuc.serit === d.durum && sonuc.yayinSekmesi === d.durum;
+            await sc.close();
+          }
+        }
+        m.kill('SIGKILL'); await bekle(300);
+      }
+      kontrol('Bağlanma hataları (iki kütüphane kuşağı): yayın yok / oda yok / imza hizmeti / internet / captcha-engel / diğer ayrı düz cümleler; yayın yok "bekliyor", gerisi "hata"; ham ileti konsolda', Object.entries(sonuc).filter(([a]) => / /.test(a)).every(([, v]) => v.iyi), Object.fromEntries(Object.entries(sonuc).filter(([a, v]) => / /.test(a) && !v.iyi)));
+      kontrol('Bağlanma hatasının cümlesi ana sayfanın şeridinde ve oyunun Yayın sekmesinde aynen görünür', sonuc.ayni === true, { serit: sonuc.serit, yayin: sonuc.yayinSekmesi });
+    }
+    // ==== DENETİM 3 (N1–N5, hazır paket) — sonu ====
   }
   // ==== DENETİM 2 (A–H) VE MAC / LINUX — sonu ====
   kontrol('Köprü testlerinde sayfada hata çıkmadı', hatalar.length === 0, hatalar.slice(0, 4).join(' | '));

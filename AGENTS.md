@@ -31,6 +31,7 @@ node kopru.js --ana-sayfa --ac                # ana sayfa (oyun salonu): Dene / 
 node kopru.js --deneme --oyun <ad> --ac       # köprü + oyun, TikTok'suz, sahte olaylarla
 node kopru.js <tiktok_adi> --oyun <ad> --ac   # gerçek yayın (yalnız okur)
 node araclar/paket.js <ad>                    # yayıncıya verilecek klasör → dist/<ad>/
+node araclar/surum.js                         # yalnız bakımcı: Windows hazır paketi (kendi Node'u + kütüphane) ve ZIP → dist/surum-…/
 ```
 
 Testler ve kareler bir tarayıcı ister. Kurulu Chrome'u göstermek en hızlısıdır:

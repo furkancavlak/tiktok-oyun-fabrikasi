@@ -1,5 +1,19 @@
 # TikTok Oyun Fabrikası
 
+## İndir
+
+**Windows (kurulum yok):** [Releases](https://github.com/furkancavlak/tiktok-oyun-fabrikasi/releases) sayfasından
+`tiktok-oyun-fabrikasi-…-windows-x64.zip` dosyasını indir, bir klasöre çıkar (sağ tık → **Tümünü ayıkla**) ve
+içindeki `BASLAT.bat` dosyasına çift tıkla. Node.js ve TikTok kütüphanesi paketin içindedir; hiçbir şey kurman
+gerekmez. Windows, internetten inen bir dosyayı ilk açılışta uyarabilir; uyarırsa **Ek bilgi → Yine de çalıştır**.
+ZIP'in içinden, çıkarmadan çift tıklarsan `BASLAT.bat` önce klasöre çıkarmanı söyler.
+
+**Kaynak koddan (Node.js gerekir):** depoyu indir, Node.js'i kur (Windows'ta nodejs.org'daki .msi kurulum dosyası,
+node.exe değil), `BASLAT.bat` dosyasına çift tıkla. Ayrıntı aşağıda, "Hızlı başlangıç".
+
+**Mac / Linux:** Node.js'i kur. Mac'te `BASLAT.command` dosyasına çift tıkla; açılmazsa Terminal'de klasöre girip
+`sh BASLAT.command` yaz (ikisi de aynı işi yapar). Linux'ta `sh BASLAT.sh` (aşağıda "Mac / Linux").
+
 TikTok canlı yayınlarında izleyicilerin oynadığı dikey oyunlar için bir depo. İzleyici yorum yazarak oyuna girer, beğeniyle ortak göstergeyi doldurur, hediyeyle sahnede etki başlatır. En çok hediye atan özel rolü alır. Depoyu Claude Code ile açıp tek cümleyle oyun fikrini anlatırsan, ajan oyunu hazır çekirdeğin üstüne kurar.
 
 ![Örnek oyun Mendil Kimde?: 1, 3, 9, 36 izleyici ve en büyük hediye anı](docs/ekran-goruntusu.png)

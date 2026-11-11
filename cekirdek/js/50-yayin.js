@@ -125,8 +125,12 @@ const Yayin = {
         bagDurum('hata', 'Köprüyle bağlantı koptu. 3 saniyede bir yeniden deniyorum.');
         clearTimeout(this.yeniden);
         this.yeniden = setTimeout(() => { if (this.surekli && !this.ws)
-          adresTazele(adres).then(a => { if (this.surekli && !this.ws)
-            this.baglan(a); }); }, 3000);
+          adresTazele(adres).then(a => {
+            if (a !== adres && $('bag-adres').value === adres)
+              $('bag-adres').value = a; // Yayın sekmesindeki adres de yeni kimliği göstersin
+            if (this.surekli && !this.ws)
+              this.baglan(a);
+          }); }, 3000);
       }
       else if (!$('bag-rozet').classList.contains('hata'))
         bagDurum('', 'Bağlantı kapandı.');

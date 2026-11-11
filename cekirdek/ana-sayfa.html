@@ -763,7 +763,7 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
   // tarayıcının ipucu kullanılır (bilinmezse Windows). Testler window.FABRIKA_PLATFORM ile ipucunu ezer.
   var PLATFORM_METIN = {
     windows: { dosya: 'BASLAT.bat', pencere: 'Siyah pencere', yeniden: 'BASLAT.bat dosyasına yeniden çift tıkla.', ac: 'BASLAT.bat dosyasına çift tıkla.' },
-    mac: { dosya: 'BASLAT.command', pencere: 'Terminal penceresi', yeniden: 'BASLAT.command dosyasına yeniden çift tıkla.', ac: 'BASLAT.command dosyasına çift tıkla.' },
+    mac: { dosya: 'BASLAT.command', pencere: 'Terminal penceresi', yeniden: 'BASLAT.command dosyasına yeniden çift tıkla; açılmazsa Terminal\'de klasöre girip sh BASLAT.command yaz.', ac: 'BASLAT.command dosyasına çift tıkla; açılmazsa Terminal\'de klasöre girip sh BASLAT.command yaz.' },
     linux: { dosya: 'BASLAT.sh', pencere: 'Terminal penceresi', yeniden: 'BASLAT.sh dosyasını yeniden çalıştır.', ac: 'BASLAT.sh dosyasını çalıştır.' }
   };
   var platform = (function () {

@@ -45,7 +45,9 @@ function karakterYap(id, ad) {
 }
 const calgi = { dumP: 0, tekP: 0, perde: 3 };
 
-const temiz = s => String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f​-‏‪-‮⁦-⁩]/g, ' ').replace(/\s+/g, ' ').trim();
+// Önce ANSI kaçışları (ESC [ … harf) ve Unicode biçim karakterleri (Cf: U+061C, U+2060, U+FEFF, yön işaretleri …; emoji
+// birleştiricisi U+200D kalır) ile görünmez dolgu harfleri (U+115F, U+1160, U+3164, U+FFA0, U+2800) atılır.
+const temiz = s => String(s == null ? '' : s).replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]/g, '').replace(/\x1b[@-_]?/g, '').replace(/(?!\u200d)[\p{Cf}\u115f\u1160\u3164\uffa0\u2800]/gu, '').replace(/[\u0000-\u001f\u007f​-‏‪-‮⁦-⁩]/g, ' ').replace(/\s+/g, ' ').trim();
 // balon: konuşma balonları açık mı · yasak: gizlenecek kelimeler · gizli / cikan: yayıncının panelden adını
 // gizlediği ve sahneden çıkardığı izleyiciler ({ id, ad }). Hepsi tarayıcıda saklanır (ayarOku / ayarYaz).
 const ayar = { balon: true, yasak: [], gizli: [], cikan: [] };

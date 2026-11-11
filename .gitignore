@@ -7,3 +7,5 @@ muzik/
 *.log
 .DS_Store
 Thumbs.db
+# Motorun kurulum kilidi (kopru.js, kütüphane inerken)
+.kurulum-kilidi.json

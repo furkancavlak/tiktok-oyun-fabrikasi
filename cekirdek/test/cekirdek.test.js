@@ -655,6 +655,10 @@ const { sonuc, kontrol } = kontrolcu();
     const cv2 = hk.cv, rose = o => o && J(o.hediye) === '{"id":"5655","ad":"Rose"}';
     kontrol('Hediye kimliği, sayfa çevirisi: kendi biçim denetlenip geçer (bozuk alan düşer), düz / giftDetails / gift biçimleri okunur, düz veride kullanıcının id ve name alanı hediye sayılmaz, seri sürerken yok', rose(cv2.kendi) && J(Object.keys(cv2.kendi.hediye)) === '["id","ad"]' && cv2.kendiBozuk && !('hediye' in cv2.kendiBozuk) && cv2.kendiBozuk.jeton === 1 && !('hediye' in cv2.kendiYok) && rose(cv2.duz) && cv2.duzKimliksiz && !('hediye' in cv2.duzKimliksiz) && rose(cv2.ayrinti) && rose(cv2.yeni) && cv2.yeni.adet === 3 && cv2.seri === null, cv2);
     kontrol('Hediye kimliği: Deneme düğmeleri sahte kimlik yollar (deneme-gul, sonra deneme-kalp), düğmenin açıklaması söyler', hk.dugme0 && J(hk.dugme0.hediye) === '{"id":"deneme-gul","ad":"Gül"}' && (hk.dugmeSayi < 2 || J(hk.dugme1.hediye) === '{"id":"deneme-kalp","ad":"Kalp"}') && /deneme hediyesi: Gül/.test(hk.dugmeBaslik), { d0: hk.dugme0, d1: hk.dugme1, baslik: hk.dugmeBaslik });
+    // N5 (denetim 3): görünmez / biçim karakterleri ve ANSI kaçışları sayfa tarafında da atılır; boş kalan ad düşer
+    const n5 = await p.evaluate(() => { const c = CanliOyun.cevir, h = ad => (c({ tip: 'hediye', kullanici: { id: 'n5' }, jeton: 1, hediye: { id: '7', ad } }) || {}).hediye;
+      return { arap: h('Ro\u061Cse\u2060'), dolgu: h('\u3164\u3164 \u115F\uFFA0'), ansi: h('\u001b[31mKırmızı\u001b[0m'), bom: h('\uFEFFGül\u2800'), izleyici: (() => { CanliOyun.olay({ tip: 'yorum', kullanici: { id: 'n5-ad', ad: '\u3164Ay\u2060şe' }, metin: 'x' }); const k = CanliOyun._test.D.oy.get('n5-ad'); return k && k.ad; })() }; });
+    kontrol('N5: sayfa da hediye adından ve izleyici adından U+061C, U+2060, U+FEFF, dolgu harflerini ve ANSI kaçışlarını atar; boş kalan hediye adı düşer', n5.arap.ad === 'Rose' && JSON.stringify(n5.dolgu) === '{"id":"7"}' && n5.ansi.ad === 'Kırmızı' && n5.bom.ad === 'Gül' && n5.izleyici === 'Ayşe', n5);
   }
   // ==== HEDİYE KİMLİĞİ — sonu ====
 

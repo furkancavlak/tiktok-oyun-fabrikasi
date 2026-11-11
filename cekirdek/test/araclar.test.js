@@ -78,6 +78,7 @@ if (process.platform === 'win32') {
   const depo = path.join(batKok, 'Oyun (deneme) & 100% şarkı');
   fs.mkdirSync(path.join(depo, 'cekirdek'), { recursive: true });
   fs.copyFileSync(path.join(KOK, 'BASLAT.bat'), path.join(depo, 'BASLAT.bat'));
+  fs.writeFileSync(path.join(depo, 'kopru.js'), '// test: gerçek depoda köprü burada durur\n');
   fs.copyFileSync(nodeYok, path.join(depo, 'cekirdek', 'node-yok.html'));
   const v = batCalis(depo, stub + ';' + sys, {}), cagri = fs.existsSync(path.join(stub, 'cagri.txt')) ? fs.readFileSync(path.join(stub, 'cagri.txt'), 'utf8') : '';
   kontrol('BASLAT.bat zor adlı klasörde (boşluk, ş, parantez, &, %) node bulunca soru sormadan "node kopru.js --ana-sayfa --ac" çalıştırır, klasörü doğru bulur', v.status === 0 && /ARGS kopru\.js --ana-sayfa --ac/.test(cagri) && cagri.includes(depo), { kod: v.status, cagri, cikti: (v.stdout + v.stderr).slice(0, 200) });
@@ -95,6 +96,7 @@ if (process.platform === 'win32') {
   if (process.platform === 'win32') {
     const gk = fs.mkdtempSync(path.join(os.tmpdir(), 'canli-bat-g-')), sys = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32');
     fs.copyFileSync(path.join(KOK, 'BASLAT.bat'), path.join(gk, 'BASLAT.bat'));
+    fs.writeFileSync(path.join(gk, 'kopru.js'), '// test: gerçek depoda köprü burada durur\n');
     const env = { ...process.env, FABRIKA_TEST_ACMA: '1' }; for (const a of Object.keys(env)) if (a.toUpperCase() === 'PATH') delete env[a]; env.Path = sys;
     const g = spawnSync('cmd.exe', ['/d', '/s', '/c', '""' + path.join(gk, 'BASLAT.bat') + '""'], { windowsVerbatimArguments: true, cwd: os.tmpdir(), env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 20000 });
     kontrol('G: BASLAT.bat yardım sayfası bulunmayınca "açılıyor" demez, kısa nodejs.org tarifini yazar, hatayla biter', g.status === 1 && /Node\.js bulunamadi/.test(g.stdout) && !/aciliyor/.test(g.stdout) && !/ACILACAK/.test(g.stdout) && /Kurulum: https:\/\/nodejs\.org/.test(g.stdout), g.stdout.slice(0, 400));
@@ -144,6 +146,76 @@ if (process.platform === 'win32') {
   kontrol('paket: BASLAT.command ve BASLAT.sh pakette (Windows dışında çalıştırılabilir); OKU.txt Mac / Linux başlatmasını ve "macOS engellerse" Terminal yolunu anlatır', ['BASLAT.command', 'BASLAT.sh'].every(d => pkDosya.includes(d) && izin(d)) && /BASLAT\.command/.test(oku) && /sh BASLAT\.sh/.test(oku) && /macOS engellerse/.test(oku) && /sh BASLAT\.command/.test(oku), pkDosya);
 }
 // ==== BAŞLATICILAR — sonu ====
+// ==== HAZIR PAKET (araclar/surum.js), ZIP izinleri, BASLAT.bat paket Node'u — başı ====
+// Ağa çıkılmaz: Node arşivi yerine bu bilgisayardaki node.exe'nin kopyasıyla kurulmuş sahte bir arşiv, npm yerine sahte
+// bir kütüphane kullanılır. Gerçek indirme ve npm yalnız bakımcının elle çalıştırdığı "node araclar/surum.js"te olur.
+{
+  const { zipYaz, zipOku } = require(path.join(KOK, 'araclar', 'zip.js')), surum = require(path.join(KOK, 'araclar', 'surum.js'));
+  const sabit = JSON.parse(fs.readFileSync(path.join(KOK, 'araclar', 'surum-node.json'), 'utf8'));
+  // Sabit sürüm her yerde aynı: surum-node.json, BASLAT.bat ve yardım sayfasındaki .msi adresi
+  kontrol('Hazır paket: sabit Node sürümü tek yerde (surum-node.json: v24, sha256 64 hane, resmî adres) ve BASLAT.bat ile yardım sayfası aynı .msi adresini gösterir', /^24\.\d+\.\d+$/.test(sabit.surum) && /^[0-9a-f]{64}$/.test(sabit.sha256) && sabit.url === 'https://nodejs.org/dist/v' + sabit.surum + '/node-v' + sabit.surum + '-win-x64.zip' && sabit.msi === 'https://nodejs.org/dist/v' + sabit.surum + '/node-v' + sabit.surum + '-x64.msi' && fs.readFileSync(path.join(KOK, 'BASLAT.bat'), 'latin1').includes(sabit.msi) && fs.readFileSync(path.join(KOK, 'cekirdek', 'node-yok.html'), 'utf8').includes(sabit.msi) && /\.msi uzantılı kurulum dosyası/.test(fs.readFileSync(path.join(KOK, 'cekirdek', 'node-yok.html'), 'utf8')) && /github\.com\/furkancavlak\/tiktok-oyun-fabrikasi\/releases/.test(fs.readFileSync(path.join(KOK, 'cekirdek', 'node-yok.html'), 'utf8')), sabit);
+  const hk = fs.mkdtempSync(path.join(os.tmpdir(), 'canli-surum-'));
+  // SHA-256 denetimi: doğru değer geçer, yanlış değer reddedilir
+  const fx = path.join(hk, 'ornek.bin'); fs.writeFileSync(fx, 'tiktok oyun fabrikası');
+  const dogru = require('crypto').createHash('sha256').update(fs.readFileSync(fx)).digest('hex');
+  let reddetti = false; try { surum.hashDogrula(fx, '0'.repeat(64)); } catch (e) { reddetti = /SHA-256 tutmuyor/.test(e.message); }
+  kontrol('Hazır paket: SHA-256 denetimi doğru değeri kabul eder, yanlış değeri reddeder', surum.hashDogrula(fx, dogru) === dogru && reddetti);
+  if (process.platform === 'win32') {
+    // Sahte Node arşivi: içinde bu bilgisayardaki node.exe'nin kopyası ve LICENSE
+    const v = process.version.slice(1), ic = 'node-v' + v + '-win-x64', arsivKl = path.join(hk, 'arsiv', ic);
+    fs.mkdirSync(arsivKl, { recursive: true });
+    fs.copyFileSync(process.execPath, path.join(arsivKl, 'node.exe')); fs.writeFileSync(path.join(arsivKl, 'LICENSE'), 'Node.js lisansı (test kopyası)');
+    const arsiv = path.join(hk, ic + '.zip'); zipYaz(arsiv, arsivKl, ic);
+    const sahte = { surum: v, dosya: ic + '.zip', url: 'https://ornek.invalid/' + ic + '.zip', sha256: surum.sha256Dosya(arsiv) };
+    const jDogru = path.join(hk, 'dogru.json'), jYanlis = path.join(hk, 'yanlis.json');
+    fs.writeFileSync(jDogru, JSON.stringify(sahte)); fs.writeFileSync(jYanlis, JSON.stringify({ ...sahte, sha256: 'f'.repeat(64) }));
+    const mod = path.join(hk, 'moduller', 'tiktok-live-connector'); fs.mkdirSync(mod, { recursive: true });
+    fs.writeFileSync(path.join(mod, 'package.json'), JSON.stringify({ name: 'tiktok-live-connector', version: '0.0.0-deneme', main: 'index.js' })); fs.writeFileSync(path.join(mod, 'index.js'), 'module.exports = {};');
+    const kur = (json, cikti) => spawnSync(process.execPath, [path.join(KOK, 'araclar', 'surum.js'), '--surum-json', json, '--node-zip', arsiv, '--moduller', path.join(hk, 'moduller'), '--cikti', cikti, '--zipsiz'], { cwd: KOK, encoding: 'utf8', timeout: 300000 });
+    const yanlisCikti = path.join(hk, 'cikti-yanlis'), y = kur(jYanlis, yanlisCikti);
+    const yanlisIc = fs.existsSync(yanlisCikti) ? fs.readdirSync(yanlisCikti).map(d => fs.existsSync(path.join(yanlisCikti, d, 'tiktok-oyun-fabrikasi', 'node'))) : [];
+    kontrol('Hazır paket: Node arşivinin SHA-256\'sı tutmazsa araç durur, hiçbir şey paketlenmez (node klasörü yok)', y.status === 1 && /SHA-256 tutmuyor/.test(y.stderr) && yanlisIc.every(x => !x), { kod: y.status, hata: (y.stderr || '').slice(0, 300) });
+    const iyiCikti = path.join(hk, 'cikti-iyi'), g = kur(jDogru, iyiCikti);
+    const kokAd = fs.existsSync(iyiCikti) ? fs.readdirSync(iyiCikti)[0] : '', pk2 = path.join(iyiCikti, kokAd || 'yok', 'tiktok-oyun-fabrikasi');
+    const sorun = fs.existsSync(pk2) ? surum.paketDenetle(pk2) : ['paket yok'];
+    const surumTxt = fs.existsSync(path.join(pk2, 'SURUM.txt')) ? fs.readFileSync(path.join(pk2, 'SURUM.txt'), 'utf8') : '';
+    kontrol('Hazır paket düzeni: node\\node.exe + LICENSE, node_modules\\tiktok-live-connector, üç oyun, başlatıcılar, node-yok.html, SURUM.txt; geliştirme bağımlılığı, test/cikti, .git, dist, npm yok', g.status === 0 && sorun.length === 0 && ['halay', 'konvoy', 'vur-duzelsin'].every(o => fs.existsSync(path.join(pk2, 'oyunlar', o, 'oyun.html'))) && !fs.existsSync(path.join(pk2, '.git')) && !fs.existsSync(path.join(pk2, 'test', 'cikti')) && !fs.existsSync(path.join(pk2, 'node_modules', 'playwright')) && new RegExp('Node\\.js: +' + v.replace(/\./g, '\\.')).test(surumTxt) && /tiktok-live-connector: 0\.0\.0-deneme/.test(surumTxt) && /Git işlemesi: +[0-9a-f]{40}/.test(surumTxt), { kod: g.status, sorun, hata: (g.stderr || '').slice(-300), surumTxt });
+    // Paketten, paketin kendi Node'uyla açılan motor: kapısında yanıt verir, kütüphane hazır, üç oyun listede
+    if (fs.existsSync(path.join(pk2, 'node', 'node.exe'))) {
+      const kp = (parseInt(process.env.KOPRU_TEST_PORT, 10) || 8791) + 12;
+      const m = require('child_process').spawn(path.join(pk2, 'node', 'node.exe'), ['kopru.js', '--ana-sayfa', '--port', String(kp)], { cwd: pk2, stdio: ['ignore', 'pipe', 'pipe'] });
+      // Bu dosya eşzamanlı çalışır: yoklama ayrı bir node sürecinde (en çok 15 sn), motor kendi sürecinde yaşar.
+      const yok = spawnSync(process.execPath, ['-e', "const h=require('http');let n=0;(function d(){h.get({host:'127.0.0.1',port:" + kp + ",path:'/api/oyunlar',headers:{host:'127.0.0.1:" + kp + "'}},r=>{let s='';r.on('data',c=>s+=c);r.on('end',()=>console.log(s));}).on('error',()=>{if(++n<60)setTimeout(d,250);else console.log('null');});})();"], { encoding: 'utf8', timeout: 30000 });
+      let api = null; try { api = JSON.parse(yok.stdout); } catch (e) { }
+      m.kill();
+      kontrol('Hazır paket: motor paketin kendi node\\node.exe\'siyle açılır, /api/oyunlar yanıt verir, kütüphane "hazir", üç oyun listede (canlı bağlantı açılmaz)', !!api && api.kutuphane.durum === 'hazir' && JSON.stringify(api.oyunlar.map(o => o.id)) === JSON.stringify(['halay', 'konvoy', 'vur-duzelsin']), api && { kutuphane: api.kutuphane, oyunlar: api.oyunlar.map(o => o.id) });
+    }
+    // BASLAT.bat: yanında node\node.exe varsa onu çalıştırır (yoldaki node'u değil); ZIP'ten çıkarılmadan açılınca uyarır
+    const bk = path.join(hk, 'bat-paket'); fs.mkdirSync(path.join(bk, 'node'), { recursive: true });
+    fs.copyFileSync(path.join(KOK, 'BASLAT.bat'), path.join(bk, 'BASLAT.bat'));
+    try { fs.linkSync(process.execPath, path.join(bk, 'node', 'node.exe')); } catch (e) { fs.copyFileSync(process.execPath, path.join(bk, 'node', 'node.exe')); }
+    fs.writeFileSync(path.join(bk, 'kopru.js'), "require('fs').writeFileSync(require('path').join(__dirname, 'hangi.txt'), process.execPath + '\\n' + process.argv.slice(2).join(' '));");
+    const yolNode = path.join(hk, 'yol-node'); fs.mkdirSync(yolNode);
+    fs.writeFileSync(path.join(yolNode, 'node.cmd'), '@echo YOLDAKI> "%~dp0cagri.txt"\r\n@exit /b 0\r\n');
+    const sys = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32');
+    const bat = (kl, yol, ek) => { const env = { ...process.env, ...ek }; for (const a of Object.keys(env)) if (a.toUpperCase() === 'PATH') delete env[a]; env.Path = yol; return spawnSync('cmd.exe', ['/d', '/s', '/c', '""' + path.join(kl, 'BASLAT.bat') + '""'], { windowsVerbatimArguments: true, cwd: os.tmpdir(), env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 20000 }); };
+    const pb = bat(bk, yolNode + ';' + sys, {}), hangi = fs.existsSync(path.join(bk, 'hangi.txt')) ? fs.readFileSync(path.join(bk, 'hangi.txt'), 'utf8').split('\n') : [];
+    kontrol('BASLAT.bat yanında node\\node.exe varsa onu kullanır (yoldaki node çağrılmaz), "kopru.js --ana-sayfa --ac" ile', pb.status === 0 && (hangi[0] || '').toLowerCase() === path.join(bk, 'node', 'node.exe').toLowerCase() && hangi[1] === '--ana-sayfa --ac' && !fs.existsSync(path.join(yolNode, 'cagri.txt')), { kod: pb.status, hangi, cikti: (pb.stdout || '').slice(0, 200) });
+    const yalniz = path.join(hk, 'zip-icinden'); fs.mkdirSync(yalniz); fs.copyFileSync(path.join(KOK, 'BASLAT.bat'), path.join(yalniz, 'BASLAT.bat'));
+    const zb = bat(yalniz, yolNode + ';' + sys, {});
+    kontrol('BASLAT.bat ZIP\'ten çıkarılmadan açılınca (yanında kopru.js yok) tek düz satırla önce klasöre çıkarmayı söyler, hatayla biter, node çalıştırmaz', zb.status === 1 && /Once ZIP'i bir klasore cikar \(sag tik, Tumunu ayikla\), sonra BASLAT\.bat'a cift tikla\./.test(zb.stdout) && !fs.existsSync(path.join(yolNode, 'cagri.txt')), zb.stdout.slice(0, 300));
+  }
+  // ZIP yazıcı: Mac başlatıcıları 0755, gerisi 0644, tek üst klasör; paket.js'in ZIP'i de böyle; Windows'un açıcısı açar
+  const pkZip = path.join(GECICI, 'dist', 'deneme-oyun.zip'), girdi = fs.existsSync(pkZip) ? zipOku(pkZip) : [];
+  const modu = ad => (girdi.find(x => x.ad === ad) || {}).mod;
+  kontrol('paket.js ZIP\'i: tek üst klasör deneme-oyun/, BASLAT.command ve BASLAT.sh 0755 (Unix), kopru.js 0644; OKU.txt Mac\'te çift tıklama ile Terminal yolunu eşit yol olarak anlatır', girdi.length > 5 && girdi.every(x => x.ad.startsWith('deneme-oyun/')) && modu('deneme-oyun/BASLAT.command') === 0o100755 && modu('deneme-oyun/BASLAT.sh') === 0o100755 && modu('deneme-oyun/kopru.js') === 0o100644 && /açılmazsa Terminal'i aç, cd ile bu klasöre gir/.test(fs.readFileSync(path.join(pkKl, 'OKU.txt'), 'utf8')), girdi.slice(0, 6).map(x => x.ad + ' ' + x.mod.toString(8)));
+  if (process.platform === 'win32' && fs.existsSync(pkZip)) {
+    const acKl = path.join(hk, 'zip-acik'), ex = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Expand-Archive -LiteralPath "' + pkZip + '" -DestinationPath "' + acKl + '"'], { encoding: 'utf8', timeout: 120000 });
+    kontrol('ZIP Windows\'un kendi açıcısıyla (Expand-Archive) açılır, klasör düzeni korunur', ex.status === 0 && fs.existsSync(path.join(acKl, 'deneme-oyun', 'BASLAT.command')) && fs.existsSync(path.join(acKl, 'deneme-oyun', 'kopru.js')), (ex.stderr || '').slice(0, 200));
+  }
+}
+// ==== HAZIR PAKET — sonu ====
+
 
 fs.rmSync(GECICI, { recursive: true, force: true });
 process.exit(raporla(sonuc) ? 1 : 0);
