@@ -2,5 +2,5 @@
   "ad": "Gelin Konvoyu 3B",
   "paket": "gelin-konvoyu-3b",
   "aciklama": "Yorum yazan arabasıyla konvoya katılır, beğeni gaza bastırır, en çok hediye atanın arabası gelin arabası olur; kamera canlı yayın rejisi gibi çekimden çekime geçer.",
-  "kitaplik": ["three", "araba-modelleri"]
+  "kitaplik": ["three", "araba-modelleri", "sokak-modelleri"]
 }
