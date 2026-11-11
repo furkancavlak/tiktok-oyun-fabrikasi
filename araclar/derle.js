@@ -86,6 +86,17 @@ function uret(ad) {
     console.warn('UYARI ' + ad + ': ' + u);
   const js = sira.map(parca).join('\n\n');
   const betik = '<script>\n(() => {\n\'use strict\';\n' + js + '\n})();\n</script>';
+  // Kitaplık (isteğe bağlı): oyun.json "kitaplik": ["three"] → kitaplik/three.js, oyunun betiğinden önce kendi
+  // <script>'inde. Kitaplık genel bir ad tanımlar (THREE); oyun onu bu adla kullanır. İstemeyen oyunun çıktısı değişmez.
+  const kitaplik = bilgi.kitaplik === undefined ? [] : bilgi.kitaplik;
+  if (!Array.isArray(kitaplik) || kitaplik.some(a => typeof a !== 'string' || !/^[\w-]+$/.test(a) || !fs.existsSync(path.join(KOK, 'kitaplik', a + '.js'))))
+    hata(ok + '/oyun.json: "kitaplik" kitaplik/ altındaki dosyaların adları olmalı (ör. ["three"]; üretmek için araclar/kitaplik-three.js).');
+  const onBetik = kitaplik.map(a => {
+    const k = oku('kitaplik/' + a + '.js');
+    if (/<\/script/i.test(k))
+      hata('kitaplik/' + a + '.js içinde "</script" geçiyor: sayfaya gömülemez.');
+    return '<script>\n' + k + '\n</script>\n';
+  }).join('');
   const BASLIK = '<title>' + kacir(bilgi.ad || ad) + '</title>';
   const stil = oku('cekirdek/stil.css'), sayfa = oku('cekirdek/sayfa.html');
   const tam = `<!DOCTYPE html>
@@ -104,7 +115,7 @@ ${stil}
 <body>
 ${sayfa}
 
-${betik}
+${onBetik}${betik}
 </body>
 </html>
 `;
@@ -117,7 +128,7 @@ ${stil}
 
 ${sayfa}
 
-${betik}
+${onBetik}${betik}
 `;
   return { tam, gomulu, hedef: path.join(KOK, ok, 'oyun.html'), goreli: ok + '/oyun.html' };
 }
