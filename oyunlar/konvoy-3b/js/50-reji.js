@@ -15,10 +15,20 @@
 const rejiV0 = new THREE.Vector3(), rejiV1 = new THREE.Vector3(), rejiV2 = new THREE.Vector3(), rejiV3 = new THREE.Vector3();
 const YAN_SINIR = 9.8; // alçak kameranın yolun ortasından en çok uzaklığı (dükkân vitrinlerinin önü)
 const SERIT_UST = 505, SERIT_ALT = 1006, MERKEZ_Y = 760;
-const CEKIM_SIRA = ['drone', 'yan', 'on', 'kus', 'tur', 'yakin', 'kenar', 'vinc'];
+const CEKIM_SIRA = ['drone', 'yan', 'on', 'kus', 'tur', 'yakin', 'kenar', 'vinc'];   // 1–8 tuşları
+// Otomatik reji geniş çekimde yaşar (konvoy bir bütün okunur); yakın ve orta çekimler programda yalnız kısa ve seyrek
+// ara kesmedir (en çok beşte bir, art arda hiç). Yakın çekimleri olaylar alır: drift şovu, yeni gelin arabası, öne
+// geçen (sollama), hediye atan izleyici. Olaydan sonra hep geniş çekime dönülür.
+const GENIS = ['drone', 'kus', 'arka', 'yanust', 'vinc'];
+const ARA_KESME = ['yakin', 'yan', 'on', 'tur', 'kenar'];
+// Geniş çekimde kadraja sığan ön grup (gelin arabası ve arkasındaki ilk sıralar); kuyruk uzağa akabilir.
+const GRUP = { drone: 6, kus: 7, arka: 8, yanust: 8, vinc: 6 };
+const genisMi = c => !!c && GENIS.includes(c.ad) && (c.ad !== 'vinc' || B - c.b0 > 9);
 // Hangi çekimden hangisine yumuşak geçilebilir (2–4 vuruş): yönü ve yüksekliği birbirine akabilen çiftler.
 const YUMUSAK = { 'drone>yan': 4, 'drone>on': 4, 'kus>drone': 4, 'vinc>kus': 2, 'kus>vinc': 4, 'tur>on': 2, 'on>tur': 2, 'yan>yakin': 2, 'tur>yakin': 2 };
 Object.assign(D, { reji: { cekim: null, gecis: null, zorla: null, olay: null, konu: null, gecmis: [], rnd: rastgeleUret(4242), yakinSira: new Map(), sonKesme: -99 } });
+// testler ve öbür dallar (süper araba) olayı aynı kapıdan verir: CanliOyun._test.D.reji.olayAt('super', k)
+D.reji.olayAt = (tur, k) => rejiOlay(tur, k);
 const OLCER = new THREE.PerspectiveCamera(50, GW / GH, 0.3, 1400);
 
 /* ---- konvoyun özeti ---- */
@@ -206,7 +216,7 @@ const CEKIM = {
     } },
   yakin: { taraf: 'yan', yuk: 'orta', gok: true, sure: [8, 8], merkezY: 712,
     kur(c) {
-      c.k = yakinSec();
+      c.k = c.k || yakinSec();
       c.yan = c.k && c.k.gl > 0.3 ? 1 : c.k && c.k.gl < -0.3 ? -1 : -1;
       c.taraf = c.yan > 0 ? 'sol' : 'sag';
       if (c.k) {
@@ -293,6 +303,42 @@ const CEKIM = {
       return { p: sigacakKadar(c, p, merkez, k, 46, 720), h: merkez, fov: 46, merkezY: 720 };
     },
     bitti(c) { return !D.drift || D.drift.k !== c.k; } },
+  arka: { taraf: 'arka', yuk: 'yuksek', gok: true, sure: [12, 20],
+    kur(c) { c.yan = c.rnd() < 0.5 ? -1 : 1; },
+    poz(c, t, z) {
+      // yüksekten, arkadan çaprazdan: ön grup okunur büyüklükte, kamera alçalarak yana kayar
+      const u = t / c.sure, grup = z.on.slice(0, GRUP.arka), n = [];
+      for (const k of grup)
+        arabaKoseleri(k, n);
+      const sOrta = grup.length ? (D.yol + grup[grup.length - 1].gs + z.SL) / 2 : z.SL, h = yN(sOrta, 0, 0.6), T = ileriYon(sOrta);
+      const el = 0.68 - 0.12 * u;
+      const yon = new THREE.Vector3(-T.x, 0, -T.z).applyAxisAngle(rejiV0.set(0, 1, 0), c.yan * (0.3 + 0.25 * u)).multiplyScalar(Math.cos(el));
+      yon.y = Math.sin(el);
+      const d = yakinlas(c, 'd', sigdir(h, yon, n, 40, 12, 160), 1.5);
+      return { p: h.clone().addScaledVector(yon, d), h, fov: 40 };
+    } },
+  yanust: { taraf: 'yan', yuk: 'yuksek', gok: true, sure: [12, 20],
+    kur(c) { c.yan = c.rnd() < 0.5 ? -1 : 1; },
+    poz(c, t, z) {
+      // yüksekten, yandan: ön grup soldan sağa dizilir, kamera yavaşça konvoyla birlikte döner
+      const u = t / c.sure, grup = z.on.slice(0, GRUP.yanust), n = [];
+      for (const k of grup)
+        arabaKoseleri(k, n);
+      const sOrta = grup.length ? (D.yol + grup[grup.length - 1].gs + z.SL) / 2 : z.SL, h = yN(sOrta, 0, 0.6);
+      const yon = solYon(sOrta).multiplyScalar(c.yan).applyAxisAngle(rejiV0.set(0, 1, 0), c.yan * (0.5 * u - 0.25)).multiplyScalar(Math.cos(0.6));
+      yon.y = Math.sin(0.6);
+      const d = yakinlas(c, 'd', sigdir(h, yon, n, 40, 12, 160), 1.5);
+      return { p: h.clone().addScaledVector(yon, d), h, fov: 40 };
+    } },
+  // süper araba: bir izleyicinin toplam hediyesi 1000 jetonu geçip arabası süper arabaya dönüştüğünde (olay 'super';
+  // modeli başka dal ekler). Yakın çekimin aynısı, büyük kartta "SÜPER ARABA".
+  super: { taraf: 'yan', yuk: 'orta', gok: true, sure: [12, 12], merkezY: 712,
+    kur(c) { c.yan = c.k && c.k.gl > 0.3 ? 1 : -1; c.taraf = c.yan > 0 ? 'sol' : 'sag'; },
+    poz(c, t, z) { return CEKIM.yakin.poz(c, t, z); } },
+  sollama: { taraf: 'on', yuk: 'alcak', gok: true, sure: [12, 16], merkezY: 720,
+    kur(c) { c.yan = c.k && c.k.gl > 0 ? 1 : -1; },
+    poz(c, t, z) { return CEKIM.lider.poz(c, t, z); },
+    bitti(c, z, t) { return !D.oy.has(c.k.id) || c.k.cikiyor || (t > 6 && Math.abs(c.k.hedefS - c.k.gs) < 1); } },
   lider: { taraf: 'on', yuk: 'alcak', gok: true, sure: [16, 16], merkezY: 720,
     kur(c) { c.yan = c.k && c.k.gl > 0 ? 1 : -1; },
     poz(c, t, z) {
@@ -331,9 +377,14 @@ function cekimKur(ad, z, ek) {
 }
 function siradakiSec(z) {
   const R = D.reji, son = R.cekim, fisek = B < D.fisekBit;
+  // yakın / orta / olay çekiminden sonra hep geniş; geniş çekimden sonra arada bir (en az dört geniş çekimde bir,
+  // beşte bir olasılıkla) kısa bir ara kesme
+  const sonYakin = !!son && son.ad !== 'bos' && !GENIS.includes(son.ad);
+  R.genisSay = sonYakin ? 0 : (R.genisSay || 0) + 1;
+  const araKesme = !sonYakin && R.genisSay >= 4 && R.rnd() < 0.2 && D.sira.length > 1;
   const adaylar = [];
   let top = 0;
-  for (const ad of CEKIM_SIRA) {
+  for (const ad of araKesme ? ARA_KESME : GENIS) {
     const t = CEKIM[ad];
     if (son && (ad === son.ad || (t.taraf === son.taraf && t.yuk === son.yuk)))
       continue;
@@ -343,7 +394,7 @@ function siradakiSec(z) {
       continue;
     if ((ad === 'tur' || ad === 'vinc' || ad === 'on') && !D.lider)
       continue;
-    let w = { drone: 1, yan: 1, on: 0.9, kus: 0.75, tur: 0.9, yakin: 1.7, kenar: 0.8, vinc: 0.6 }[ad];
+    let w = { drone: 1, kus: 0.8, arka: 1, yanust: 1, vinc: 0.5, yan: 1, on: 0.8, tur: 0.8, yakin: 2, kenar: 0.6 }[ad];
     const once = R.gecmis.lastIndexOf(ad);
     if (once >= 0 && R.gecmis.length - once <= 3)
       w *= 0.25;
@@ -358,8 +409,19 @@ function siradakiSec(z) {
       return ad;
   return adaylar.length ? adaylar[adaylar.length - 1][0] : 'drone';
 }
+// Programdaki bir sonraki çekim; ara kesme kısa sürer (8 vuruş).
+function siradakiKes(z) {
+  const ad = siradakiSec(z);
+  kes(ad, z, null, true);
+  if (ARA_KESME.includes(ad))
+    D.reji.cekim.sure = 8;
+}
+const OLAY_CEKIMLERI = ['sov', 'lider', 'super', 'sollama'];
 function kes(ad, z, ek, yumusakIzin) {
   const R = D.reji, eski = R.cekim, yeni = cekimKur(ad, z, ek);
+  // olay çekimi bitti: bekleme süresi buradan sayılır (hediye yakın çekimi de olay sayılır: eski.olay)
+  if (eski && R.sonOlay && R.sonOlay.bitis === null && (OLAY_CEKIMLERI.includes(eski.ad) || eski.olay))
+    R.sonOlay.bitis = B;
   const g = eski && yumusakIzin ? YUMUSAK[eski.ad + '>' + ad] : 0;
   R.gecis = g && R.rnd() < 0.55 ? { eski, b0: B, sure: g } : null;
   R.cekim = yeni;
@@ -377,10 +439,31 @@ function rejiOlay(tur, k) {
   // en büyük hediye her şeyden önce gelir; gelin arabası değişimi şov sürerken araya girmez
   if (tur === 'lider' && R.olay && R.olay.tur === 'sov')
     return;
+  // hediye atan izleyici: büyük olaylar (şov, gelin arabası, süper araba) bekliyorsa onların yerini almaz
+  if (tur === 'hediye' && R.olay && R.olay.tur !== 'hediye')
+    return;
   R.olay = { tur, k, b: B };
+}
+// Bekleme: son olay çekimi bittikten sonra en az onun süresi kadar (en az 16 vuruş) geniş çekim gelmeden yeni olay
+// çekimi olmaz: olaylar ne kadar sık gelirse gelsin süre en az yarı yarıya geniş çekimde kalır. Şov, yeni gelin
+// arabası ve süper araba, bekleme dolduysa geniş çekimin 8 vuruşunu beklemez; hediye ve sollama bekler.
+function olayKesebilir(o, c, t) {
+  const R = D.reji, so = R.sonOlay;
+  if (so && (so.bitis === null || B - so.bitis < Math.max(16, so.bitis - so.b)))
+    return false;
+  if (o.tur === 'sov' || o.tur === 'lider' || o.tur === 'super')
+    return true;
+  return GENIS.includes(c.ad) && t >= 8;
+}
+// Konusu olan çekimde (yakın, sollama, lider, şov) konu çıkıyor ya da kaydı silindi mi?
+function konuGitti(c) {
+  if (!c || !c.k || !['yakin', 'sollama', 'lider', 'sov', 'super'].includes(c.ad))
+    return false;
+  return c.k.cikiyor || D.oy.get(c.k.id) !== c.k;
 }
 function rejiSifirla() {
   const R = D.reji;
+  R.sonOlay = R.vurgu = null;
   R.cekim = R.gecis = R.olay = R.konu = null;
   R.gecmis.length = 0;
 }
@@ -416,22 +499,49 @@ function rejiGuncelle(dt) {
     if (R.cekim && R.cekim.zorlu)
       R.cekim = null;
     const c = R.cekim, t = c ? B - c.b0 : 0;
+    if (olcuBasi && R.olay && c && CEKIM[c.ad] && !olayKesebilir(R.olay, c, t)) {
+      // Bekleme süresi dolmadı (olay yağıyor): kamera kesmez, geniş çekimin üstünde arabanın büyük adı ve çevresinde
+      // bir halka çıkar. Böylece hediye seli altında da sürenin en az yarısı geniş çekimde kalır. (Ayrı bir adım: çekimin
+      // bitişini ve sıradaki çekime geçişi engellemez.)
+      const o = R.olay;
+      R.olay = null;
+      if (D.oy.get(o.k.id) === o.k && !o.k.cikiyor)
+        R.vurgu = { k: o.k, b0: B, sure: o.tur === 'sov' ? DRIFT_V : 6, ust: { sov: 'DRIFT ŞOV!', lider: 'YENİ GELİN ARABASI', super: 'SÜPER ARABA' }[o.tur] || 'HEDİYE ATTI' };
+    }
     const bittiMi = c && c.ad !== 'bos' && (t >= c.sure || (CEKIM[c.ad].bitti && t >= 8 && CEKIM[c.ad].bitti(c, z, t)) || ((c.ad === 'tur' || c.ad === 'vinc' || c.ad === 'on') && !D.lider));
     if (!c || c.ad === 'bos' || !CEKIM[c.ad])
       kes(siradakiSec(z), z, null, false);
+    else if (konuGitti(c)) {
+      // yakın çekimin konusu çıkıyor ya da silindi: kart düşer, hemen geniş çekime geçilir (ölçü çizgisini beklemez)
+      siradakiKes(z);
+    }
     else if (olcuBasi && R.olay) {
-      // olay çekimi: bir sonraki ölçü çizgisinde programı keser
+      // olay çekimi: bir sonraki ölçü çizgisinde programı keser (bekleme süresi doluysa)
       const o = R.olay;
       R.olay = null;
+      R.sonOlay = { b: B, bitis: null };
       if (o.tur === 'sov' && D.drift && D.drift.k === o.k)
         kes('sov', z, { k: o.k }, false);
       else if (o.tur === 'lider' && D.lider === o.k && !(c.ad === 'sov'))
         kes('lider', z, { k: o.k }, false);
+      else if (o.tur === 'super' && D.oy.get(o.k.id) === o.k && !o.k.cikiyor)
+        kes('super', z, { k: o.k }, false);
+      else if (o.tur === 'hediye' && D.oy.get(o.k.id) === o.k && !o.k.cikiyor && o.k !== D.lider) {
+        // yerinden çok öne geçecekse sollamayı izler, değilse yakın çekimde adıyla gösterilir
+        if (o.k.hedefS - o.k.gs > 12)
+          kes('sollama', z, { k: o.k }, false);
+        else {
+          kes('yakin', z, { k: o.k, olay: true }, false);
+          R.cekim.sure = 8;
+        }
+      }
     }
+    else if (olcuBasi && R.olay && R.olay.tur === 'hediye' && B - R.olay.b > 16)
+      R.olay = null;
     else if (olcuBasi && bittiMi && t >= 8)
-      kes(siradakiSec(z), z, null, true);
+      siradakiKes(z);
     else if (olcuBasi && t >= 8 && B < D.fisekBit && !CEKIM[c.ad].gok && c.ad !== 'sov')
-      kes(siradakiSec(z), z, null, true);
+      siradakiKes(z);
   }
   const c = R.cekim;
   let poz = CEKIM[c.ad].poz(c, B - c.b0, z);
@@ -462,7 +572,7 @@ function rejiGuncelle(dt) {
   kameraKoy(poz.p, poz.h, poz.fov, poz.merkezY || MERKEZ_Y);
   konuKadraj(c, z);
   // gölge kutusu: geniş çekimde geniş, yakında sıkı (gölge keskin kalsın)
-  DUNYA.golgeR = c.ad === 'kus' || c.ad === 'drone' || (c.ad === 'vinc' && B - c.b0 > 6) ? clamp(z.uzun * 0.62 + 18, 34, 120) : 30;
+  DUNYA.golgeR = genisMi(c) || (c.ad === 'vinc' && B - c.b0 > 6) ? clamp(z.uzun * 0.62 + 18, 34, 120) : 30;
   DUNYA.golgeOdak = poz.h;
 }
 // Çekimin asıl konusu ekranda nerede (720×1280): testler ve kare betiği her karede şeritte mi diye bakar.
@@ -472,8 +582,8 @@ function rejiGuncelle(dt) {
 // itmesinden sonra hâlâ sığmıyorsa görüş açısı genişler. Her karede, gecikmesiz: konu kadrajdan hiç kaçmaz.
 function konuNoktalari(c, z) {
   const n = [];
-  if (c.ad === 'drone' || c.ad === 'kus' || (c.ad === 'vinc' && B - c.b0 > 9)) {
-    for (const k of z.on.slice(0, c.ad === 'kus' ? 7 : 6))
+  if (genisMi(c)) {
+    for (const k of z.on.slice(0, GRUP[c.ad]))
       arabaKoseleri(k, n);
   }
   else {
@@ -528,9 +638,9 @@ function sonKadraj(c, z, poz) {
   poz.fov = b;
 }
 function konuArabasi(c) {
-  if (c.ad === 'drone' || c.ad === 'kus' || c.ad === 'bos' || (c.ad === 'vinc' && B - c.b0 > 9))
+  if (genisMi(c) || c.ad === 'bos')
     return null;
-  const k = c.ad === 'yakin' || c.ad === 'sov' || c.ad === 'lider' ? c.k : c.ad === 'yan' || c.ad === 'kenar' ? c.konu : D.lider;
+  const k = ['yakin', 'sov', 'lider', 'sollama', 'super'].includes(c.ad) ? c.k : c.ad === 'yan' || c.ad === 'kenar' ? c.konu : D.lider;
   return k && k.ar && D.oy.has(k.id) ? k : null;
 }
 function konuKadraj(c, z) {
@@ -569,7 +679,8 @@ function kameraKoy(p, h, fov, merkezY) {
 // p'den q'ya giden doğru, konu dışındaki bir arabanın kutusundan geçiyor mu (arabanın kendi ekseninde dilim testi).
 const _eA = new THREE.Vector3(), _eB = new THREE.Vector3(), _eM = new THREE.Matrix4();
 function engelVar(p, q, konu) {
-  for (const k of D.oy.values()) {
+  // yalnız bu karede çizilen arabalar (sınır yüzünden çizilmeyen görünmez araba kamerayı kaldırmasın)
+  for (const k of gorunenArabalar) {
     if (k === konu || !k.ar || !k._M || k.cikiyor)
       continue;
     const K = KASA[k.ar.tip];
@@ -621,7 +732,7 @@ function guvenli(p, h) {
   }
   // Arabanın bu kareki yeri (önceki karenin matrisi değil: drift atan saniyede 30 metre gider); hızlı arabanın önünde
   // pay hızıyla büyür.
-  for (const k of D.oy.values()) {
+  for (const k of gorunenArabalar) {
     if (!k.ar)
       continue;
     const K = KASA[k.ar.tip], M = arabaMatris(k, false, _gMat2);

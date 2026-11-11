@@ -571,10 +571,12 @@ function gelinSusu(tip) {
 const _arM = new THREE.Matrix4(), _arM2 = new THREE.Matrix4(), _arQ = new THREE.Quaternion(), _arE = new THREE.Euler(0, 0, 0, 'YZX'), _arP = new THREE.Vector3(), _arS = new THREE.Vector3(1, 1, 1), _arC = new THREE.Color();
 const LAMBA_RENK = { far: [0.95, 0.9, 0.74], farYan: [3, 2.9, 2.4], stop: [0.34, 0.03, 0.03], stopYan: [1.6, 0.08, 0.05], sinyal: [0.42, 0.2, 0.03], sinyalYan: [1.8, 0.75, 0.05] };
 // Arabanın yerel matrisi: yolda (gs + os, gl + ox), yola göre sapma yonO, viraja yatma, fren eğilmesi, zıplama.
+// yaySiz: tekerleklerin çerçevesi (yolda, zıplamada kalkar, yaylanmaz, yatmaz); değilse gövdenin çerçevesi (üstüne
+// süspansiyonun yaylanması, yatması ve eğilmesi eklenir; sınırları 20-hareket.js'te).
 function arabaMatris(k, yaySiz, out) {
   const s = D.yol + k.gs + k.os;
-  yolNokta(s, k.gl + k.ox, (yaySiz ? 0 : k.oy0 - k.zipY) + k.zipY, _arP);
-  _arE.set(yaySiz ? 0 : k.yalpa, yolYon(s) + k.yonO, yaySiz ? 0 : k.bas);
+  yolNokta(s, k.gl + k.ox, k.zipY + (yaySiz ? 0 : k.yayY || 0), _arP);
+  _arE.set(yaySiz ? 0 : k.yalpaC || 0, yolYon(s) + k.yonO, yaySiz ? 0 : k.basC || 0);
   _arQ.setFromEuler(_arE);
   return out.compose(_arP, _arQ, _arS);
 }
@@ -590,6 +592,7 @@ function arabalariYerlestir() {
   for (const k of gorunenArabalar) {
     const tip = k.ar.tip, K = KASA[tip], i = SAYAC[tip]++;
     arabaMatris(k, false, _arM);
+    k._cizKare = kareSay;
     k._M = k._M || new THREE.Matrix4();
     k._M.copy(_arM);
     GOVDE[tip].setMatrixAt(i, _arM);
@@ -601,8 +604,9 @@ function arabalariYerlestir() {
     for (const xc of K.teker)
       for (const s of [-1, 1]) {
         _arQ.setFromAxisAngle(_v.set(0, 0, 1), -k.teker);
-        _m4.compose(_v.set(xc, K.r + k.zipY, s * (K.W / 2 - 0.13)), _arQ, _arS).premultiply(_arM2);
+        _m4.compose(_v.set(xc, K.r, s * (K.W / 2 - 0.13)), _arQ, _arS).premultiply(_arM2);
         TEKER.setMatrixAt(nt++, _m4);
+        tekerOlc(k, K, xc, _m4);
       }
     // ışıklar: korna çalınca selektör (farlar yanıp söner), dörtlüler vuruşla yanar, fren yaparken ve her ölçünün
     // ilk vuruşunda stoplar parlar
@@ -708,7 +712,19 @@ function arabalariYerlestir() {
   gelinSusuYerlestir();
 }
 let plakaSahipleri = [], cizimDisi = 0;
-const ORNEK = { araba: 0, teker: 0, plaka: 0, yuva: 0, dusen: 0, yuvaCakisma: 0, adYanlis: 0, bosYuva: 0 };
+// Tekerlek denetimi: tekerleğin merkezi gövdenin kendi ekseninde nerede? Kemerin tepesi ile lastiğin tepesi arası
+// (kemer) hep artı, lastiğin altı gövdenin eşiğinin altında (esik artı) kalmalı. En küçük değerler kasa tipine göre
+// D.tekerOlc'ta birikir (test sıfırlayıp okur).
+const _toM = new THREE.Matrix4(), _toV = new THREE.Vector3();
+function tekerOlc(k, K, xc, M) {
+  _toV.setFromMatrixPosition(M).applyMatrix4(_toM.copy(k._M).invert());
+  const R = K.r + 0.075, dx = _toV.x - xc, kemer = K.r + Math.sqrt(Math.max(0, R * R - dx * dx)) - (_toV.y + K.r), esik = K.sil - (_toV.y - K.r);
+  const o = D.tekerOlc[k.ar.tip] || (D.tekerOlc[k.ar.tip] = { kemer: Infinity, esik: Infinity, n: 0 });
+  o.kemer = Math.min(o.kemer, kemer);
+  o.esik = Math.min(o.esik, esik);
+  o.n++;
+}
+const ORNEK = { araba: 0, teker: 0, plaka: 0, yuva: 0, dusen: 0, yuvaCakisma: 0, adYanlis: 0, bosYuva: 0, etiket: null };
 // Çizilecek arabalar: sahnedekiler (gelin arabası, konu, drift atan önce), sonra çıkmakta olanlar en yenisinden;
 // toplam KAP_ARABA'yı geçmez. Çizilmeyen çıkan araba zaten birkaç kare sonra silinecektir.
 function cizimSirasi() {

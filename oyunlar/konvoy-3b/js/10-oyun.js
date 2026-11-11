@@ -11,34 +11,57 @@
  * Süreler vuruşla (B) ölçülür: korna 1,5 vuruş, kurdele geçişi 2 vuruş, drift 16 vuruş.
  * Kancalar: oyunYerlesim, oyunGiris, oyunHediye, oyunLiderDegisti, oyunBaslat, oyunBosalt, oyunDurum.
  */
-const SERIT_L = 1.75;     // iki şeritli dizilişte şeridin yolun ortasına uzaklığı (metre)
-const SERIT_3 = 2.75;     // üç şeritli dizilişte yan şeritlerin yolun ortasına uzaklığı
-const SIRA_ARA = 7.6;   // aynı şeritte iki arabanın arası (araba boyu ~4,3 m + boşluk)
-const ILK_ARA = 9.6;    // gelin arabası ile ilk sıra arası
-const DRIFT_ON = 17;    // drift atanın yeri: gelin arabasının önündeki boş yol
+// ölçüler 00-ayar.js YOL_OLCU'dan
+const SERIT_L = YOL_OLCU.serit[2][0];
+const SIRA_ARA = YOL_OLCU.siraAra;
+const ILK_ARA = YOL_OLCU.ilkAra;
+const DRIFT_ON = YOL_OLCU.driftOn;
 const KORNA_V = 1.5;    // bir kornanın süresi (vuruş)
 const DRIFT_V = 16;     // drift şovunun (dönüşlerin) süresi (vuruş)
-Object.assign(D, { kolon: 1, zigzag: null, fisekler: [], fisekBit: -1, sovBit: -1, driftKuyruk: [], drift: null, kurdeleUcus: null, yol: 0, hiz: 8, duman: [], sonB: 0, yolAc: null });
+Object.assign(D, { kolon: 1, zigzag: null, fisekler: [], fisekBit: -1, sovBit: -1, driftKuyruk: [], drift: null, kurdeleUcus: null, yol: 0, hiz: 8, duman: [], sonB: 0, yolAc: null, tekerOlc: {}, koridor: false, carpisma: { cift: 0, enAz: Infinity, kare: 0 } });
 
 // Konvoy önce uzar, sonra genişler: beş arabaya kadar tek sıra, 17'ye kadar iki şerit, sonrası üç şerit (36 arabada
 // konvoy ~90 metre kalır; iki şeritte ~140 metreydi ve izleyicilerin çoğu her kameradan uzak düşüyordu).
-function kolonSayisi(m) { return m <= 4 ? 1 : m <= 16 ? 2 : 3; }
+// Üç şerit denendi, geri alındı: 8,4 metrelik yolda üç şeridin yanında bir geçiş yolu kalmıyor (sollayan, katılan,
+// çıkan araba ya birinin içinden geçiyor ya kaldırıma çıkıyordu). İki şerit + ortada geçiş yolu her hâlde sığar.
+function kolonSayisi(m) { return m <= 4 ? 1 : 2; }
 function oyunYerlesim() {
   const m = D.sira.length - 1, kol = kolonSayisi(m);
   D.kolon = kol;
-  D.sira.forEach((k, i) => {
+  // Her araba bir şeride bağlıdır (k.serit: 0 sol, 1 sağ) ve sıra değişince şeridini korur: hediyeyle biri öne geçince
+  // önündekiler kendi şeritlerinde birer sıra geri kayar (hep birlikte, birbirine değmeden), yalnız öne geçen geçiş
+  // yolunu kullanır. Şeritlerin sayısı bir farkı aşınca en arkadaki şerit değiştirir (seyrek).
+  for (const k of D.sira)
     arabaHazir(k);
-    if (i === 0) {
-      k.hedefS = 0;
-      k.hedefL = 0;
-      return;
-    }
-    const s = Math.floor((i - 1) / kol), o = (i - 1) % kol;
-    // İki şeritte sıradaki en yüksek jeton sol şeride (gelin arabasının arkasındaki ilk yer), sağ şerit yarım sıra geride.
-    // Üç şeritte sıranın en yüksek jetonu ortaya, sonra sol ve sağa; yan şeritler yarım sıra geride.
-    k.hedefL = kol === 1 ? 0 : kol === 2 ? (o === 0 ? SERIT_L : -SERIT_L) : [0, SERIT_3, -SERIT_3][o];
-    k.hedefS = -(ILK_ARA + SIRA_ARA * (s + ((kol === 2 && o === 1) || (kol === 3 && o > 0) ? 0.5 : 0)));
-  });
+  const L = D.sira[0];
+  if (L) {
+    L.hedefS = 0;
+    L.hedefL = 0;
+  }
+  const kalan = D.sira.slice(1);
+  if (kol === 1) {
+    kalan.forEach((k, r) => { k.hedefL = 0; k.hedefS = -(ILK_ARA + SIRA_ARA * r); });
+    return;
+  }
+  const say = [0, 0];
+  for (const k of kalan) {
+    if (k.serit !== 0 && k.serit !== 1)
+      k.serit = say[0] <= say[1] ? 0 : 1;
+    say[k.serit]++;
+  }
+  // denge: fark birden büyükse kalabalık şeridin en arkadaki arabası öbür şeride geçer
+  while (Math.abs(say[0] - say[1]) > 1) {
+    const cok = say[0] > say[1] ? 0 : 1, son = [...kalan].reverse().find(k => k.serit === cok);
+    son.serit = 1 - cok;
+    say[cok]--;
+    say[1 - cok]++;
+  }
+  const sira = [0, 0];
+  for (const k of kalan) {
+    const r = sira[k.serit]++;
+    k.hedefL = k.serit === 0 ? SERIT_L : -SERIT_L;
+    k.hedefS = -(ILK_ARA + SIRA_ARA * (r + (k.serit === 1 ? 0.5 : 0)));
+  }
 }
 // Yeni gelen arkadan, geçiş yolundan (gecisL) hızla gelip yerine girer; çıkanlar kaldırım tarafına çekilir, birbirinin
 // içinden geçmezler.
@@ -81,6 +104,9 @@ function oyunHediye(k, j, kd) {
     D.sarsinti = 1;
   }
   muzik.sov = B < D.sovBit;
+  // reji: hediye atan izleyiciyi yakın çekimde (ya da öne geçiyorsa sollamasıyla) gösterir; drift kendi şovunu alır
+  if (kd.tip !== 'drift')
+    rejiOlay('hediye', k);
 }
 // Gelin süsü eski gelin arabasından yenisine uçar; reji yeni gelin arabasının öne geçişini gösterir.
 function oyunLiderDegisti(eski, yeni) {
@@ -136,6 +162,8 @@ function oyunDurum(d) {
   d.webgl = !!DUNYA.r;
   d.kalite = KALITE.kademe;
   d.kareAralik = +KALITE.aralik.toFixed(1);
+  d.kaliteTemel = Number.isFinite(KALITE.temel) ? +KALITE.temel.toFixed(1) : null;
+  d.kaliteBekleme = KALITE.bekleme;
   d.ornek = Object.assign({}, ORNEK);
 }
 // Korna çalıyor ya da birazdan çalacak (dalga halinde başlayanlar için).

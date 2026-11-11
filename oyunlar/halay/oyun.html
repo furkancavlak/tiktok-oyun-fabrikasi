@@ -3809,8 +3809,8 @@ function kareOlcum() {
     if (!k || gor.has(k) || k.cikiyor)
       continue;
     gor.add(k);
-    const be = k.basEkran && k.basEkran.kare >= kareSay - 1 ? k.basEkran : null;
-    kisiler.push({ ad: k.ad, lider: k === D.lider, ozel: !!k.ozel, bas: be ? { x: yuv(be.x), y: yuv(be.y), r: yuv(be.r) } : null, etiket: k.etKutu ? k.etKutu.map(yuv) : null });
+    const be = k.basEkran && k.basEkran.kare >= kareSay - 1 ? k.basEkran : null, oa = k.oyunAd && k.oyunAd.kare >= kareSay - 1 ? k.oyunAd.kutu : null;
+    kisiler.push({ ad: k.ad, lider: k === D.lider, ozel: !!k.ozel, bas: be ? { x: yuv(be.x), y: yuv(be.y), r: yuv(be.r) } : null, etiket: k.etKutu ? k.etKutu.map(yuv) : oa ? oa.map(yuv) : null });
   }
   return {
     kare: kareSay, alan: [ALAN_UST, ALAN_ALT],

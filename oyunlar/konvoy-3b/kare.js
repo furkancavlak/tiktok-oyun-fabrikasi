@@ -161,24 +161,76 @@ const bekle = ms => new Promise(r => setTimeout(r, ms));
     }
     await p.close();
   }
-  if (yap('serit')) {
+  // Film şeridi: 60 sn otomatik reji, saniyede bir kare; önce hediyesiz, sonra iki hediyeyle (20. ve 40. saniyede).
+  const serit = async (ad, hediyeler) => {
     const p = await ac();
     await doldur(p, kapasite);
     await p.waitForTimeout(3000);
     const dosyalar = [], yazilar = [];
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 60; i++) {
       const t0 = Date.now();
-      if (i === 16) await p.evaluate(a => CanliOyun.olay({ tip: 'hediye', kullanici: { id: 'kare:' + a, ad: a }, jeton: 1000 }), ADLAR[25]);
-      if (i === 30) await p.evaluate(a => CanliOyun.olay({ tip: 'hediye', kullanici: { id: 'kare:' + a, ad: a }, jeton: 2000 }), ADLAR[33]);
-      const d = 'serit-kare-' + String(i).padStart(2, '0') + '.png';
-      const o = await cek(p, d, 'serit:' + i);
+      for (const [sn, jeton, kim] of hediyeler)
+        if (i === sn) await p.evaluate(([a, j]) => CanliOyun.olay({ tip: 'hediye', kullanici: { id: 'kare:' + a, ad: a }, jeton: j }), [ADLAR[kim], jeton]);
+      const d = ad + '-kare-' + String(i).padStart(2, '0') + '.png';
+      const o = await cek(p, d, ad + ':' + i);
       dosyalar.push(d);
       yazilar.push(i + ' sn · ' + o.cekim + (o.gecis ? ' (geçiş)' : '') + (o.konuDisari ? ' · KONU TAŞTI' : ''));
       await bekle(Math.max(0, 1000 - (Date.now() - t0)));
     }
     await p.close();
-    await sayfa(dosyalar.slice(0, 20), 10, 216, 384, 'serit-1.png', yazilar.slice(0, 20));
-    await sayfa(dosyalar.slice(20), 10, 216, 384, 'serit-2.png', yazilar.slice(20));
+    await sayfa(dosyalar, 10, 216, 384, ad + '.png', yazilar);
+    for (const d of dosyalar) fs.unlinkSync(path.join(cikti, d));
+  };
+  if (yap('serit')) {
+    await serit('serit-hediyesiz', []);
+    await serit('serit-hediyeli', [[20, 50, 30], [40, 1000, 25]]);
+  }
+  // Yaylanma: yakın çekimde iki araba, vuruş saati dondurulup sekizde bir vuruş arayla 16 kare; ortada hediye zıplaması
+  if (yap('yaylanma')) {
+    const p = await ac();
+    await doldur(p, 9);
+    await p.waitForTimeout(4000);
+    const dosyalar = [], yazilar = [];
+    for (const kimi of [3, 5]) {
+      await zorla(p, 'yakin');
+      await p.evaluate(i => { const D = CanliOyun._test.D, k = D.sira[i]; D.reji.cekim.k = k; D.reji.konu = k; D.reji.cekim.d = undefined; }, kimi);
+      await p.waitForTimeout(1200);
+      const tip = await p.evaluate(i => { const D = CanliOyun._test.D, k = D.sira[i]; CanliOyun.olay({ tip: 'hediye', kullanici: { id: k.id, ad: k.ad }, jeton: 1 }); return k.ar.tip; }, kimi);
+      const b0 = await p.evaluate(() => Math.ceil(CanliOyun._test.vurusDondur()));
+      for (let i = 0; i < 16; i++) {
+        await p.evaluate(b => CanliOyun._test.vurusDondur(b), b0 - 1 + i * 0.125);
+        await p.waitForTimeout(80);
+        const d = 'yaylanma-' + kimi + '-' + i + '.png';
+        await cek(p, d, 'yaylanma');
+        dosyalar.push(d);
+        yazilar.push(tip + ' B+' + (i * 0.125 - 1).toFixed(3));
+      }
+      await p.evaluate(() => CanliOyun._test.vurusCoz());
+    }
+    await p.close();
+    await sayfa(dosyalar, 8, 270, 480, 'yaylanma.png', yazilar);
+    for (const d of dosyalar) fs.unlinkSync(path.join(cikti, d));
+  }
+  // Sollama: arkadan bir araba büyük hediyeyle öne geçer; yarım saniye arayla 20 kare (otomatik reji sollama çekimini seçer)
+  if (yap('sollama')) {
+    const p = await ac();
+    await doldur(p, 17);
+    await p.waitForTimeout(5000);
+    await zorla(p, 'kus');
+    await p.waitForTimeout(3000);
+    await zorla(p, null);
+    const dosyalar = [], yazilar = [];
+    await p.evaluate(a => CanliOyun.olay({ tip: 'hediye', kullanici: { id: 'kare:' + a, ad: a }, jeton: 100 }), ADLAR[15]);
+    for (let i = 0; i < 20; i++) {
+      const t0 = Date.now();
+      const d = 'sollama-' + i + '.png';
+      const o = await cek(p, d, 'sollama:' + i);
+      dosyalar.push(d);
+      yazilar.push((i / 2).toFixed(1) + ' sn · ' + o.cekim);
+      await bekle(Math.max(0, 500 - (Date.now() - t0)));
+    }
+    await p.close();
+    await sayfa(dosyalar, 10, 216, 384, 'sollama.png', yazilar);
     for (const d of dosyalar) fs.unlinkSync(path.join(cikti, d));
   }
   // en kalabalık hâlde kare süresi (çekirdeğin D.kareMs'i: 3B çizim dahil)

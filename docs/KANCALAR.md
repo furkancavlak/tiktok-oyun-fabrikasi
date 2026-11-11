@@ -291,6 +291,10 @@ Oyuncu başına (her karede `insanEkle`'den sonra yazılır; `insanEkle` bunlar�
   çene) altına asılır. Ön sıradakinin adı arkadakinin yüzünü örtmesin diye. Balonu o zaman başın üstünde çıkar.
 - `k.et.bx`, `k.et.by`: konuşma balonunun ucunun ekrandaki yeri (balon onun üstünde durur).
 - Etiketin çizildiği kutu `k.etKutu = [x, y, genişlik, yükseklik]` (çizilmediyse `null`).
+- `k.oyunAd = { kutu: [x, y, genişlik, yükseklik], kare: kareSay }` (isteğe bağlı): oyun bir oyuncunun adını kendisi
+  çiziyorsa (büyük ad kartı gibi) kutusunu böyle bildirir. Çekirdeğin ölçümü (`CanliOyun._test.olcum()`, kare-cek ve
+  "en az bir ad okunur" testi) o oyuncunun etiketi yoksa bu kutuyu sayar. Yalnız o karede (ya da bir önceki karede)
+  yazılmış kutu geçerlidir. Yazmayan oyun için hiçbir şey değişmez.
 
 ```js
 // 00-ayar.js

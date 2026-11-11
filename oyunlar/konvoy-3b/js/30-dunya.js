@@ -9,12 +9,12 @@
  * geçişte aynı görünür. Hiçbir görsel dosya yoktur: dokular CanvasTexture ile kodla çizilir.
  */
 const PARCA = 60;            // bir yol parçasının boyu (metre)
-const YOL_YARI = 4.2;        // asfaltın yarı genişliği
-const KALDIRIM = 7.4;        // kaldırımın dış kenarı (yolun ortasından)
-const KALDIRIM_Y = 0.16;
-const AGAC_L = 6.0;          // ağaç ve direklerin yolun ortasına uzaklığı
-const BINA_L = 10.6;         // ön sıra binaların cephesi
-const PARK_L = 3.45;         // sol kaldırımın dibinde park etmiş arabalar
+// ölçüler 00-ayar.js YOL_OLCU'dan
+const YOL_YARI = YOL_OLCU.asfaltYari;
+const KALDIRIM = YOL_OLCU.kaldirimDis;
+const KALDIRIM_Y = YOL_OLCU.kaldirimY;
+const AGAC_L = YOL_OLCU.agacL;
+const BINA_L = YOL_OLCU.binaL;
 const GOK = { ust: '#4f93db', orta: '#93c3ee', ufuk: '#ffe2b6', sis: '#f2dcc0', gunes: '#fff1cf' };
 const GUNES_YON = new THREE.Vector3(-0.42, 0.74, 0.52).normalize();
 const DUNYA = { r: null, sahne: null, kamera: null, kx: 0, kz: 0, parcalar: new Map(), gpu: null, yok: false, bakis: new THREE.Vector3(0, 0, 1), golgeR: 30 };
@@ -527,8 +527,8 @@ function parcaKur(i) {
     dizi.push(g);
   };
   serit(-YOL_YARI, YOL_YARI, 0, 0, 4, asf);
-  serit(YOL_YARI + 0.2, KALDIRIM, KALDIRIM_Y, KALDIRIM_Y, 1, kal);
-  serit(-KALDIRIM, -YOL_YARI - 0.2, KALDIRIM_Y, KALDIRIM_Y, 1, kal);
+  serit(YOL_OLCU.bordurDis, KALDIRIM, KALDIRIM_Y, KALDIRIM_Y, 1, kal);
+  serit(-KALDIRIM, -YOL_OLCU.bordurDis, KALDIRIM_Y, KALDIRIM_Y, 1, kal);
   for (const g of asf)
     ekle(g, MALZ.asfalt);
   for (const g of kal)
@@ -552,7 +552,7 @@ function parcaKur(i) {
   const K = new Yigin(), M = new THREE.Matrix4();
   for (let s = s0; s < s1; s += 1)
     for (const yan of [-1, 1]) {
-      cerceveMatris(s + 0.5, yan * (YOL_YARI + 0.1), 0, ox, oz, false, M);
+      cerceveMatris(s + 0.5, yan * (YOL_YARI + YOL_OLCU.bordurDis) / 2, 0, ox, oz, false, M);
       parcaEkle(K, M, 'kutu', 0, 0.09, 0, 1, 0.18, 0.2, (Math.floor(s) & 1) ? '#d8392b' : '#f3efe6');
     }
   // kaldırımın dış kenarı (alçak taş)
@@ -817,12 +817,6 @@ function caminin(Y, M) {
   parcaEkle(Y, M, 'koni', mx, 33.1, mz, 0.12, 1.2, 0.12, '#d4b24a');
 }
 // Sol kaldırımın dibinde park etmiş arabalar (seyrek). Yan kameranın önüne düşerse reji onları gizler.
-function parkDiz(pi, s0, s1, ox, oz, Y) {
-  const r = rastgeleUret(ozet('park' + pi)), M = new THREE.Matrix4();
-  for (let s = s0 + 4 + r() * 6; s < s1 - 3; s += 9 + r() * 14) {
-    if (r() < 0.45)
-      continue;
-    cerceveMatris(s, PARK_L, 0, ox, oz, false, M);
-    parkArabasi(Y, M, r);
-  }
+function parkDiz() {
+  // Park etmiş arabalar kaldırıldı: asfaltın kenarında duruyorlardı, konvoyun şeridine taşıyorlardı (çarpışma kuralı).
 }

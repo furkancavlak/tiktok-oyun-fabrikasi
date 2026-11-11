@@ -66,3 +66,25 @@ const OYUN = {
     ]
   }
 };
+
+// YOLUN VE ARABALARIN ÖLÇÜLERİ (metre; yolun orta çizgisinden yana). Yol, şerit, kaldırım ve dizilişte kullanılan her sayı
+// buradan okunur: yeni araba modelleri, kaldırımdaki insanlar ve yol kenarı eşyası aynı ölçülere oturur.
+const YOL_OLCU = {
+  asfaltYari: 4.2,          // asfaltın yarı genişliği (bordürün iç yüzü)
+  bordurDis: 4.4,           // bordürün dış kenarı = kaldırımın iç kenarı
+  kaldirimDis: 7.4,         // kaldırımın dış kenarı
+  kaldirimY: 0.16,          // kaldırımın yüksekliği
+  agacL: 6.0,               // ağaç, sokak lambası ve bayraklı ip direklerinin çizgisi (kaldırımın üstünde)
+  binaL: 10.6,              // ön sıra binaların cephesi (en yakın)
+  arabaSinir: 4.25,         // hiçbir arabanın kenarı bu çizgiyi geçmez (kaldırıma çıkmaz)
+  // şerit ortaları, şerit sayısına göre (1: tek sıra, 2: iki şerit). Gelin arabası hep ortada (0).
+  serit: { 1: [0], 2: [1.75, -1.75] },
+  // biri geçerken (koridor) yerindeki arabaların kayması ve geçiş yolunun yeri
+  koridorKayma: { 1: -1.4, 2: 0.75 },   // tek sırada hepsi sağa; iki şeritte her şerit kendi yanına (dışa): ±2,5
+  gecisYolu: { 1: 1.3, 2: 0 },
+  arabaBoy: 4.75,           // dizilişte ve çarpışmada kullanılan araba boyu (tampondan tampona, en uzun kasa)
+  arabaEn: 1.85,            // ve eni (aynalar hariç, en geniş kasa)
+  siraAra: 7.6,             // aynı şeritte iki arabanın merkezleri arası
+  ilkAra: 9.6,              // gelin arabası ile ilk sıra arası
+  driftOn: 17               // drift atanın dönüş yeri: gelin arabasının önü
+};
