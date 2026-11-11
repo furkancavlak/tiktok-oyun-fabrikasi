@@ -294,10 +294,16 @@ function oyunCiz() {
 }
 // Büyük ad kartının konusu (yoksa k: null): şov çekiminde drift atan, yakın çekimde o izleyici, lider çekiminde yeni
 // gelin arabası. Bu arabanın küçük etiketi çizilmez: ad bir kez, büyük yazılır.
+// Süper araba anı (10-oyun.js superAraba) hangi çekimde olursa olsun SUPER_KART_V vuruş boyunca kartı alır (şov hariç):
+// reji o anın yakın çekimini ekleyene dek de izleyici adını büyük görür. b0: kartın girişi bu andan sayılır.
+const SUPER_KART_V = 8;
 function kartKonusu() {
   const R = D.reji, ad = R.cekim && R.cekim.ad;
   if (ad === 'sov' && D.drift && D.drift.k.ar)
     return { k: D.drift.k, ust: 'DRIFT ŞOV!' };
+  const sa = D.superAn;
+  if (sa && B - sa.b0 < SUPER_KART_V && D.oy.get(sa.k.id) === sa.k && !sa.k.cikiyor)
+    return { k: sa.k, ust: 'SÜPER ARABA', b0: sa.b0, super: true };
   if (ad === 'yakin' && R.konu && D.oy.has(R.konu.id) && D.oy.get(R.konu.id) === R.konu)
     return { k: R.konu, ust: (R.konu.sn + 1) + '. araba' + (R.konu.jeton > 0 ? ' · ' + R.konu.jeton + ' jeton' : '') };
   if (ad === 'lider' && D.lider)
@@ -358,9 +364,9 @@ function oyunUst() {
     c.globalAlpha = 1;
   }
   // büyük ad kartı: yakın çekimin konusu ya da drift atan (şov çekiminde). Şeridin altında, yolun üstünde durur.
-  const R = D.reji, ad = R.cekim && R.cekim.ad, { k, ust } = kartKonusu();
-  if (k && R.cekim && B - R.cekim.b0 > 0.3) {
-    const gir = clamp((B - R.cekim.b0 - 0.3) * 2.5, 0, 1);
+  const R = D.reji, ad = R.cekim && R.cekim.ad, { k, ust, b0, super: sup } = kartKonusu(), kb0 = b0 !== undefined ? b0 : R.cekim && R.cekim.b0;
+  if (k && R.cekim && B - kb0 > 0.3) {
+    const gir = clamp((B - kb0 - 0.3) * 2.5, 0, 1);
     c.globalAlpha = gir;
     c.font = '34px "Paytone One", Rubik, system-ui, sans-serif';
     const w = Math.min(560, c.measureText(k.ad).width + 52), x = GW / 2, y = SERIT_ALT - 52 + (1 - gir) * 16;
@@ -377,7 +383,7 @@ function oyunUst() {
     c.lineWidth = 4;
     c.strokeStyle = MUREKKEP;
     c.strokeText(ust, x, y - 42);
-    c.fillStyle = ad === 'sov' ? RENK.sicak : RENK.vurgu;
+    c.fillStyle = sup ? SUPER_RENK : ad === 'sov' ? RENK.sicak : RENK.vurgu;
     c.fillText(ust, x, y - 42);
     c.globalAlpha = 1;
   }

@@ -7,7 +7,8 @@
  * D'ye eklenenler: kolon (şerit sayısı), zigzag ({ bas, sure }), fisekler (gökteki havai fişekler), fisekBit / sovBit
  * (fişek ve davul şovu hangi vuruşa dek sürer), driftKuyruk + drift ({ k, bas, vardi }), kurdeleUcus (gelin süsünün yeni
  * arabaya geçişi), yol (gelin arabasının yolda aldığı yol, metre; hiç geri gitmez), hiz (metre / saniye), duman
- * (drift dumanı), sonB, reji (kamera rejisi, js/50-reji.js).
+ * (drift dumanı), sonB, reji (kamera rejisi, js/50-reji.js), superAn ({ k, b0 }: son süper araba anı, büyük kart için).
+ * Süper araba: tek seferde SUPER_ESIK jetonluk hediye atanın arabası süper arabaya döner (aşağıda "süper araba").
  * Süreler vuruşla (B) ölçülür: korna 1,5 vuruş, kurdele geçişi 2 vuruş, drift 16 vuruş.
  * Kancalar: oyunYerlesim, oyunGiris, oyunHediye, oyunLiderDegisti, oyunBaslat, oyunBosalt, oyunDurum.
  */
@@ -18,7 +19,7 @@ const ILK_ARA = 9.6;    // gelin arabası ile ilk sıra arası
 const DRIFT_ON = 17;    // drift atanın yeri: gelin arabasının önündeki boş yol
 const KORNA_V = 1.5;    // bir kornanın süresi (vuruş)
 const DRIFT_V = 16;     // drift şovunun (dönüşlerin) süresi (vuruş)
-Object.assign(D, { kolon: 1, zigzag: null, fisekler: [], fisekBit: -1, sovBit: -1, driftKuyruk: [], drift: null, kurdeleUcus: null, yol: 0, hiz: 8, duman: [], sonB: 0, yolAc: null });
+Object.assign(D, { kolon: 1, zigzag: null, fisekler: [], fisekBit: -1, sovBit: -1, driftKuyruk: [], drift: null, superAn: null, kurdeleUcus: null, yol: 0, hiz: 8, duman: [], sonB: 0, yolAc: null });
 
 // Konvoy önce uzar, sonra genişler: beş arabaya kadar tek sıra, 17'ye kadar iki şerit, sonrası üç şerit (36 arabada
 // konvoy ~90 metre kalır; iki şeritte ~140 metreydi ve izleyicilerin çoğu her kameradan uzak düşüyordu).
@@ -60,8 +61,59 @@ function hepsiKorna() {
     if (!k.cikiyor)
       kornaCal(k, Math.min(1, k.sn * 0.06));
 }
+/* ---- süper araba ----
+ * Kural: TEK bir hediyenin birim değeri (bir hediye öğesinin jetonu, olayın "jeton" alanı) SUPER_ESIK (00-ayar) ya da
+ * üstüyse gönderenin arabası o anda süper arabaya döner (superGiydir, js/40-araba.js) ve yayının geri kalanında öyle
+ * kalır: çıkıp geri gelse de (SUPER_IDLER kimliği tutar; "Yolu boşalt" sıfırlar). Seri (aynı küçük hediyeden adet × 1000)
+ * ve birkaç hediyenin toplamı saymaz. Aynı izleyici yine eşik üstü hediye atarsa kasa ikinci kez değişmez ama an yine
+ * onundur: olay yeniden kalkar. Süper arabanın sürücüsü gelin arabasıysa süs onun üstündedir (gelin süsü tipe göre kurulur).
+ * Çekirdek oyunHediye'ye yalnız toplamı (jeton × adet) verir. Birimi görmek için oyuna gelen hediye olayları geçerken
+ * not edilir: köprüden gelenler Yayin.cevir'den, deneme / test olayları CanliOyun.olay'dan geçer; sahte izleyici ve panel
+ * düğmeleri adet vermez (toplam = birim). ÇEKİRDEĞE EKLENMELİ: oyunHediye(k, j, kd, o) — o.jeton ve o.adet ile; o zaman
+ * bu iki sarmalayıcı kalkar.
+ */
+const SUPER_IDLER = new Set(), SON_HEDIYE = { id: null, jeton: 0, adet: 1 };
+function superMi(id) { return SUPER_IDLER.has(id); }
+function hediyeNotEt(o) {
+  if (o && o.tip === 'hediye') {
+    const kim = o.kullanici || {};
+    SON_HEDIYE.id = temiz(kim.id || kim.ad).slice(0, 64);
+    SON_HEDIYE.jeton = +o.jeton || 1;
+    SON_HEDIYE.adet = +o.adet || 1;
+  }
+  return o;
+}
+{
+  const cevir = Yayin.cevir, kapi = window.CanliOyun.olay;
+  Yayin.cevir = function (m) { return hediyeNotEt(cevir.call(this, m)); };
+  window.CanliOyun.olay = o => kapi(hediyeNotEt(o));
+}
+// Bu hediyenin birim değeri: not edilen olay bu kişinin bu hediyesiyse onun jetonu, değilse (adetsiz olay) toplamın kendisi.
+function hediyeBirim(k, j) {
+  const n = SON_HEDIYE, birim = n.id === k.id && Math.min(1e7, Math.max(1, Math.round(n.jeton * n.adet))) === j ? n.jeton : j;
+  n.id = null;
+  return birim;
+}
+function superAraba(k) {
+  SUPER_IDLER.add(k.id);
+  const yeni = superGiydir(k);
+  D.superAn = { k, b0: B };
+  if (yeni) {
+    D.superDegisim = (D.superDegisim || 0) + 1;
+    pankart('SÜPER ARABA', k.ad + ' artık süper arabada');
+    konfeti(80, 0.9);
+  }
+  // REJİ KANCASI (super): olay rejiye 'sov' ve 'lider' ile aynı yoldan (rejiOlay) gider. Reji bugün yalnız 'sov' ve
+  // 'lider' için keser; 'super' için yakın çekim rejiyi yeniden yazan çalışmada eklenecek (50-reji.js rejiGuncelle,
+  // "olay çekimi" dalı: o.tur === 'super' → kes(..., { k: o.k })). Bekleyen daha büyük olayı (şov, gelin değişimi) ezmez.
+  // Büyük kart ("SÜPER ARABA" + ad) rejiden bağımsız, D.superAn ile 60-cizim.js'te çizilir.
+  if (!D.reji.olay || D.reji.olay.tur === 'super')
+    rejiOlay('super', k);
+}
 function oyunHediye(k, j, kd) {
   const v = Math.ceil(B);
+  if (hediyeBirim(k, j) >= SUPER_ESIK)
+    superAraba(k);
   // Her hediyede gönderen korna çalar; büyüdükçe bütün konvoy katılır.
   if (kd.tip !== 'tek')
     hepsiKorna();
@@ -111,6 +163,9 @@ function oyunBosalt() {
   D.duman.length = 0;
   D.fisekBit = D.sovBit = -1;
   D.yolAc = null;
+  D.superAn = null;
+  D.superDegisim = 0;
+  SUPER_IDLER.clear();
   muzik.sov = false;
   rejiSifirla();
   if (DUNYA.r)
@@ -121,6 +176,10 @@ function oyunDurum(d) {
   d.drift = D.drift ? D.drift.k.ad : null;
   d.driftKuyruk = D.driftKuyruk.length;
   d.zigzag = !!D.zigzag;
+  d.superAraba = [...D.oy.values()].filter(k => k.ar && k.ar.tip === 'super' && !k.cikiyor).map(k => k.ad);
+  d.superAn = D.superAn ? D.superAn.k.ad : null;
+  d.superDegisim = D.superDegisim || 0;
+  d.gelinSusu = DUNYA.r ? Object.keys(GELIN.gruplar).filter(t => GELIN.gruplar[t].visible) : [];
   d.fisek = D.fisekler.length;
   let n = 0;
   for (const k of D.oy.values())

@@ -2,9 +2,16 @@
  * gerçek 3B çizilir ve otomatik bir kamera rejisi çeker (js/50-reji.js).
  * Derlemede HER ZAMAN İLK dosyadır; çekirdek OYUN'u buradan okur (docs/KANCALAR.md).
  * Oyun: yorum yazan izleyici kendi arabasıyla konvoya katılır. En çok hediye atanın arabası gelin arabasıdır:
- * en önde, fiyonklu, kurdeleli, çiçekli. Hediyeler korna, zigzag, havai fişek ve drift yaptırır.
- * three.js oyun.json'daki "kitaplik": ["three"] ile sayfaya gömülür (genel THREE nesnesi).
+ * en önde, fiyonklu, kurdeleli, çiçekli. Hediyeler korna, zigzag, havai fişek ve drift yaptırır. Tek seferde
+ * SUPER_ESIK jetonluk bir hediye atan, yayının geri kalanında süper arabayla sürer (js/10-oyun.js "süper araba").
+ * three.js ve hazır araba modelleri oyun.json'daki "kitaplik": ["three", "araba-modelleri"] ile sayfaya gömülür (genel THREE
+ * ve ARABA_MODELLERI nesneleri; modelleri araclar/kitaplik-araba.js üretir).
  */
+// Süper araba: TEK bir hediyenin birim değeri (bir hediye öğesinin jetonu) bu eşiğe ulaşırsa gönderenin arabası o anda
+// süper arabaya döner ve yayının geri kalanında öyle kalır. Seri (aynı küçük hediyeden 1000 tane) ya da birkaç hediyenin
+// toplamı saymaz. Süper arabanın imza rengi: uzaktan (drone) bir bakışta ayrılsın diye konvoyun paletinde olmayan bir ton.
+const SUPER_ESIK = 1000;
+const SUPER_RENK = '#a6e22e';
 const OYUN = {
   id: 'konvoy-3b',
   ad: 'Gelin Konvoyu 3B',
@@ -17,7 +24,7 @@ const OYUN = {
   kapasite: 36,
   // Büyükten küçüğe. tip, oyunHediye'nin hangi etkiyi başlatacağını seçer; etki paneldeki tabloda yazar.
   kademe: [
-    { min: 1000, ad: 'Drift şov', tip: 'drift', etki: 'Gönderenin arabası en öne çıkar, dönerek drift atar; kamera ona geçer' },
+    { min: 1000, ad: 'Drift şov', tip: 'drift', etki: 'Gönderenin arabası en öne çıkar, dönerek drift atar; kamera ona geçer. ' + SUPER_ESIK + ' jetonluk hediye: süper araba' },
     { min: 200, ad: 'Havai fişek', tip: 'fisek', etki: 'Gökte havai fişekler patlar, davul coşar' },
     { min: 50, ad: 'Sağ sol', tip: 'zigzag', etki: 'Bütün konvoy sağa sola kıvrılır' },
     { min: 10, ad: 'Hep beraber korna', tip: 'korna', etki: 'Bütün arabalar korna çalar, farlar yanıp söner' },
