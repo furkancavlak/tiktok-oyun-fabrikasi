@@ -23,6 +23,10 @@ const bekle = ms => new Promise(r => setTimeout(r, ms));
 const al = url => new Promise((res, rej) => http.get(url, r => { let d = ''; r.on('data', c => d += c); r.on('end', () => res({ kod: r.statusCode, govde: d })); }).on('error', rej));
 // Köprü dinlemeye başlayana dek bekler (en çok 15 sn). Yük altında köprünün açılması 1 sn'yi geçebiliyor; sabit bekleme yetmez.
 const acik = async kp => { for (let i = 0; i < 150; i++) { if (await al('http://127.0.0.1:' + kp + '/durum').then(x => x.kod > 0, () => false)) return true; await bekle(100); } return false; };
+// Sürecin kendiliğinden çıkmasını bekler (en çok 15 sn); yük altında çıkış bir iki saniye gecikebiliyor.
+const cikis = c => new Promise(res => { if (c.exitCode !== null) return res(); const t = setTimeout(res, 15000); c.on('exit', () => { clearTimeout(t); setTimeout(res, 50); }); });
+// Sürecin çıktısında bir yazı görünene dek bekler (en çok 15 sn); kaçıncı kez görüneceği verilebilir.
+const yazdi = async (c, ifade, kez = 1) => { for (let i = 0; i < 150 && (c.cikti.match(ifade) || []).length < kez; i++) await bekle(100); };
 // Ham WebSocket el sıkışması: ilk yanıt satırını ve gelen veriyi döndürür (başlık değeri null ise o başlık yollanmaz).
 const wsDene = (kp, yol, bas = {}) => new Promise(res => {
   const s = require('net').connect(kp, '127.0.0.1', () => {
@@ -53,8 +57,8 @@ function baslat(klasor, args) { const c = spawn(process.execPath, ['kopru.js', .
   kontrol('Köprü: kimliksiz ya da bozuk veri yok sayılır', cevir('chat', {}) === null && cevir('gift', null) === null && cevir('bilinmeyen', v1) === null);
   kontrol('Köprü: yalnız takma adı olan kullanıcı', cevir('follow', { nickname: 'Sadece Ad' }).kullanici.id === 'Sadece Ad');
   // Oyun seçimi: depoda birden çok oyun varken "hangi oyun?" sorusunun yanıtı (sıra numarası ya da ad).
-  const { oyunSec } = require(path.join(KOK, 'kopru.js')), uc = ['dolmus', 'halay', 'konvoy'];
-  kontrol('Köprü: oyun seçimi numarayla ya da adla; boşluk ve büyük harf hoş görülür', typeof oyunSec === 'function' && oyunSec(uc, '2') === 'halay' && oyunSec(uc, ' Konvoy ') === 'konvoy');
+  const { oyunSec } = require(path.join(KOK, 'kopru.js')), uc = ['halay', 'konvoy', 'vur-duzelsin'];
+  kontrol('Köprü: oyun seçimi numarayla ya da adla; boşluk ve büyük harf hoş görülür', typeof oyunSec === 'function' && oyunSec(uc, '2') === 'konvoy' && oyunSec(uc, ' Vur-Duzelsin ') === 'vur-duzelsin');
   kontrol('Köprü: oyun seçiminde listede olmayan yanıt geri çevrilir', typeof oyunSec === 'function' && [undefined, '', '0', '4', 'yok', '2.5'].every(y => oyunSec(uc, y) === null));
 
   const b = await tarayici();
@@ -115,7 +119,7 @@ function baslat(klasor, args) { const c = spawn(process.execPath, ['kopru.js', .
   // ---- 4. sayfa yenilenince sıralama geri gelir
   await bekle(5500); const sakli = await p.evaluate(() => CanliOyun.durum().sira.filter(x => x[1] > 0));
   k.kill('SIGKILL'); await bekle(400); k = baslat(KOK, ['--deneme', '--oyun', OYUN_AD, '--port', String(P)]); await bekle(600); await acik(P);
-  await p.reload(); await bekle(350);
+  await p.reload({ waitUntil: 'domcontentloaded' }); await p.waitForFunction(() => window.CanliOyun && CanliOyun.durum(), null, { timeout: 15000 }).catch(() => { }); await bekle(350);
   const geri = await p.evaluate(() => CanliOyun.durum().sira.filter(x => x[1] > 0));
   kontrol('Sayfa yenilenince jeton sıralaması geri yüklenir', geri.length >= sakli.length - 1 && geri.length > 0 && geri[0][1] >= sakli[0][1] - 30, { once: sakli.slice(0, 3), sonra: geri.slice(0, 3) });
   await p.close();
@@ -125,7 +129,7 @@ function baslat(klasor, args) { const c = spawn(process.execPath, ['kopru.js', .
   kontrol('Köprüden #yayin: yalnız sahne, bağlı, ses kendiliğinden başlar (tarayıcı izin verirse)', yd.panel === 'none' && yd.bagli && yd.ses && yd.sesDugme, yd);
   await y.screenshot({ path: S + '/k-yayin.png' }); await y.close();
   // aynı kapı ikinci kez
-  const k2 = baslat(KOK, ['--deneme', '--oyun', OYUN_AD, '--port', String(P)]); await bekle(900);
+  const k2 = baslat(KOK, ['--deneme', '--oyun', OYUN_AD, '--port', String(P)]); await cikis(k2);
   kontrol('Kapı doluysa anlaşılır ileti verip kapanır', /kapı dolu/.test(k2.cikti) && k2.exitCode === 1, k2.cikti.trim().slice(0, 90));
   k.kill('SIGKILL');
 
@@ -135,7 +139,7 @@ function baslat(klasor, args) { const c = spawn(process.execPath, ['kopru.js', .
   const dr3 = JSON.parse((await al('http://127.0.0.1:' + (P + 1) + '/durum')).govde);
   kontrol('Kütüphane kurulu değilken ne yapılacağını söyler, oyun yine açılır', /npm install/.test(k3.cikti) && /npm install/.test(dr3.durum) && (await al('http://127.0.0.1:' + (P + 1) + '/')).kod === 200, dr3.durum);
   k3.kill('SIGKILL');
-  const k4 = baslat(bos, []); await bekle(500);
+  const k4 = baslat(bos, []); await cikis(k4);
   kontrol('Kullanıcı adı verilmezse kullanım bilgisini yazar', /Kullanım/.test(k4.cikti) && k4.exitCode === 1);
 
   // ---- 6. sahte kütüphanelerle: eski sürüm, yeni sürüm, yayın kapalı
@@ -171,18 +175,18 @@ function baslat(klasor, args) { const c = spawn(process.execPath, ['kopru.js', .
     }
     fs.copyFileSync(path.join(KOK, 'kopru.js'), path.join(kl, 'kopru.js'));
     // Soru istenmediyse ve girdi klavye değilse (başka bir program çalıştırıyor) eskisi gibi söyleyip durur.
-    const sessiz = baslat(kl, ['--deneme', '--port', String(kp)]); let sessizKod = null; sessiz.on('exit', k => sessizKod = k); await bekle(900);
+    const sessiz = baslat(kl, ['--deneme', '--port', String(kp)]); let sessizKod = null; sessiz.on('exit', k => sessizKod = k); await cikis(sessiz);
     kontrol('Çok oyunlu klasör, soru istenmedi: hangi oyunların olduğunu yazıp durur', sessizKod === 1 && /--oyun <ad> ekle/.test(sessiz.cikti) && /a-oyun, b-oyun/.test(sessiz.cikti), { kod: sessizKod, cikti: sessiz.cikti }); sessiz.kill('SIGKILL');
     // --sor ile (BASLAT.bat böyle çağırır): listeyi gösterir, yanlış yanıtta yeniden sorar, seçilen oyunu açar.
-    const sorulu = baslat(kl, ['--deneme', '--sor', '--port', String(kp)]); await bekle(700);
-    sorulu.stdin.write('olmayan\n'); await bekle(300); sorulu.stdin.write('2\n'); await bekle(900);
+    const sorulu = baslat(kl, ['--deneme', '--sor', '--port', String(kp)]); await yazdi(sorulu, /Enter'a bas/g);
+    sorulu.stdin.write('olmayan\n'); await yazdi(sorulu, /Enter'a bas/g, 2); sorulu.stdin.write('2\n'); await acik(kp);
     const yanit = await al('http://127.0.0.1:' + kp + '/').catch(() => ({ kod: 0, govde: '' }));
     kontrol('Çok oyunlu klasör, --sor: oyunları görünen adlarıyla listeler ve sorar', /1\) a-oyun/.test(sorulu.cikti) && /2\) b-oyun/.test(sorulu.cikti) && /İkinci Oyun/.test(sorulu.cikti), sorulu.cikti);
     kontrol('Çok oyunlu klasör, --sor: listede olmayan yanıtta yeniden sorar', /Listede yok: olmayan/.test(sorulu.cikti), sorulu.cikti);
     kontrol('Çok oyunlu klasör, --sor: seçilen oyunla açılır, sayfa gelir', /Oyun: oyunlar[\\/]b-oyun[\\/]oyun\.html/.test(sorulu.cikti) && yanit.kod === 200 && /CanliOyun/.test(yanit.govde), { kod: yanit.kod, cikti: sorulu.cikti });
     sorulu.kill('SIGKILL'); await bekle(300);
     // Yanıt gelmeden girdi biterse (pencere kapatıldı) asılı kalmaz.
-    const yarim = baslat(kl, ['--deneme', '--sor', '--port', String(kp)]); let yarimKod = null; yarim.on('exit', k => yarimKod = k); await bekle(500); yarim.stdin.end(); await bekle(700);
+    const yarim = baslat(kl, ['--deneme', '--sor', '--port', String(kp)]); let yarimKod = null; yarim.on('exit', k => yarimKod = k); await yazdi(yarim, /Enter'a bas/g); yarim.stdin.end(); await cikis(yarim);
     kontrol('Çok oyunlu klasör, --sor: yanıt verilmeden girdi kapanırsa durur', yarimKod === 1, { kod: yarimKod, cikti: yarim.cikti }); yarim.kill('SIGKILL');
   }
   // ---- 7. ana sayfa kipi (BASLAT.bat böyle çalıştırır): oyun ve kip sayfadan seçilir
@@ -265,14 +269,14 @@ function baslat(klasor, args) { const c = spawn(process.execPath, ['kopru.js', .
     await ap.press('#kullanici', 'Enter'); await bekle(300);
     const kay = await ap.evaluate(() => { const k = document.querySelector('.kart[data-oyun="a-oyun"]'), r = e => getComputedStyle(e.querySelector('i')).backgroundImage; return { gor: !document.getElementById('kayitli-gor').hidden, form: !document.getElementById('ad-form').hidden, ad: document.getElementById('kayitli-ad').textContent, etiket: document.querySelector('.kayit-etiket').textContent, dene: r(k.querySelector('.dene')), bagla: r(k.querySelector('.bagla')), alt: k.querySelector('.bagla small').textContent }; });
     kontrol('Ana sayfa: yazmak kaydetmez; Enter ile kaydedilir, "@ad Kayıtlı" görünür, kırmızı Yayın yanar ve "@ad" der', !yazinca && kay.gor && !kay.form && kay.ad === '@Test_Kullanici' && kay.etiket === 'Kayıtlı' && /255, 138, 112/.test(kay.bagla) && kay.alt === '@Test_Kullanici', { yazinca, ...kay });
-    await ap.reload(); await bekle(800);
+    await ap.reload({ waitUntil: 'domcontentloaded' }); await ap.waitForFunction(() => document.getElementById('kayitli-ad') && document.getElementById('kayitli-ad').textContent !== '', null, { timeout: 15000 }).catch(() => { });
     const hatirla = await ap.evaluate(() => ({ ad: document.getElementById('kayitli-ad').textContent, gor: !document.getElementById('kayitli-gor').hidden }));
     kontrol('Ana sayfa: kayıtlı ad sayfa yeniden açılınca kayıtlı gelir', hatirla.gor && hatirla.ad === '@Test_Kullanici', hatirla);
     await ap.click('#degistir'); await bekle(150);
     const deg = await ap.evaluate(() => ({ form: !document.getElementById('ad-form').hidden, deger: document.getElementById('kullanici').value, kayitli: document.body.classList.contains('kayitli'), saklanan: localStorage.getItem('fabrika-kullanici'), vazgec: !document.getElementById('vazgec').hidden, odak: document.activeElement.id }));
     await ap.keyboard.press('Escape'); await bekle(150);
     const esc = await ap.evaluate(() => ({ gor: !document.getElementById('kayitli-gor').hidden, ad: document.getElementById('kayitli-ad').textContent }));
-    await ap.click('#degistir'); await ap.fill('#kullanici', 'yarim_ad'); await ap.reload(); await bekle(800);
+    await ap.click('#degistir'); await ap.fill('#kullanici', 'yarim_ad'); await ap.reload({ waitUntil: 'domcontentloaded' }); await ap.waitForFunction(() => document.getElementById('kayitli-ad') && document.getElementById('kayitli-ad').textContent !== '', null, { timeout: 15000 }).catch(() => { });
     const yenile = await ap.evaluate(() => document.getElementById('kayitli-ad').textContent);
     await ap.click('#degistir'); await ap.click('#vazgec'); await bekle(100);
     const vaz = await ap.evaluate(() => !document.getElementById('kayitli-gor').hidden);
@@ -297,6 +301,10 @@ function baslat(klasor, args) { const c = spawn(process.execPath, ['kopru.js', .
     };
     const gwDurum = Object.fromEntries(Object.entries(gw).map(([a, v]) => [a, v.durum.slice(9, 12)]));
     kontrol('Ana sayfa kipinde soket yalnız kendi sayfasından ve çalışan başlatmanın adresinde (/olay/<oyun>/<kimlik>) açılır; başka kaynak, kaynaksız, null, başka Host, başka yol, eski biçim, yanlış kimlik geri çevrilir ve hiçbir olay almaz', gwDurum.dogru === '101' && gwDurum.localhost === '101' && /"tip":"kopru"/.test(gw.dogru.veri) && Object.entries(gwDurum).filter(([a]) => a !== 'dogru' && a !== 'localhost').every(([, v]) => v === '403') && Object.entries(gw).filter(([a]) => a !== 'dogru' && a !== 'localhost').every(([, v]) => !/"tip"/.test(v.veri)), gwDurum);
+    // Geri çevrilen yoklamayı istemci TCP RST ile keserse köprü düşmemeli (önceden dinleyicisiz soket hatası süreci kapatıyordu).
+    for (let i = 0; i < 20; i++) await new Promise(res => { const s = require('net').connect(kp, '127.0.0.1', () => { s.write('GET /olay HTTP/1.1\r\nHost: 127.0.0.1:' + kp + '\r\nOrigin: http://kotu.example\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n'); s.once('data', () => { s.resetAndDestroy(); res(); }); }); setTimeout(() => { try { s.resetAndDestroy(); } catch (e) { } res(); }, 300); s.on('error', () => { }); });
+    await bekle(500);
+    kontrol('Geri çevrilen soket yoklaması bağlantıyı sıfırlayarak (RST) kesse de köprü ayakta kalır (20 kez)', ana.exitCode === null && (await al(A + '/durum').then(x => x.kod, () => 0)) === 200, { kod: ana.exitCode, cikti: ana.cikti.slice(-200) });
     const anaHost = await Promise.all(['/', '/durum', '/api/oyunlar', '/oyun/a-oyun/', '/onizleme/a-oyun/', '/oyun/a-oyun/muzik/liste.js'].map(y => hostAl(kp, y, 'kotu.example:' + kp)));
     kontrol('Ana sayfa kipinde her HTTP adresi başka Host\'la gelirse 403', anaHost.every(k => k === 403), anaHost);
     const bosListe = await al(A + '/oyun/a-oyun/muzik/liste.js');
@@ -305,7 +313,7 @@ function baslat(klasor, args) { const c = spawn(process.execPath, ['kopru.js', .
     const toplam = s => Object.values(s.sayac).reduce((x, y) => x + y, 0);
     const hiz = async () => { const a = JSON.parse((await al(A + '/durum')).govde); await bekle(4000); return toplam(JSON.parse((await al(A + '/durum')).govde)) - toplam(a); };
     const hiz1 = await hiz();
-    for (const o of ['b-oyun', 'a-oyun', 'b-oyun', 'c-oyun', 'b-oyun']) await api({ oyun: o, kip: 'deneme' });
+    for (const o of ['b-oyun', 'c-oyun', 'b-oyun', 'c-oyun', 'b-oyun']) await api({ oyun: o, kip: 'deneme' });
     const hiz2 = await hiz();
     kontrol('Oyun değiştirip geri dönünce olay hızı katlanmaz (eski sahte olay saati durur)', hiz1 >= 6 && hiz2 >= 6 && hiz2 <= hiz1 * 1.4, { once: hiz1, sonra: hiz2 });
     await bekle(2600); od = await ap.evaluate(() => ({ alinan: CanliOyun.durum().alinan, ortu: (document.getElementById('calistirma-ortu') || {}).textContent || '' })); await bekle(2000);
@@ -374,7 +382,7 @@ function baslat(klasor, args) { const c = spawn(process.execPath, ['kopru.js', .
     const mz2 = [(await al(A + '/oyun/a-oyun/muzik/_t.js')).govde, (await al(A + '/oyun/b-oyun/muzik/_t.js')).kod, (await al(A + '/oyun/a-oyun/muzik/..%2F..%2Fkopru.js')).kod, (await al(A + '/onizleme/a-oyun/muzik/_t.js')).kod];
     kontrol('Ana sayfa kipi: oyunun hazır müziği kendi adresinden gelir; başka oyununki, klasör dışı ve önizlemeden gelmez', mz2[0] === 'mz' && mz2.slice(1).every(k => k === 404), mz2);
     // İkinci kez çift tıklanınca: aynı kapıda ana sayfa zaten açık
-    const ikinci = baslat(kl, ['--ana-sayfa', '--port', String(kp)]); let ikinciKod = null; ikinci.on('exit', k => ikinciKod = k); await bekle(1800);
+    const ikinci = baslat(kl, ['--ana-sayfa', '--port', String(kp)]); let ikinciKod = null; ikinci.on('exit', k => ikinciKod = k); await cikis(ikinci);
     kontrol('Ana sayfa zaten açıkken ikinci kez açılınca düz bir dille söyleyip hatasız kapanır', ikinciKod === 0 && /zaten açık/.test(ikinci.cikti) && !/Error|hata/i.test(ikinci.cikti), { kod: ikinciKod, cikti: ikinci.cikti.trim() });
     ikinci.kill('SIGKILL'); await actx.close(); ana.kill('SIGKILL');
   }
@@ -384,6 +392,8 @@ function baslat(klasor, args) { const c = spawn(process.execPath, ['kopru.js', .
     fs.mkdirSync(kl); fs.copyFileSync(path.join(KOK, 'kopru.js'), path.join(kl, 'kopru.js')); fs.copyFileSync(OYUN_HTML, path.join(kl, 'oyun.html')); fs.copyFileSync(path.join(KOK, 'cekirdek', 'ana-sayfa.html'), path.join(kl, 'ana-sayfa.html'));
     fs.mkdirSync(path.join(kl, 'oyunlar', 'baska'), { recursive: true }); fs.copyFileSync(OYUN_HTML, path.join(kl, 'oyunlar', 'baska', 'oyun.html')); // pakette olmaz; olsa da gösterilmez
     const pk = baslat(kl, ['--ana-sayfa', '--port', String(kp)]); await bekle(800); await acik(kp);
+    const kp8 = JSON.parse((await al(A + '/api/oyunlar')).govde).kutuphane;
+    kontrol('package.json olmayan klasörde köprü kütüphane indirmeye kalkmaz (npm üst klasördeki başka bir projeyi değiştirmesin); durum açıkça "hata"', kp8.durum === 'hata' && /package\.json/.test(kp8.neden) && !fs.existsSync(path.join(kl, 'kurulum-sayac.txt')), kp8);
     const l = JSON.parse((await al(A + '/api/oyunlar')).govde), baslik = /<title>([^<]*)<\/title>/.exec(fs.readFileSync(OYUN_HTML, 'utf8'))[1];
     kontrol('Paket düzeni, ana sayfa kipi: yalnız paketteki tek oyun (oyun.json yoksa adı sayfa başlığından)', l.paket === true && l.oyunlar.length === 1 && l.oyunlar[0].id === 'oyun' && l.oyunlar[0].ad === baslik && (await al(A + '/')).kod === 200, l.oyunlar);
     fs.writeFileSync(path.join(kl, 'oyun.json'), JSON.stringify({ ad: 'Paket Oyunu', paket: 'paket-oyunu', aciklama: 'Tek cümle.', vitrin: false }));
@@ -404,6 +414,7 @@ function baslat(klasor, args) { const c = spawn(process.execPath, ['kopru.js', .
       fs.copyFileSync(path.join(KOK, 'kopru.js'), path.join(kl, 'kopru.js'));
       fs.copyFileSync(path.join(KOK, 'cekirdek', 'ana-sayfa.html'), path.join(kl, 'cekirdek', 'ana-sayfa.html'));
       fs.writeFileSync(path.join(kl, 'kurulum-mod.txt'), mod);
+      fs.writeFileSync(path.join(kl, 'package.json'), JSON.stringify({ private: true, dependencies: { 'tiktok-live-connector': '^2.5.0' } }));
       return kl;
     };
     const sayac = kl => { try { return fs.readFileSync(path.join(kl, 'kurulum-sayac.txt'), 'utf8'); } catch (e) { return ''; } };
@@ -413,6 +424,7 @@ function baslat(klasor, args) { const c = spawn(process.execPath, ['kopru.js', .
     // 9a. indirme sürüyor → biter
     const kl = kur('kurulum-iyi', 'tamam 7000');
     let m = baslat(kl, ['--ana-sayfa', '--port', String(kp)]); await bekle(700); await acik(kp);
+    for (let i = 0; i < 150 && !sayac(kl); i++) await bekle(100); // taklit kurucu kendi sürecinde başlayıp sayacını yazana dek
     const d1 = await durum();
     kontrol('Açılış: kütüphane yoksa motor hemen sunar ve kendisi indirmeye başlar (durum "iniyor", saniye sayılır)', d1.kutuphane && d1.kutuphane.durum === 'iniyor' && d1.kutuphane.sure >= 0 && /kütüphanesi iniyor/.test(m.cikti) && sayac(kl) === 't', { kutuphane: d1.kutuphane, sayac: sayac(kl) });
     const canliErken = await api('/api/baslat', { oyun: 'a-oyun', kip: 'canli', kullanici: 'Test_Kullanici' });
@@ -570,7 +582,7 @@ function baslat(klasor, args) { const c = spawn(process.execPath, ['kopru.js', .
     m.kill('SIGKILL'); await bekle(400);
     const pk = path.join(GECICI, 'denetim-paket'); fs.mkdirSync(pk); fs.copyFileSync(path.join(KOK, 'kopru.js'), path.join(pk, 'kopru.js')); fs.copyFileSync(OYUN_HTML, path.join(pk, 'oyun.html'));
     const eski = baslat(pk, ['--deneme', '--port', String(kp)]); await bekle(800); await acik(kp);
-    const ikinciMotor = baslat(kl, ['--ana-sayfa', '--port', String(kp)]); let ikinciKod = null; ikinciMotor.on('exit', k => ikinciKod = k); await bekle(2000);
+    const ikinciMotor = baslat(kl, ['--ana-sayfa', '--port', String(kp)]); let ikinciKod = null; ikinciMotor.on('exit', k => ikinciKod = k); await cikis(ikinciMotor);
     kontrol('Kapıyı eski yoldan açılmış kendi motorumuz tutuyorsa "başka bir pencerede zaten açık, o pencereyi kapat" der', ikinciKod === 1 && /başka bir pencerede zaten açık/.test(ikinciMotor.cikti) && /kapat/.test(ikinciMotor.cikti), { kod: ikinciKod, cikti: ikinciMotor.cikti.trim() });
     eski.kill('SIGKILL'); await bekle(400);
     const yavas = require('net').createServer(s => { s.write('HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n'); const t = setInterval(() => { try { s.write(' '); } catch (e) { clearInterval(t); } }, 200); s.on('close', () => clearInterval(t)); s.on('error', () => clearInterval(t)); });

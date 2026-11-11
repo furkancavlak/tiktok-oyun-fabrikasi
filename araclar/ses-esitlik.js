@@ -13,7 +13,7 @@
  *      motordan tıpatıp aynı sesi istemiştir. Aracın sonucu (çıkış kodu) buna bakar.
  *   2. ÖRNEKLER: üretilen sesin iki kanalının bütün 32 bitlik örnekleri. Chrome aynı sayfayı iki kez ürettiğinde bile
  *      son basamaklarda oynayabiliyor (aynı dosyayla dene: --yeni <aynı yol>); burada yalnız fark büyüklüğü yazılır.
- * Fark yoksa 0, varsa 1 koduyla çıkar. Halay ve dolmuş çekirdekteki müzik değişikliklerinden sonra aynı çalmalı.
+ * Fark yoksa 0, varsa 1 koduyla çıkar. Çekirdekteki müzik değişikliğinden sonra her oyun (kendi müziği değişmediyse) aynı çalmalı.
  */
 'use strict';
 const path = require('path'), fs = require('fs'), { pathToFileURL } = require('url'), { execFileSync } = require('child_process');

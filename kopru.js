@@ -151,6 +151,9 @@ function muzikSun(ad, req, res, klasor = MUZIK_KLASOR) {
   });
 }
 sunucu.on('upgrade', (req, soket) => {
+  // Hata dinleyicisi en başta: geri çevrilen ya da yarıda kesilen bir bağlantının ECONNRESET'i köprüyü düşürmesin
+  // (dinleyicisiz soketteki 'error' bütün süreci kapatır; başka bir site yalnız yoklayarak motoru durdurabilirdi).
+  soket.on('error', () => { });
   const anahtar = req.headers['sec-websocket-key'];
   if (!anahtar || String(req.headers.upgrade).toLowerCase() !== 'websocket') { soket.destroy(); return; }
   const reddet = () => { try { soket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n'); } catch (e) { } setTimeout(() => soket.destroy(), 200); };
@@ -307,6 +310,15 @@ function kutuphaneDurum() {
 function kutuphaneHazirla() {
   if (kutuphane.durum === 'iniyor' || kutuphane.durum === 'hazir') return;
   if (kutuphaneVarMi()) { kutuphane.durum = 'hazir'; return; }
+  // Yalnız köprünün kendi klasöründe, kütüphaneyi isteyen bir package.json varsa kurulur. Yoksa npm üst klasörlere
+  // tırmanıp ilk bulduğu başka bir projeyi değiştirir (--omit=dev o projenin geliştirme paketlerini siler).
+  let kendiPaket = false;
+  try { const pj = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8').replace(/^﻿/, '')); kendiPaket = !!(pj && pj.dependencies && pj.dependencies['tiktok-live-connector']); } catch (e) { }
+  if (!kendiPaket) {
+    kutuphane.durum = 'hata'; kutuphane.neden = 'Bu klasörde oyunun package.json dosyası yok; kütüphane indirilemez. Oyun klasörünün tamamını (package.json ile) kullan.';
+    console.log('  TikTok kütüphanesi kurulmadı: bu klasörde kütüphaneyi isteyen package.json yok (başka bir projeye dokunulmasın diye). Dene yine çalışır.\n');
+    return;
+  }
   kutuphane.durum = 'iniyor'; kutuphane.basladi = Date.now(); kutuphane.neden = '';
   console.log('  TikTok kütüphanesi iniyor (yalnız ilk sefer, yaklaşık bir dakika). Beklerken ana sayfada Dene çalışır.');
   const { spawn } = require('child_process'), betik = process.env.KOPRU_KURULUM_BETIGI;
