@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TikTok Oyun Fabrikası</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Paytone+One&family=Rubik:wght@400;500;700&display=swap">
+<!--
+  Ana sayfa: köprü --ana-sayfa ile açılınca / adresinde sunulur (kopru.js). Oyunları /api/oyunlar'dan okur, düğmeler
+  POST /api/baslat ile oyunu ve kipi seçer, sonra /oyun/<ad>/ adresine geçer. Kartlardaki önizleme /onizleme/<ad>/#yayin:
+  köprüye bağlanmayan, sessiz, kendi sahte kalabalığıyla oynayan oyun sayfası.
+  Renkler ve yazı tipleri yayın masasıyla (cekirdek/stil.css) aynı ailedendir. Dışarıdan gelen hiçbir metin HTML
+  olarak yazılmaz: hepsi textContent / value.
+-->
+<style>
+:root{
+  color-scheme: dark;
+  --zemin:#0e1230; --zemin-2:#171d47; --zemin-3:#232b63; --cizgi:#343d80;
+  --vurgu:#ffd166; --sicak:#e23d2f; --serin:#22b8a7; --acik:#f6ecd9;
+  --soluk:#a9b0dc; --murekkep:#080a1c;
+  --vurgu-a:rgba(255,209,102,.13); --sicak-a:rgba(226,61,47,.17); --sicak-b:rgba(226,61,47,.42); --serin-a:rgba(34,184,167,.16);
+  --acik-a:rgba(246,236,217,.05); --acik-b:rgba(246,236,217,.1); --murekkep-a:rgba(8,10,28,.55);
+  --baslik:'Paytone One','Rubik','Trebuchet MS',sans-serif;
+  --govde:'Rubik',system-ui,'Segoe UI',sans-serif;
+  /* önizleme yüksekliği: 1366×768'de dört kart başlıkla birlikte ekrana sığsın */
+  --onizleme-y:clamp(230px, calc(100vh - 430px), 540px);
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{min-height:100%}
+body{margin:0;min-height:100vh;color:var(--acik);font-family:var(--govde);font-size:14px;line-height:1.45;
+  background:radial-gradient(1100px 620px at 78% -12%,var(--zemin-2),transparent 62%) var(--zemin)}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--vurgu);outline-offset:2px}
+a{color:var(--vurgu)}
+
+.sayfa{max-width:1480px;margin:0 auto;padding:22px max(20px,env(safe-area-inset-left,0px)) 16px;display:flex;flex-direction:column;gap:18px;min-height:100vh}
+
+/* ---- baş: ad + ne yapılacağı, sağda kullanıcı adı ---- */
+.bas{display:flex;align-items:flex-end;justify-content:space-between;gap:16px 32px;flex-wrap:wrap}
+.ad-blok{min-width:0;flex:1 1 420px}
+.ust-etiket{display:block;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--vurgu);margin-bottom:6px}
+h1{margin:0;font-family:var(--baslik);font-weight:400;font-size:clamp(30px,3.2vw,42px);line-height:1;letter-spacing:.01em;
+  text-shadow:0 3px 0 var(--sicak),0 8px 18px rgba(0,0,0,.45)}
+.ne-yap{margin:10px 0 0;color:var(--soluk);font-size:15px;max-width:76ch}
+.ne-yap b{color:var(--acik);font-weight:500}
+
+.hesap{flex:0 1 430px;display:flex;flex-direction:column;gap:7px;padding:12px 16px 12px 18px;border-radius:16px;
+  background:var(--zemin-2);border:1px solid var(--cizgi);box-shadow:inset 3px 0 0 var(--vurgu)}
+.hesap label{font-size:10.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--soluk)}
+.ad-alan{display:flex;align-items:stretch;border-radius:10px;background:var(--murekkep);border:1px solid var(--cizgi);transition:border-color .15s}
+.ad-alan:hover{border-color:var(--soluk)}
+.ad-alan:focus-within{border-color:var(--vurgu);outline:2px solid var(--vurgu-a);outline-offset:0}
+.ad-alan .et{display:grid;place-items:center;padding:0 4px 0 13px;font-family:var(--baslik);font-size:19px;color:var(--vurgu)}
+.ad-alan input{flex:1;min-width:0;background:none;border:0;padding:10px 12px 10px 4px;font-size:16px;font-weight:500}
+.ad-alan input:focus{outline:none}
+.ad-alan input::placeholder{color:var(--soluk);opacity:.65;font-weight:400}
+/* uyarı çıkınca güven satırının yerini alır: kutu büyüyüp kartları aşağı itmesin */
+.hesap.eksik .guven{display:none}
+.hesap.eksik .ad-alan{border-color:var(--sicak);box-shadow:0 0 0 3px var(--sicak-a)}
+.hata-not{margin:0;font-size:13px;font-weight:500;color:#ff9b8f;display:flex;gap:7px;align-items:flex-start}
+.hata-not::before{content:"";flex:none;width:7px;height:7px;margin-top:6px;border-radius:50%;background:var(--sicak)}
+.guven{margin:0;font-size:12.5px;line-height:1.4;color:var(--soluk);display:flex;gap:8px;align-items:flex-start}
+.guven svg{flex:none;width:14px;height:14px;margin-top:2px}
+
+/* ---- oyun kartları ---- */
+.raf{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(236px,1fr));align-items:stretch;
+  max-width:calc(var(--adet,4) * 376px)} /* az kart varken kartlar devleşmesin */
+.kart{position:relative;display:flex;flex-direction:column;min-width:0;border-radius:18px;overflow:hidden;
+  background:linear-gradient(180deg,var(--zemin-2),var(--zemin) 140%);border:1px solid var(--cizgi);
+  animation:gel .45s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(var(--i,0) * 70ms)}
+.kart.acik-oyun{border-color:var(--serin);box-shadow:0 0 0 1px var(--serin)}
+@keyframes gel{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+/* önizleme yuvası: koyu masa, ortasında 9:16 ekran */
+.yuva{position:relative;display:grid;place-items:center;padding:12px 12px 10px;
+  background:repeating-linear-gradient(135deg,transparent 0 9px,rgba(246,236,217,.025) 9px 10px) var(--murekkep);border-bottom:1px solid var(--cizgi)}
+.ekran{position:relative;width:min(100%,calc(var(--onizleme-y) * 9 / 16));aspect-ratio:9/16;border-radius:12px;overflow:hidden;
+  background:var(--zemin);box-shadow:0 0 0 1px var(--cizgi),0 10px 24px rgba(0,0,0,.45)}
+.ekran iframe{position:absolute;left:0;top:0;width:270px;height:480px;border:0;transform-origin:0 0;pointer-events:none;background:var(--murekkep)}
+.ekran .bekle{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:12px;color:var(--soluk);font-size:12px}
+.ekran .bekle span{font-family:var(--baslik);font-size:18px;color:var(--acik);display:block;margin-bottom:4px;opacity:.6}
+.yuva .acik-rozet{position:absolute;left:12px;top:12px;z-index:2;font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  background:var(--serin);color:var(--murekkep);border-radius:99px;padding:3px 9px}
+
+.icerik{flex:1;display:flex;flex-direction:column;gap:6px;padding:12px 14px 14px}
+.icerik h2{margin:0;font-family:var(--baslik);font-weight:400;font-size:21px;line-height:1.1;letter-spacing:.01em}
+.icerik p{margin:0;color:var(--soluk);font-size:13.5px;line-height:1.42}
+.dugmeler{margin-top:auto;padding-top:8px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:8px}
+.dugme{position:relative;min-width:0;background:var(--zemin-3);border:1px solid var(--cizgi);border-radius:11px;padding:9px 12px;
+  font-weight:700;font-size:14.5px;line-height:1.2;text-align:left;transition:border-color .15s,background-color .15s,transform .05s}
+.dugme:hover{border-color:var(--soluk)}
+.dugme:active{transform:translateY(1px)}
+.dugme small{display:block;margin-top:2px;font-weight:400;font-size:11.5px;opacity:.8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dugme.ana{background:var(--vurgu);border-color:var(--vurgu);color:var(--murekkep);box-shadow:0 3px 0 var(--murekkep-a)}
+.dugme.ana:hover{border-color:var(--acik)}
+.dugme.ana .ust{display:flex;align-items:center;gap:7px}
+.dugme.ana .ust::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:var(--sicak);box-shadow:0 0 0 2px rgba(226,61,47,.25)}
+.dugme[disabled]{cursor:progress;opacity:.75}
+.dugme.basliyor{background:var(--serin);border-color:var(--serin);color:var(--murekkep);opacity:1}
+.dugme.basliyor .ust::before{background:var(--murekkep);animation:yanip .8s steps(2) infinite}
+@keyframes yanip{50%{opacity:.2}}
+.kart-ileti{margin:4px 0 0;font-size:12.5px;line-height:1.4;padding:7px 10px;border-radius:9px;background:var(--sicak-a);border:1px solid var(--sicak-b);color:var(--acik)}
+.kart-ileti:empty{display:none}
+
+/* kendi oyununu yap: sessiz kart */
+.kart.yap{background:transparent;border:1px dashed var(--cizgi);animation-delay:calc(var(--i,0) * 70ms)}
+.yap .yuva{background:transparent;border-bottom:1px dashed var(--cizgi)}
+.yap .ekran{background:transparent;box-shadow:none;border:1.5px dashed var(--cizgi);display:grid;place-items:center}
+.arti{width:46px;height:46px;border-radius:50%;border:1.5px dashed var(--soluk);position:relative;opacity:.7}
+.arti::before,.arti::after{content:"";position:absolute;left:50%;top:50%;width:18px;height:2px;background:var(--soluk);transform:translate(-50%,-50%)}
+.arti::after{transform:translate(-50%,-50%) rotate(90deg)}
+.yap h2{color:var(--acik);opacity:.92}
+.yap ol{margin:2px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px;counter-reset:a}
+.yap li{display:grid;grid-template-columns:20px minmax(0,1fr);gap:6px;font-size:13px;line-height:1.4;color:var(--soluk);counter-increment:a}
+.yap li::before{content:counter(a);width:18px;height:18px;margin-top:1px;border-radius:50%;display:grid;place-items:center;font-size:10.5px;font-weight:700;
+  background:var(--zemin-3);color:var(--acik)}
+.yap li b{color:var(--acik);font-weight:500}
+
+/* tek oyunlu paket: kart yatay, ortada */
+/* (oyunun adı sayfanın başlığında yazar; kartta tekrarlanmaz) */
+.raf.tek{grid-template-columns:minmax(0,740px);justify-content:start;max-width:none}
+.raf.tek .kart{flex-direction:row}
+.raf.tek .yuva{flex:none;border-bottom:0;border-right:1px solid var(--cizgi);padding:16px}
+.raf.tek .ekran{width:calc(var(--onizleme-y) * 9 / 16)}
+.raf.tek .icerik{padding:26px 26px 24px;gap:10px;justify-content:center}
+.raf.tek .icerik h2{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.raf.tek .icerik p{font-size:17px;line-height:1.5;color:var(--acik);max-width:40ch}
+.raf.tek .dugmeler{margin-top:12px;max-width:440px}
+.raf.tek{--onizleme-y:clamp(300px, calc(100vh - 310px), 560px)}
+
+/* ---- alt durum satırı ---- */
+.alt{margin-top:auto;display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;padding-top:12px;border-top:1px solid var(--acik-b);font-size:12.5px;color:var(--soluk)}
+.alt .lamba{display:inline-flex;align-items:center;gap:8px;color:var(--acik);font-weight:500}
+.alt .lamba::before{content:"";width:9px;height:9px;border-radius:50%;background:var(--serin);box-shadow:0 0 0 3px var(--serin-a)}
+.alt.koptu .lamba::before{background:var(--sicak);box-shadow:0 0 0 3px var(--sicak-a)}
+.alt .simdi{min-width:0}
+.alt .simdi a{font-weight:500}
+.alt .kopru-ileti{flex:1 1 260px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;opacity:.8}
+
+.bos{grid-column:1/-1;padding:28px;border:1px dashed var(--cizgi);border-radius:16px;color:var(--soluk)}
+
+/* dar pencere: kartlar alt alta, önizleme solda küçük */
+@media (max-width:640px){
+  .sayfa{padding:16px 16px 14px;gap:14px}
+  .ne-yap{font-size:14px}
+  .hesap{flex:1 1 100%}
+  .raf,.raf.tek{grid-template-columns:minmax(0,1fr)}
+  .kart,.raf.tek .kart{flex-direction:row}
+  .yuva,.raf.tek .yuva{border-bottom:0;border-right:1px solid var(--cizgi);padding:10px;align-content:start}
+  .ekran,.raf.tek .ekran{width:112px}
+  .yap .yuva{border-right:1px dashed var(--cizgi)}
+  .icerik,.raf.tek .icerik{padding:11px 12px 12px;gap:5px;justify-content:flex-start}
+  .icerik h2{font-size:19px}
+  .icerik p{font-size:13px}
+  .raf.tek .icerik p{font-size:14.5px}
+  .dugmeler{grid-template-columns:minmax(0,1fr)}
+  .dugme{padding:8px 11px}
+  .yuva .acik-rozet{left:6px;top:6px}
+  .alt .kopru-ileti{text-align:left;white-space:normal}
+}
+@media (prefers-reduced-motion:reduce){
+  .kart{animation:none}
+  .dugme.basliyor .ust::before{animation:none}
+}
+</style>
+</head>
+<body>
+<main class="sayfa">
+  <header class="bas">
+    <div class="ad-blok">
+      <span class="ust-etiket" id="ust-etiket">Canlı yayın oyunları</span>
+      <h1>TikTok Oyun Fabrikası</h1>
+      <p class="ne-yap" id="ne-yap">Bir oyun seç. Önce <b>Dene</b> ile sahte izleyicilerle aç; hazır olunca kullanıcı adını yazıp <b>Yayına bağlan</b>.</p>
+    </div>
+    <div class="hesap" id="hesap">
+      <label for="kullanici">TikTok kullanıcı adın</label>
+      <div class="ad-alan">
+        <span class="et" aria-hidden="true">@</span>
+        <input id="kullanici" type="text" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="25"
+          placeholder="kullanici_adin" aria-describedby="ad-hata guven-not">
+      </div>
+      <p class="hata-not" id="ad-hata" role="alert" hidden></p>
+      <p class="guven" id="guven-not"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1l6 2.5v4C14 11 11.4 14 8 15 4.6 14 2 11 2 7.5v-4z" fill="none" stroke="#22b8a7" stroke-width="1.6"/><path d="M5.2 8l2 2 3.6-4" fill="none" stroke="#22b8a7" stroke-width="1.6"/></svg>
+        <span>Şifre istemez. Yayını yalnızca okur; hesabına girmez.</span></p>
+    </div>
+  </header>
+
+  <section class="raf" id="raf" aria-label="Oyunlar" aria-busy="true"></section>
+
+  <footer class="alt" id="alt" aria-live="polite">
+    <span class="lamba" id="lamba">Köprü çalışıyor</span>
+    <span id="yerel">Yalnızca bu bilgisayar erişebilir.</span>
+    <span class="simdi" id="simdi" hidden></span>
+    <span class="kopru-ileti" id="kopru-ileti"></span>
+  </footer>
+</main>
+
+<template id="kart-sablon">
+  <article class="kart">
+    <div class="yuva">
+      <span class="acik-rozet" hidden>Şu an açık</span>
+      <div class="ekran" aria-hidden="true"><div class="bekle"><div><span></span>önizleme</div></div></div>
+    </div>
+    <div class="icerik">
+      <h2></h2>
+      <p class="aciklama"></p>
+      <div class="dugmeler">
+        <button type="button" class="dugme dene"><span class="ust">Dene</span><small>sahte izleyicilerle</small></button>
+        <button type="button" class="dugme ana bagla"><span class="ust">Yayına bağlan</span><small>kullanıcı adı gerekli</small></button>
+      </div>
+      <p class="kart-ileti" role="alert"></p>
+    </div>
+  </article>
+</template>
+
+<template id="yap-sablon">
+  <article class="kart yap" aria-labelledby="yap-baslik">
+    <div class="yuva"><div class="ekran" aria-hidden="true"><span class="arti"></span></div></div>
+    <div class="icerik">
+      <h2 id="yap-baslik">Kendi oyununu yap</h2>
+      <ol>
+        <li><span>Bu klasörü <b>Claude Code</b> ile aç.</span></li>
+        <li><span>Oyun fikrini tek cümleyle yaz: <b>“yorum yazan balık olsun, hediye atan büyüsün”</b> gibi.</span></li>
+        <li><span>Yeni oyun hazır olunca burada, bu listede çıkar.</span></li>
+      </ol>
+    </div>
+  </article>
+</template>
+
+<script>
+'use strict';
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var SAKLA = 'fabrika-kullanici';
+  var DESEN = /^[A-Za-z0-9_.]{2,24}$/;
+  var girdi = $('kullanici'), hesap = $('hesap'), adHata = $('ad-hata'), raf = $('raf');
+  var kartlar = new Map(); // oyun kimliği → { el, iframe, ... }
+  var son = null, mesgul = false;
+
+  // ---- kullanıcı adı: başta @ yazılırsa atılır, bu tarayıcıda hatırlanır
+  try { girdi.value = localStorage.getItem(SAKLA) || ''; } catch (e) { }
+  function adAl() { return girdi.value.trim().replace(/^@+/, ''); }
+  girdi.addEventListener('input', function () {
+    if (/^@/.test(girdi.value)) girdi.value = girdi.value.replace(/^@+/, '');
+    try { localStorage.setItem(SAKLA, adAl()); } catch (e) { }
+    if (!adHata.hidden && (DESEN.test(adAl()) || !adAl())) adHataGoster('');
+    altYazilariYaz();
+  });
+  function adHataGoster(metin) {
+    adHata.textContent = metin;
+    adHata.hidden = !metin;
+    hesap.classList.toggle('eksik', !!metin);
+  }
+  function altYazilariYaz() {
+    var ad = adAl();
+    kartlar.forEach(function (k) { k.baglaAlt.textContent = ad ? '@' + ad + ' yayınına' : 'kullanıcı adı gerekli'; });
+  }
+
+  // ---- canlı önizleme: kart görünürken yüklenir, görünmez olunca kaldırılır
+  var gozcu = 'IntersectionObserver' in window ? new IntersectionObserver(function (girdiler) {
+    girdiler.forEach(function (g) {
+      var k = g.target.__kart;
+      if (g.isIntersecting) onizlemeAc(k); else onizlemeKapat(k);
+    });
+  }, { rootMargin: '120px 0px' }) : null;
+  var olcer = 'ResizeObserver' in window ? new ResizeObserver(function (girdiler) {
+    girdiler.forEach(function (g) { olcekle(g.target.__kart); });
+  }) : null;
+  function olcekle(k) {
+    if (!k.iframe) return;
+    var w = k.ekran.clientWidth || 1;
+    k.iframe.style.transform = 'scale(' + (w / 270) + ')';
+  }
+  function onizlemeAc(k) {
+    if (k.iframe) return;
+    var f = document.createElement('iframe');
+    f.title = k.ad + ' önizlemesi';
+    f.setAttribute('tabindex', '-1');
+    f.setAttribute('aria-hidden', 'true');
+    f.setAttribute('inert', '');
+    f.setAttribute('allow', "autoplay 'none'");
+    f.src = '/onizleme/' + encodeURIComponent(k.id) + '/#yayin';
+    k.iframe = f;
+    k.ekran.appendChild(f);
+    olcekle(k);
+  }
+  function onizlemeKapat(k) {
+    if (!k.iframe) return;
+    k.iframe.remove();
+    k.iframe = null;
+  }
+
+  // ---- kartlar
+  function kartKur(o, i) {
+    var el = $('kart-sablon').content.firstElementChild.cloneNode(true);
+    el.style.setProperty('--i', i);
+    el.dataset.oyun = o.id;
+    var baslikId = 'oyun-' + o.id;
+    el.querySelector('h2').textContent = o.ad;
+    el.querySelector('h2').id = baslikId;
+    el.setAttribute('aria-labelledby', baslikId);
+    el.querySelector('.aciklama').textContent = o.aciklama || '';
+    el.querySelector('.aciklama').hidden = !o.aciklama;
+    el.querySelector('.bekle span').textContent = o.ad;
+    var k = {
+      id: o.id, ad: o.ad, el: el, iframe: null,
+      ekran: el.querySelector('.ekran'), dene: el.querySelector('.dene'), bagla: el.querySelector('.bagla'),
+      baglaAlt: el.querySelector('.bagla small'), ileti: el.querySelector('.kart-ileti'), rozet: el.querySelector('.acik-rozet')
+    };
+    k.ekran.__kart = k;
+    k.dene.setAttribute('aria-describedby', baslikId);
+    k.bagla.setAttribute('aria-describedby', baslikId);
+    k.dene.addEventListener('click', function () { baslat(k, 'deneme'); });
+    k.bagla.addEventListener('click', function () { baslat(k, 'canli'); });
+    kartlar.set(o.id, k);
+    raf.appendChild(el);
+    if (gozcu) gozcu.observe(k.ekran); else onizlemeAc(k);
+    if (olcer) olcer.observe(k.ekran);
+  }
+  function yapKartiKur(i) {
+    var el = $('yap-sablon').content.firstElementChild.cloneNode(true);
+    el.style.setProperty('--i', i);
+    raf.appendChild(el);
+  }
+
+  // ---- başlat: API'ye sor, sonra oyunun sayfasına geç
+  function baslat(k, kip) {
+    if (mesgul) return;
+    var ad = adAl();
+    k.ileti.textContent = '';
+    if (kip === 'canli') {
+      if (!ad) { adHataGoster('Yayına bağlanmak için önce TikTok kullanıcı adını yaz.'); girdi.focus(); return; }
+      if (!DESEN.test(ad)) { adHataGoster('Bu ad olmaz: yalnız harf, rakam, alt çizgi ve nokta (2-24 karakter).'); girdi.focus(); return; }
+    }
+    adHataGoster('');
+    var dugme = kip === 'canli' ? k.bagla : k.dene, ust = dugme.querySelector('.ust'), alt = dugme.querySelector('small');
+    var eskiUst = ust.textContent, eskiAlt = alt.textContent;
+    mesgul = true;
+    dugme.classList.add('basliyor');
+    k.dene.disabled = k.bagla.disabled = true;
+    k.el.setAttribute('aria-busy', 'true');
+    ust.textContent = 'Açılıyor…';
+    alt.textContent = kip === 'canli' ? '@' + ad + ' yayınına' : 'hazırlanıyor';
+    var geriAl = function (metin) {
+      mesgul = false;
+      dugme.classList.remove('basliyor');
+      k.dene.disabled = k.bagla.disabled = false;
+      k.el.removeAttribute('aria-busy');
+      ust.textContent = eskiUst; alt.textContent = eskiAlt;
+      altYazilariYaz();
+      k.ileti.textContent = metin;
+    };
+    fetch('/api/baslat', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, cache: 'no-store',
+      body: JSON.stringify({ oyun: k.id, kip: kip, kullanici: kip === 'canli' ? ad : '' })
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; });
+    }).then(function (s) {
+      if (!s.ok || !s.j.tamam) {
+        if (s.j.alan === 'kullanici') { geriAl(''); adHataGoster(s.j.hata); girdi.focus(); return; }
+        geriAl(s.j.hata || 'Köprü bu isteği kabul etmedi. Sayfayı yenileyip yeniden dene.');
+        return;
+      }
+      location.href = s.j.adres || ('/oyun/' + encodeURIComponent(k.id) + '/');
+    }).catch(function () {
+      geriAl('Köprüye ulaşılamadı. Siyah pencere kapandıysa BASLAT.bat dosyasına yeniden çift tıkla.');
+      durumYaz(null);
+    });
+  }
+
+  // ---- durum: köprü ayakta mı, şu an hangi oyun açık
+  function durumYaz(d) {
+    var alt = $('alt');
+    alt.classList.toggle('koptu', !d);
+    $('lamba').textContent = d ? 'Köprü çalışıyor' : 'Köprüye ulaşılamıyor';
+    $('yerel').textContent = d ? 'Yalnızca bu bilgisayar erişebilir.' : 'Siyah pencere kapandıysa BASLAT.bat dosyasına yeniden çift tıkla.';
+    var simdi = $('simdi');
+    simdi.textContent = '';
+    var aktif = d && d.aktif;
+    kartlar.forEach(function (k) {
+      var bu = !!aktif && aktif.oyun === k.id;
+      k.el.classList.toggle('acik-oyun', bu);
+      k.rozet.hidden = !bu;
+    });
+    if (aktif) {
+      simdi.hidden = false;
+      simdi.append('Açık: ' + aktif.ad + (aktif.kip === 'canli' ? ' (@' + aktif.kullanici + ')' : ' (deneme)') + ' · ');
+      var a = document.createElement('a');
+      a.href = '/oyun/' + encodeURIComponent(aktif.oyun) + '/';
+      a.textContent = 'oyuna dön';
+      simdi.appendChild(a);
+    } else simdi.hidden = true;
+    $('kopru-ileti').textContent = aktif && d.durum ? d.durum : '';
+  }
+  function oku() {
+    return fetch('/api/oyunlar', { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); });
+  }
+  function kur(d) {
+    son = d;
+    raf.textContent = '';
+    kartlar.clear();
+    var liste = Array.isArray(d.oyunlar) ? d.oyunlar : [];
+    raf.classList.toggle('tek', !!d.paket && liste.length === 1);
+    if (d.paket && liste.length === 1) {
+      $('ust-etiket').textContent = 'TikTok Oyun Fabrikası';
+      document.querySelector('h1').textContent = liste[0].ad;
+      document.title = liste[0].ad;
+      $('ne-yap').textContent = '';
+      $('ne-yap').append('Önce ', bKalin('Dene'), ' ile sahte izleyicilerle aç; hazır olunca kullanıcı adını yazıp ', bKalin('Yayına bağlan'), '.');
+    }
+    if (!liste.length) {
+      var b = document.createElement('p');
+      b.className = 'bos';
+      b.textContent = 'Henüz derlenmiş oyun yok. Claude Code ile bir oyun yap ya da node araclar/derle.js <ad> çalıştır.';
+      raf.appendChild(b);
+    }
+    liste.forEach(kartKur);
+    if (!d.paket) yapKartiKur(liste.length);
+    raf.style.setProperty('--adet', Math.max(1, raf.children.length));
+    raf.removeAttribute('aria-busy');
+    altYazilariYaz();
+    durumYaz(d);
+  }
+  function bKalin(t) { var b = document.createElement('b'); b.textContent = t; return b; }
+  function imza(d) { return JSON.stringify((d.oyunlar || []).map(function (o) { return [o.id, o.ad, o.aciklama]; })) + d.paket; }
+
+  oku().then(kur).catch(function () {
+    raf.removeAttribute('aria-busy');
+    var b = document.createElement('p');
+    b.className = 'bos';
+    b.textContent = 'Köprüye ulaşılamadı. BASLAT.bat dosyasına çift tıkla; siyah pencere açık kaldıkça bu sayfa çalışır.';
+    raf.appendChild(b);
+    durumYaz(null);
+  });
+  // Her birkaç saniyede bir: köprü ayakta mı, açık oyun değişti mi, yeni oyun eklendi mi.
+  setInterval(function () {
+    if (document.hidden || mesgul) return;
+    oku().then(function (d) { if (!son || imza(d) !== imza(son)) kur(d); else { son = d; durumYaz(d); } }).catch(function () { durumYaz(null); });
+  }, 4000);
+  // Geri tuşuyla dönülünce (sayfa önbellekten gelir) düğmeler eski "Açılıyor…" hâlinde kalmasın.
+  addEventListener('pageshow', function (e) { if (e.persisted) location.reload(); });
+})();
+</script>
+</body>
+</html>

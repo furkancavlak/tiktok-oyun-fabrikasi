@@ -18,6 +18,9 @@ kontrol('yeni-oyun: oyun kurulur ve derlenir', y.status === 0 && fs.existsSync(p
 kontrol('yeni-oyun: üretilen js/10-oyun.js en başta bunun oyunun kendi dosyası olduğunu, üstüne yazılacağını söyler', /BU DOSYA ARTIK SENİN OYUNUN/.test(ilk) && /SİLİP BAŞTAN YAZ/.test(ilk) && /yalnız BİR dosyada/.test(ilk), ilk.split('\n').slice(0, 3).join(' / '));
 kontrol('yeni-oyun: şablon klasöründeki asıl dosya değişmez', !/BU DOSYA ARTIK/.test(fs.readFileSync(path.join(GECICI, 'sablon/js/10-oyun.js'), 'utf8')));
 kontrol('yeni-oyun: komutun çıktısı 10-oyun.js\'in üstüne yazılacağını söyler', /SENİN DOSYAN/.test(y.stdout), y.stdout.split('\n').filter(s => /10-oyun/.test(s)).join(' / '));
+// Ana sayfadaki kartın tek cümlesi: oyun.json'a aciklama alanı yazılır, komut onu oyuna göre yazmayı hatırlatır
+const yBilgi = (() => { try { return JSON.parse(fs.readFileSync(path.join(GECICI, 'oyunlar/deneme-oyun/oyun.json'), 'utf8')); } catch (e) { return {}; } })();
+kontrol('yeni-oyun: oyun.json ana sayfa kartı için aciklama alanıyla gelir, çıktı onu yazmayı hatırlatır', yBilgi.ad === 'Deneme Oyunu' && typeof yBilgi.aciklama === 'string' && yBilgi.aciklama.length > 0 && /aciklama/.test(y.stdout), yBilgi);
 
 // derle: çekirdekteki adla aynı işlev uyarı verir, aynı adla const sayfayı açtırmayacağı için derlemeyi durdurur
 const ek = path.join(GECICI, 'oyunlar/deneme-oyun/js/90-cakisma.js');

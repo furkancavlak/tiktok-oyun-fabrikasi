@@ -26,6 +26,7 @@ node araclar/derle.js <ad>                    # oyunlar/<ad>/js + cekirdek → o
 node araclar/kare-cek.js <ad>                 # sahne kareleri → test/cikti/<ad>/kare-hepsi.png
 node araclar/test.js <ad>                     # çekirdek testleri + oyunun kendi testi
 node araclar/test.js                          # bütün oyunlar + köprü testleri
+node kopru.js --ana-sayfa --ac                # ana sayfa: bütün oyunlar, Dene / Yayına bağlan (BASLAT.bat bunu açar)
 node kopru.js --deneme --oyun <ad> --ac       # köprü + oyun, TikTok'suz, sahte olaylarla
 node kopru.js <tiktok_adi> --oyun <ad> --ac   # gerçek yayın (yalnız okur)
 node araclar/paket.js <ad>                    # yayıncıya verilecek klasör → dist/<ad>/
@@ -40,6 +41,7 @@ Testler ve kareler bir tarayıcı ister. Kurulu Chrome'u göstermek en hızlıs�
 ```
 cekirdek/js/          çekirdek parçaları; başlarındaki yorum ne yaptıklarını söyler
 cekirdek/sayfa.html   sayfa iskeleti: solda 9:16 sahne, sağda deneme paneli
+cekirdek/ana-sayfa.html  BASLAT.bat'ın açtığı ana sayfa: oyun kartları, önizleme, Dene / Yayına bağlan
 cekirdek/test/        her oyuna uygulanan testler ve köprü testleri
 oyunlar/halay/        tam örnek oyun: Mendil Kimde? (bütün kancaları kullanır)
 sablon/               en yalın oyun; yeni oyun bundan başlar
@@ -94,6 +96,7 @@ dosyasına kendi gözünle bak, gördüğün kusuru düzelt, yeniden bak.
   tutuyor.
 - En kalabalık hâlde, 1080×1920'de kare başına işlem 33 ms'nin altında (kare-cek yazar).
 - `node kopru.js --deneme --oyun <ad>` ile açılıp sahte olayların oyuna işlendiği görüldü.
+- `oyun.json` içinde oyunun kendi `aciklama` cümlesi var (ana sayfadaki kart; şablonun cümlesi kalmadı).
 - Oyunun kendi müziği var (`OYUN.muzik`, derleme müzik uyarısı vermiyor); müzik testi geçti ve
   `test/cikti/<ad>/muzik-onizleme.wav` kullanıcıya dinlemesi için verildi.
 - Kullanıcıya neyin testle, neyin gözle doğrulandığı ve neyin hiç denenmediği söylendi (ses kulakla

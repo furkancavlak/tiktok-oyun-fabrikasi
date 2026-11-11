@@ -1,1 +1,5 @@
-{ "ad": "Şablon Oyun", "paket": "sablon-oyun" }
+{
+  "ad": "Şablon Oyun",
+  "paket": "sablon-oyun",
+  "aciklama": "Yorum yazan oyuna girer, hediye atan öne geçer."
+}

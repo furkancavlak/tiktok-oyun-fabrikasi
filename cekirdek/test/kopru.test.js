@@ -7,7 +7,7 @@ const { KOK, CIKTI, tarayici, raporla, kontrolcu } = require('./ortak');
 const { sonuc, kontrol } = kontrolcu();
 const S = CIKTI, GECICI = fs.mkdtempSync(path.join(os.tmpdir(), 'canli-kopru-')); // depo dışı: gerçek node_modules görünmesin
 const OYUN_AD = process.argv[2] && !process.argv[2].startsWith('--') ? process.argv[2] : 'halay', OYUN_HTML = path.join(KOK, 'oyunlar', OYUN_AD, 'oyun.html'); // köprü hangi oyunla sınanacak
-// Kapılar: --port N ya da KOPRU_TEST_PORT=N (öntanım 8791); N, N+1 ve N+2…N+6 kullanılır. Açık bir köprü 8791'i tutuyorsa başka kapı ver.
+// Kapılar: --port N ya da KOPRU_TEST_PORT=N (öntanım 8791); N, N+1 ve N+2…N+8 kullanılır. Açık bir köprü 8791'i tutuyorsa başka kapı ver.
 const pi = process.argv.indexOf('--port'), P = parseInt(pi > 0 ? process.argv[pi + 1] : process.env.KOPRU_TEST_PORT, 10) || 8791;
 const bekle = ms => new Promise(r => setTimeout(r, ms));
 const al = url => new Promise((res, rej) => http.get(url, r => { let d = ''; r.on('data', c => d += c); r.on('end', () => res({ kod: r.statusCode, govde: d })); }).on('error', rej));
@@ -153,6 +153,131 @@ function baslat(klasor, args) { const c = spawn(process.execPath, ['kopru.js', .
     // Yanıt gelmeden girdi biterse (pencere kapatıldı) asılı kalmaz.
     const yarim = baslat(kl, ['--deneme', '--sor', '--port', String(kp)]); let yarimKod = null; yarim.on('exit', k => yarimKod = k); await bekle(500); yarim.stdin.end(); await bekle(700);
     kontrol('Çok oyunlu klasör, --sor: yanıt verilmeden girdi kapanırsa durur', yarimKod === 1, { kod: yarimKod, cikti: yarim.cikti }); yarim.kill('SIGKILL');
+  }
+  // ---- 7. ana sayfa kipi (BASLAT.bat böyle çalıştırır): oyun ve kip sayfadan seçilir
+  // JSON gövdeli POST; başlıklar öntanımda köprünün kendi sayfasından gelmiş gibidir, testler tek tek bozar.
+  const gonder = (kp, yol, govde, baslik = {}) => new Promise(res => {
+    const veri = typeof govde === 'string' ? govde : JSON.stringify(govde);
+    const r = http.request({ host: '127.0.0.1', port: kp, path: yol, method: 'POST', headers: { host: '127.0.0.1:' + kp, origin: 'http://127.0.0.1:' + kp, 'content-type': 'application/json', 'content-length': Buffer.byteLength(veri), ...baslik } }, y => { let g = ''; y.on('data', c => g += c); y.on('end', () => { let j = null; try { j = JSON.parse(g); } catch (e) { } res({ kod: y.statusCode, j }); }); });
+    r.on('error', e => res({ kod: 0, hata: e.code })); r.end(veri);
+  });
+  {
+    const kl = path.join(GECICI, 'ana'), kp = P + 7, A = 'http://127.0.0.1:' + kp, api = (g, b) => gonder(kp, '/api/baslat', g, b);
+    const oyunKur = (ad, bilgi, derli = true) => {
+      fs.mkdirSync(path.join(kl, 'oyunlar', ad), { recursive: true });
+      if (derli) fs.copyFileSync(OYUN_HTML, path.join(kl, 'oyunlar', ad, 'oyun.html'));
+      if (bilgi) fs.writeFileSync(path.join(kl, 'oyunlar', ad, 'oyun.json'), JSON.stringify(bilgi));
+    };
+    oyunKur('a-oyun', { ad: 'Birinci Oyun', aciklama: 'Yorum yazan girer.' });
+    oyunKur('b-oyun', { ad: 'İkinci Oyun' });
+    oyunKur('c-oyun', { ad: '<img src=x onerror="window.__xss=1">Üç', aciklama: '<b>kalın değil</b>' }); // ad HTML olarak yazılmamalı
+    oyunKur('gizli', { ad: 'Gizli Oyun', vitrin: false });
+    oyunKur('derlenmemis', { ad: 'Derlenmemiş' }, false);
+    fs.mkdirSync(path.join(kl, 'cekirdek'), { recursive: true });
+    fs.copyFileSync(path.join(KOK, 'cekirdek', 'ana-sayfa.html'), path.join(kl, 'cekirdek', 'ana-sayfa.html'));
+    fs.copyFileSync(path.join(KOK, 'kopru.js'), path.join(kl, 'kopru.js'));
+    // Sahte kütüphane: bağlanınca 300 ms'de bir yorum yollar; her bağlanma ve kopma kayit.txt'ye yazılır (b / k).
+    fs.mkdirSync(path.join(kl, 'node_modules/tiktok-live-connector'), { recursive: true });
+    fs.writeFileSync(path.join(kl, 'node_modules/tiktok-live-connector/index.js'), `const E=require('events'),fs=require('fs'),p=require('path');const kayit=h=>fs.appendFileSync(p.join(__dirname,'..','..','kayit.txt'),h);class WebcastPushConnection extends E{constructor(u){super();this.u=u;}connect(){kayit('b');let n=0;this.t=setInterval(()=>{n++;this.emit('chat',{uniqueId:'canli_'+(n%3),nickname:'Canlı '+(n%3),comment:'selam '+this.u});if(n%4===0)this.emit('gift',{uniqueId:'canli_0',nickname:'Canlı 0',giftType:2,repeatCount:1,diamondCount:7});},300);return Promise.resolve({roomId:'789'});}disconnect(){if(this.t){clearInterval(this.t);this.t=null;kayit('k');}}}module.exports={WebcastPushConnection};`);
+    const kayit = () => { try { return fs.readFileSync(path.join(kl, 'kayit.txt'), 'utf8'); } catch (e) { return ''; } };
+    const ana = baslat(kl, ['--ana-sayfa', '--port', String(kp)]); await bekle(800);
+    const liste = JSON.parse((await al(A + '/api/oyunlar')).govde), sayfa = await al(A + '/');
+    kontrol('Ana sayfa kipi: köprü oyunsuz ve kullanıcı adsız açılır, adresi ve "pencere motordur" der', /Oyun Fabrikası açık: +http:\/\/localhost:\d+\//.test(ana.cikti) && /motorudur/.test(ana.cikti) && !/Kullanım/.test(ana.cikti) && ana.exitCode === null, ana.cikti.trim());
+    kontrol('Ana sayfa kipi: / ana sayfayı sunar', sayfa.kod === 200 && /TikTok Oyun Fabrikası/.test(sayfa.govde) && /api\/baslat/.test(sayfa.govde), sayfa.kod);
+    kontrol('Ana sayfa kipi: liste derlenmiş oyunlar, adlar oyun.json\'dan; vitrin:false ve derlenmemiş yok', JSON.stringify(liste.oyunlar.map(o => [o.id, o.ad])) === JSON.stringify([['a-oyun', 'Birinci Oyun'], ['b-oyun', 'İkinci Oyun'], ['c-oyun', '<img src=x onerror="window.__xss=1">Üç']]) && liste.oyunlar[0].aciklama === 'Yorum yazan girer.' && liste.aktif === null && liste.paket === false, liste.oyunlar);
+    // POST /api/baslat: başka siteden, JSON olmayan, bilinmeyen oyun, gizli oyun, bozuk kullanıcı adı geri çevrilir
+    const ret = {
+      yabanci: await api({ oyun: 'a-oyun', kip: 'deneme' }, { origin: 'http://kotu.example' }),
+      kaynaksiz: await api({ oyun: 'a-oyun', kip: 'deneme' }, { origin: '' }),
+      baskaSite: await api({ oyun: 'a-oyun', kip: 'deneme' }, { 'sec-fetch-site': 'cross-site' }),
+      host: await api({ oyun: 'a-oyun', kip: 'deneme' }, { host: 'kotu.example:' + kp, origin: 'http://kotu.example:' + kp }),
+      duzMetin: await api({ oyun: 'a-oyun', kip: 'deneme' }, { 'content-type': 'text/plain' }),
+      bilinmeyen: await api({ oyun: 'yok-boyle', kip: 'deneme' }),
+      gizli: await api({ oyun: 'gizli', kip: 'deneme' }),
+      derlenmemis: await api({ oyun: 'derlenmemis', kip: 'deneme' }),
+      yol: await api({ oyun: '../a-oyun', kip: 'deneme' }),
+      kip: await api({ oyun: 'a-oyun', kip: 'hepsi' }),
+      adBos: await api({ oyun: 'a-oyun', kip: 'canli', kullanici: '' }),
+      adBosluk: await api({ oyun: 'a-oyun', kip: 'canli', kullanici: 'ali veli' }),
+      adHtml: await api({ oyun: 'a-oyun', kip: 'canli', kullanici: '<b>x</b>' }),
+      adUzun: await api({ oyun: 'a-oyun', kip: 'canli', kullanici: 'a'.repeat(25) }),
+      bozuk: await api('{oyun:')
+    };
+    const retKod = Object.fromEntries(Object.entries(ret).map(([a, r]) => [a, r.kod]));
+    kontrol('POST /api/baslat başka siteden (Origin, Sec-Fetch-Site, Host) gelince ya da JSON değilse geri çevrilir', ret.yabanci.kod === 403 && ret.kaynaksiz.kod === 403 && ret.baskaSite.kod === 403 && ret.host.kod === 403 && ret.duzMetin.kod === 415, retKod);
+    kontrol('POST /api/baslat bilinmeyen, gizli, derlenmemiş ya da yol içeren oyunu, bozuk kipi ve bozuk isteği geri çevirir', ret.bilinmeyen.kod === 404 && ret.gizli.kod === 404 && ret.derlenmemis.kod === 404 && ret.yol.kod === 404 && ret.kip.kod === 400 && ret.bozuk.kod === 400, retKod);
+    kontrol('POST /api/baslat bozuk kullanıcı adını geri çevirir (boş, boşluklu, HTML, 24\'ten uzun)', ['adBos', 'adBosluk', 'adHtml', 'adUzun'].every(a => ret[a].kod === 400 && ret[a].j.alan === 'kullanici'), retKod);
+    const sonra = JSON.parse((await al(A + '/api/oyunlar')).govde);
+    kontrol('Geri çevrilen isteklerden sonra hiçbir oyun başlamamış, TikTok\'a bağlanılmamış', sonra.aktif === null && kayit() === '', { aktif: sonra.aktif, kayit: kayit() });
+    kontrol('Ana sayfa kipi: çalışmayan oyunun sayfası ana sayfaya yönlenir; gizli ve bilinmeyen oyun 404', (await al(A + '/oyun/a-oyun/')).kod === 302 && (await al(A + '/oyun/a-oyun')).kod === 301 && (await al(A + '/onizleme/gizli/')).kod === 404 && (await al(A + '/oyun/yok/')).kod === 404);
+    // Ana sayfa tarayıcıda: kartlar, metinler textContent ile, önizlemeler köprüsüz ve sessiz
+    const actx = await b.newContext({ viewport: { width: 1366, height: 768 } });
+    const ap = await sayfaAc(actx, A + '/'); await bekle(3500);
+    const ad1 = await ap.evaluate(() => ({ kart: [...document.querySelectorAll('.kart:not(.yap) h2')].map(h => h.textContent), yap: !!document.querySelector('.kart.yap'), etiket: document.querySelectorAll('.kart:not(.yap) img, .kart:not(.yap) .icerik b').length, xss: !!window.__xss, ifr: [...document.querySelectorAll('.ekran iframe')].map(f => f.getAttribute('src')) }));
+    kontrol('Ana sayfa: her oyunun kartı, ad ve cümle düz metin (HTML olarak yazılmaz), "Kendi oyununu yap" kartı', JSON.stringify(ad1.kart) === JSON.stringify(['Birinci Oyun', 'İkinci Oyun', '<img src=x onerror="window.__xss=1">Üç']) && ad1.yap && ad1.etiket === 0 && !ad1.xss, ad1);
+    kontrol('Ana sayfa: görünen kartlarda canlı önizleme (/onizleme/<ad>/#yayin)', ad1.ifr.length === 3 && ad1.ifr.every(s => /^\/onizleme\/[\w-]+\/#yayin$/.test(s)), ad1.ifr);
+    const cerceve = ap.frames().find(f => /\/onizleme\/a-oyun\//.test(f.url()));
+    const on = cerceve ? await cerceve.evaluate(() => ({ kopru: typeof window.OYUN_KOPRU, kisi: CanliOyun.durum().kisi, ses: CanliOyun.durum().ses, sesDugme: getComputedStyle(document.getElementById('ses-cagri')).display, yayin: document.body.classList.contains('yayin'), geri: !!document.querySelector('.ana-don') })).catch(e => ({ hata: e.message })) : { hata: 'önizleme çerçevesi yok' };
+    kontrol('Önizleme köprüye bağlanmaz, kendi kalabalığıyla oynar, sessizdir, ses düğmesi gizli, yalnız sahne', on.kopru === 'undefined' && on.kisi >= 3 && on.ses === false && on.sesDugme === 'none' && on.yayin && !on.geri, on);
+    // Kullanıcı adı boşken Yayına bağlan: sayfa geçmez, alanın yanında ne eksik olduğunu söyler, odak alana gider
+    await ap.click('.kart[data-oyun="a-oyun"] .bagla'); await bekle(300);
+    const bosAd = await ap.evaluate(() => ({ url: location.pathname, hata: document.getElementById('ad-hata').textContent, gorunur: !document.getElementById('ad-hata').hidden, odak: document.activeElement && document.activeElement.id }));
+    kontrol('Ana sayfa: kullanıcı adı boşken Yayına bağlan geçmez, eksik olanı alanın yanında söyler, odak alana gider', bosAd.url === '/' && bosAd.gorunur && /kullanıcı adını yaz/.test(bosAd.hata) && bosAd.odak === 'kullanici' && kayit() === '', bosAd);
+    await ap.fill('#kullanici', '@Test_Kullanici'); await ap.reload(); await bekle(800);
+    const hatirla = await ap.inputValue('#kullanici');
+    kontrol('Ana sayfa: kullanıcı adı bu tarayıcıda hatırlanır, baştaki @ atılır', hatirla === 'Test_Kullanici', hatirla);
+    // Dene: API'ye sorar, oyunun sayfasına geçer; olaylar gelir; geri dönüş bağlantısı var
+    await ap.click('.kart[data-oyun="a-oyun"] .dene'); await ap.waitForURL(/\/oyun\/a-oyun\/$/, { timeout: 8000 }).catch(() => { }); await bekle(4500);
+    let od = await ap.evaluate(() => { const g = document.querySelector('.ana-don'); return { url: location.pathname, ...CanliOyun.durum(), geri: g && g.textContent, geriHref: g && g.getAttribute('href'), adres: document.getElementById('bag-adres').value }; });
+    kontrol('Ana sayfadan Dene: oyunun sayfası açılır, köprüye bağlanır, sahte olaylar işlenir', od.url === '/oyun/a-oyun/' && od.bagli && od.alinan > 5 && od.sira.length > 0 && od.sira.every(x => x[0].startsWith('D. ')) && od.adres === 'ws://127.0.0.1:' + kp + '/olay/a-oyun', { url: od.url, bagli: od.bagli, alinan: od.alinan, adres: od.adres });
+    const geriYayin = await ap.evaluate(() => { location.hash = '#yayin'; return new Promise(r => setTimeout(() => r(getComputedStyle(document.querySelector('.ana-don')).display), 300)); }).catch(e => e.message);
+    kontrol('Ana sayfadan açılan oyunda "← Oyunlar" bağlantısı var, yalnız sahne görünümünde gizli', od.geri === '← Oyunlar' && od.geriHref === '/' && geriYayin === 'none', { geri: od.geri, yayinda: geriYayin });
+    await ap.evaluate(() => { location.hash = ''; });
+    // Olay hızı: oyun ve kip birkaç kez değişince sahte olay saati çoğalmamalı
+    const toplam = s => Object.values(s.sayac).reduce((x, y) => x + y, 0);
+    const hiz = async () => { const a = JSON.parse((await al(A + '/durum')).govde); await bekle(4000); return toplam(JSON.parse((await al(A + '/durum')).govde)) - toplam(a); };
+    const hiz1 = await hiz();
+    for (const o of ['b-oyun', 'a-oyun', 'b-oyun', 'c-oyun', 'b-oyun']) await api({ oyun: o, kip: 'deneme' });
+    const hiz2 = await hiz();
+    kontrol('Oyun değiştirip geri dönünce olay hızı katlanmaz (eski sahte olay saati durur)', hiz1 >= 6 && hiz2 >= 6 && hiz2 <= hiz1 * 1.4, { once: hiz1, sonra: hiz2 });
+    od = await ap.evaluate(() => ({ alinan: CanliOyun.durum().alinan, ileti: document.getElementById('bag-ileti').textContent })); await bekle(2000);
+    const od2 = await ap.evaluate(() => CanliOyun.durum().alinan);
+    kontrol('Başka oyun başlayınca eski oyunun açık sayfası olay almaz ve bunu söyler', od2 === od.alinan && /çalışmıyor/.test(od.ileti), { once: od.alinan, sonra: od2, ileti: od.ileti });
+    // Yayına bağlan (sahte kütüphane): bağlanır, olaylar oyuna akar
+    await ap.goto(A + '/'); await bekle(800);
+    await ap.click('.kart[data-oyun="a-oyun"] .bagla'); await ap.waitForURL(/\/oyun\/a-oyun\/$/, { timeout: 8000 }).catch(() => { });
+    await ap.waitForFunction(() => CanliOyun.durum().sira.some(x => /^Canlı/.test(x[0])), null, { timeout: 10000 }).catch(() => { }); await bekle(1500);
+    const cd = await ap.evaluate(() => ({ url: location.pathname, ...CanliOyun.durum(), ileti: document.getElementById('bag-ileti').textContent }));
+    kontrol('Ana sayfadan Yayına bağlan: sahte kütüphaneyle bağlanır, olaylar oyuna akar; az önceki denemenin sahte adları yayına taşınmaz', cd.url === '/oyun/a-oyun/' && cd.bagli && cd.sira.some(x => x[0] === 'Canlı 0' && x[1] >= 7) && cd.sira.every(x => !x[0].startsWith('D. ')) && /@Test_Kullanici yayınına bağlandı/.test(cd.ileti) && kayit() === 'b', { sira: cd.sira.slice(0, 4), ileti: cd.ileti, kayit: kayit() });
+    const ayni = await api({ oyun: 'a-oyun', kip: 'canli', kullanici: 'Test_Kullanici' });
+    kontrol('Aynı oyun aynı kipte yeniden istenince bağlantı koparılmaz', ayni.kod === 200 && kayit() === 'b', kayit());
+    await api({ oyun: 'b-oyun', kip: 'canli', kullanici: 'baska.kisi' }); await bekle(300);
+    await api({ oyun: 'b-oyun', kip: 'deneme' }); await bekle(1200);
+    const durum2 = JSON.parse((await al(A + '/api/oyunlar')).govde);
+    kontrol('Canlıdan canlıya ve canlıdan denemeye geçince eski TikTok bağlantısı kapanır (her bağlanmaya bir kopma)', kayit() === 'bkbk' && durum2.aktif.oyun === 'b-oyun' && durum2.aktif.kip === 'deneme', { kayit: kayit(), aktif: durum2.aktif });
+    // Müzik: ana sayfa kipinde her oyunun kendi muzik/ klasörü kendi adresinden
+    fs.mkdirSync(path.join(kl, 'oyunlar', 'a-oyun', 'muzik'), { recursive: true }); fs.writeFileSync(path.join(kl, 'oyunlar', 'a-oyun', 'muzik', '_t.js'), 'mz');
+    const mz2 = [(await al(A + '/oyun/a-oyun/muzik/_t.js')).govde, (await al(A + '/oyun/b-oyun/muzik/_t.js')).kod, (await al(A + '/oyun/a-oyun/muzik/..%2F..%2Fkopru.js')).kod, (await al(A + '/onizleme/a-oyun/muzik/_t.js')).kod];
+    kontrol('Ana sayfa kipi: oyunun hazır müziği kendi adresinden gelir; başka oyununki, klasör dışı ve önizlemeden gelmez', mz2[0] === 'mz' && mz2.slice(1).every(k => k === 404), mz2);
+    // İkinci kez çift tıklanınca: aynı kapıda ana sayfa zaten açık
+    const ikinci = baslat(kl, ['--ana-sayfa', '--port', String(kp)]); let ikinciKod = null; ikinci.on('exit', k => ikinciKod = k); await bekle(1800);
+    kontrol('Ana sayfa zaten açıkken ikinci kez açılınca düz bir dille söyleyip hatasız kapanır', ikinciKod === 0 && /zaten açık/.test(ikinci.cikti) && !/Error|hata/i.test(ikinci.cikti), { kod: ikinciKod, cikti: ikinci.cikti.trim() });
+    ikinci.kill('SIGKILL'); await actx.close(); ana.kill('SIGKILL');
+  }
+  // ---- 8. yayıncı paketi düzeni ana sayfa kipinde: tek oyun
+  {
+    const kl = path.join(GECICI, 'paket-ana'), kp = P + 8, A = 'http://127.0.0.1:' + kp;
+    fs.mkdirSync(kl); fs.copyFileSync(path.join(KOK, 'kopru.js'), path.join(kl, 'kopru.js')); fs.copyFileSync(OYUN_HTML, path.join(kl, 'oyun.html')); fs.copyFileSync(path.join(KOK, 'cekirdek', 'ana-sayfa.html'), path.join(kl, 'ana-sayfa.html'));
+    fs.mkdirSync(path.join(kl, 'oyunlar', 'baska'), { recursive: true }); fs.copyFileSync(OYUN_HTML, path.join(kl, 'oyunlar', 'baska', 'oyun.html')); // pakette olmaz; olsa da gösterilmez
+    const pk = baslat(kl, ['--ana-sayfa', '--port', String(kp)]); await bekle(800);
+    const l = JSON.parse((await al(A + '/api/oyunlar')).govde), baslik = /<title>([^<]*)<\/title>/.exec(fs.readFileSync(OYUN_HTML, 'utf8'))[1];
+    kontrol('Paket düzeni, ana sayfa kipi: yalnız paketteki tek oyun (oyun.json yoksa adı sayfa başlığından)', l.paket === true && l.oyunlar.length === 1 && l.oyunlar[0].id === 'oyun' && l.oyunlar[0].ad === baslik && (await al(A + '/')).kod === 200, l.oyunlar);
+    fs.writeFileSync(path.join(kl, 'oyun.json'), JSON.stringify({ ad: 'Paket Oyunu', paket: 'paket-oyunu', aciklama: 'Tek cümle.', vitrin: false }));
+    const l2 = JSON.parse((await al(A + '/api/oyunlar')).govde);
+    const pb = await gonder(kp, '/api/baslat', { oyun: 'paket-oyunu', kip: 'deneme' }); await bekle(300);
+    const pg = await al(A + '/oyun/paket-oyunu/');
+    kontrol('Paket düzeni: oyun.json\'daki ad, cümle ve paket adı kullanılır, vitrin ayarı yok sayılır; Dene ile açılır', JSON.stringify(l2.oyunlar) === JSON.stringify([{ id: 'paket-oyunu', ad: 'Paket Oyunu', aciklama: 'Tek cümle.' }]) && pb.kod === 200 && pg.kod === 200 && /\/olay\/paket-oyunu/.test(pg.govde), { liste: l2.oyunlar, kod: pb.kod, sayfa: pg.kod });
+    pk.kill('SIGKILL');
   }
   kontrol('Köprü testlerinde sayfada hata çıkmadı', hatalar.length === 0, hatalar.slice(0, 4).join(' | '));
   await b.close();

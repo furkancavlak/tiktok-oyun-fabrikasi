@@ -20,11 +20,17 @@ Bu rehber, programcı olmayan bir yayıncı içindir. Elinde bir oyun paketi kla
 
 1. Paket klasöründeki `BASLAT.bat` dosyasına çift tıkla.
 2. İlk seferde gereken kütüphane iner. Bu bir kez olur, internet ister.
-3. Ekranda TikTok kullanıcı adın sorulur. Başında `@` olmadan yaz ve Enter'a bas. Yalnızca denemek için boş
-   bırak: TikTok'a bağlanmadan, sahte izleyicilerle açılır.
-4. Oyun tarayıcıda açılır. Solda sahne, sağda yayın masası (panel) vardır. Masanın en üstündeki şeritte Bağlantı
-   kutusu **Canlı** yazıyorsa yorumlar, beğeniler ve hediyeler oyuna akıyor demektir. Yanında kaç olay alındığı yazar.
-5. Sayfada bir kez herhangi bir yere tıkla ya da başlat düğmesine bas. Tarayıcılar, kullanıcı tıklamadan ses çalmaya izin vermez.
+3. Tarayıcıda ana sayfa açılır. Siyah pencere de açık kalır: o oyunun motorudur. Kapatırsan oyun durur; yayın
+   bitene kadar açık bırak (küçültebilirsin).
+4. Önce **Dene** düğmesine bas: oyun TikTok'a bağlanmadan, sahte izleyicilerle açılır. Neye benzediğini gör.
+5. Yayına geçmek için masanın sol üstündeki **← Oyunlar** bağlantısıyla ana sayfaya dön. Üstteki kutuya TikTok
+   kullanıcı adını yaz (başındaki `@` hazır durur) ve **Yayına bağlan** düğmesine bas. Ad bu bilgisayarda
+   hatırlanır; bir dahaki sefere yeniden yazman gerekmez.
+6. Oyun sayfasında solda sahne, sağda yayın masası (panel) vardır. Masanın en üstündeki şeritte Bağlantı kutusu
+   **Canlı** yazıyorsa yorumlar, beğeniler ve hediyeler oyuna akıyor demektir. Yanında kaç olay alındığı yazar.
+7. Sayfada bir kez herhangi bir yere tıkla ya da başlat düğmesine bas. Tarayıcılar, kullanıcı tıklamadan ses çalmaya izin vermez.
+
+Denemeden yayına geçince denemenin sahte izleyicileri sıralamadan silinir; gerçek yayında görünmezler.
 
 ## TikTok LIVE Studio'ya ekleme
 
@@ -66,7 +72,10 @@ buna izin verip vermediği denenmedi.
 | "Node.js bulunamadı" | Node.js kurulu değil ya da kurulumdan sonra bilgisayar yeniden başlatılmadı. https://nodejs.org adresinden LTS sürümünü kur, `BASLAT.bat` dosyasını yeniden aç. |
 | Köprü bağlanamıyor, 403 hatası | Kütüphane eski. Paket klasöründe bir komut satırı aç ve `npm install tiktok-live-connector@latest` yaz. Sonra `BASLAT.bat` dosyasını yeniden aç. |
 | "Yayın kapalı" ya da kullanıcı bulunamadı | Yayın açık değil ya da kullanıcı adı yanlış. Önce TikTok'ta yayını başlat, adı `@` olmadan yaz. |
-| Kapı dolu (port meşgul) | Köprü zaten başka bir pencerede açık olabilir; onu kapat. Olmazsa komut satırında `node kopru.js <kullanıcı_adı> --port 9000 --ac` çalıştır. |
+| Siyah pencere "zaten açık" deyip kapanıyor | `BASLAT.bat` iki kez açıldı. Sorun değil: tarayıcıda açılan ana sayfayı kullan. |
+| Kapı dolu (port meşgul) | Başka bir program aynı kapıyı tutuyor; onu kapat. Olmazsa komut satırında `node kopru.js --ana-sayfa --port 9000 --ac` çalıştır. |
+| Ana sayfa "Köprüye ulaşılamıyor" diyor | Siyah pencere kapanmış. `BASLAT.bat` dosyasına yeniden çift tıkla. |
+| Kullanıcı adı kabul edilmiyor | TikTok adında yalnız harf, rakam, alt çizgi ve nokta olur. Ekrandaki adını değil, profil adresindeki `@` ile başlayan adı yaz. |
 | Ses yok | Tarayıcılar tıklamadan ses açmaz. Sayfada başlat düğmesine bas. Pencere yakalama bilgisayar sesini ayrıca almıyorsa LIVE Studio'da ses kaynağını kontrol et. |
 | LIVE Studio'da oyun görünmüyor | Tarayıcı kaynağı yerine pencere yakalama kullan. Pencerenin küçültülmediğinden emin ol. |
 | Oyun açık ama yorumlar gelmiyor | Masanın üstündeki Bağlantı kutusuna bak; ayrıntı Yayın sekmesinde yazar. Yayın açıksa ve yorum yazılıyorsa kütüphaneyi güncelle (403 satırı). |
@@ -78,7 +87,7 @@ Bu tablo neyin denendiğini dürüstçe gösterir. "Denenmedi" yazan adımların
 | Adım | Durum |
 | --- | --- |
 | Köprünün gerçek bir TikTok canlı yayınını okuması | `tiktok-live-connector` 2.5.0 ile bir kez denendi: yorum, beğeni, hediye ve takip olayları oyuna ulaştı. 1.x sürümü artık bağlanamıyor (imza isteği 403 dönüyor). |
-| `BASLAT.bat`, Windows 10, temiz kopya, Türkçe harfli klasör yolu | Denendi, çalışıyor |
+| `BASLAT.bat`, Windows 10, temiz kopya, Türkçe harfli klasör yolu | Soru soran eski sürümüyle denendi, çalışıyor. Ana sayfa açan yeni sürümü (11 Kasım 2026) görünür pencerede çift tıklanarak henüz denenmedi; köprünün ana sayfa kipi otomatik testlerle ve görünmez tarayıcıyla denendi. |
 | Node.js kurulu olmayan bir bilgisayar; insanın çift tıklaması | Denenmedi |
 | TikTok LIVE Studio pencere yakalama | Denenmedi |
 

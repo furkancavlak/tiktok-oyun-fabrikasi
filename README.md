@@ -20,28 +20,34 @@ Oyun ile çekirdek arasındaki sözleşme `docs/KANCALAR.md` dosyasındadır.
 
 ## Hızlı başlangıç
 
-Gerekenler: Node.js 18 veya üstü. Testler ve ekran görüntüsü için Chrome.
+Gerekenler: Node.js 18 veya üstü (https://nodejs.org, LTS sürümü).
+
+### Yol 1: Çift tıkla, oyunu seç (Windows, komut yazmadan)
+
+1. Depoyu indir (GitHub'da **Code → Download ZIP**) ve klasörü aç.
+2. `BASLAT.bat` dosyasına çift tıkla. İlk seferde gereken kütüphane iner; bu bir kez olur.
+3. Tarayıcıda ana sayfa açılır: oyunlar canlı önizlemeleriyle yan yana durur.
+   - **Dene**: oyun sahte izleyicilerle açılır, hiçbir hesaba bağlanmaz.
+   - **Yayına bağlan**: sayfanın üstüne TikTok kullanıcı adını yaz, sonra bu düğmeye bas. Köprü yayını yalnızca okur.
+4. Açılan siyah pencere oyunların motorudur: açık kalsın, kapatınca oyunlar durur. Oyundan ana sayfaya
+   **← Oyunlar** bağlantısıyla dönülür.
+
+Komut satırından aynısı ve tek oyunla doğrudan açılış:
 
 ```
 npm install
+node kopru.js --ana-sayfa --ac               # ana sayfa (BASLAT.bat bunu çalıştırır)
+node kopru.js --deneme --oyun halay --ac     # tek oyun, sahte izleyicilerle
 ```
 
-### Yol 1: Örnek oyunu TikTok olmadan dene
-
-```
-node araclar/derle.js halay
-node kopru.js --deneme --oyun halay --ac
-```
-
-Tarayıcı açılır. Sahte izleyiciler yorum yazar, beğeni ve hediye gönderir. Hiçbir hesaba bağlanmaz.
-
-Windows'ta komut yazmadan: `BASLAT.bat` dosyasına çift tıkla, kullanıcı adını boş bırakıp Enter'a bas, listeden oyunu seç.
+Testler ve ekran görüntüsü için Chrome gerekir.
 
 ### Yol 2: Kendi oyununu Claude Code ile yap
 
 1. Depo klasöründe Claude Code'u aç. Ajan `AGENTS.md` dosyasını ve `.claude/skills/` altındaki beceriyi okur; çekirdeğin sınırlarını ve komutları oradan öğrenir.
 2. Fikrini tek cümleyle yaz. Örnek: "Yorum yazan herkes bir balık olsun, hediye atan balık büyüsün, en çok hediye atan köpekbalığı olsun."
-3. Ajan şablonu kopyalar, oyunu yazar, derler ve test eder. Elle yapmak istersen komutlar şunlar:
+3. Ajan şablonu kopyalar, oyunu yazar, derler ve test eder. Yeni oyun, `BASLAT.bat` ile açılan ana sayfada kendi
+   kartıyla görünür (kartın tek cümlesi oyunun `oyun.json` dosyasındaki `aciklama`). Elle yapmak istersen komutlar şunlar:
 
 ```
 node araclar/yeni-oyun.js <ad> "<Görünen Ad>"
@@ -67,7 +73,8 @@ node kopru.js <tiktok_kullanici_adi> --oyun <ad> --ac
 node araclar/paket.js <ad>
 ```
 
-`dist/<ad>/` klasörü oluşur: oyun, köprü, `BASLAT.bat` ve kısa bir `OKU.txt`. Klasörü yayıncıya ver. Yayıncı için adım adım anlatım `docs/YAYIN.md` dosyasındadır.
+`dist/<ad>/` klasörü oluşur: oyun, köprü, ana sayfa, `BASLAT.bat` ve kısa bir `OKU.txt`. Yayıncı `BASLAT.bat`
+dosyasına çift tıklayınca tek oyunlu ana sayfa açılır. Klasörü yayıncıya ver. Yayıncı için adım adım anlatım `docs/YAYIN.md` dosyasındadır.
 
 Köprü şifre istemez; yayını yalnızca okur.
 
@@ -108,6 +115,6 @@ MIT. Ayrıntı `LICENSE` dosyasında.
 
 TikTok Game Factory is a repo for vertical, interactive games played by viewers of a TikTok live stream. A comment puts a viewer into the game, likes raise a shared gauge, gifts trigger tiered effects, and the top gifter gets a special role. The repo contains a shared core (`cekirdek/`), an example game (a halay line dance, `oyunlar/halay/`), a game template (`sablon/`), a bridge (`kopru.js`) and tools (`araclar/`). Open the repo in Claude Code, describe a game in one sentence, and the agent builds it on the core.
 
-Quick try without TikTok: `npm install`, `node araclar/derle.js halay`, `node kopru.js --deneme --oyun halay --ac`. Live: `node kopru.js <username> --oyun <name> --ac`. `node araclar/paket.js <name>` builds a double-click package for a non-programmer streamer.
+Quick try on Windows: double-click `BASLAT.bat`; a home page opens in the browser with every game, a live preview, a "try with fake viewers" button and a "connect to your live stream" button (the TikTok username is typed on the page). From a terminal: `npm install`, then `node kopru.js --ana-sayfa --ac`, or one game directly with `node kopru.js --deneme --oyun halay --ac`. Live: `node kopru.js <username> --oyun <name> --ac`. `node araclar/paket.js <name>` builds a double-click package for a non-programmer streamer.
 
 Limits: the bridge reads streams through the unofficial `tiktok-live-connector` library, which depends on a third-party signing service (Euler Stream) that may limit or stop free use. TikTok offers no official public API for live comments and gifts. Streaming from a phone is not supported. No music files are shipped. Not affiliated with or endorsed by TikTok. Documentation is in Turkish. MIT licence.

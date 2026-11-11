@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-title Canli Oyun - Kopru
+title TikTok Oyun Fabrikasi - motor
 cd /d "%~dp0"
 
 where node >nul 2>nul
@@ -25,18 +25,10 @@ if not exist "node_modules\tiktok-live-connector" (
   )
 )
 
-echo.
-echo  Kendi yayininla oynamak icin TikTok kullanici adini yaz.
-echo  Yalnizca denemek istiyorsan bos birak ve Enter'a bas: TikTok'a baglanmadan, sahte izleyicilerle acilir.
-echo.
-set "KULLANICI="
-set /p KULLANICI= TikTok kullanici adin (basinda @ olmadan):
-
-rem --sor: klasorde birden cok oyun varsa kopru hangisinin acilacagini sorar (depo kokunden calistirinca).
-if "%KULLANICI%"=="" (
-  node kopru.js --deneme --ac --sor
-) else (
-  node kopru.js "%KULLANICI%" --ac --sor
+rem Tarayicida ana sayfa acilir; oyun, deneme ya da canli yayin oradan secilir. Bu pencere motordur.
+node kopru.js --ana-sayfa --ac
+if errorlevel 1 (
+  echo.
+  pause
+  exit /b 1
 )
-echo.
-pause

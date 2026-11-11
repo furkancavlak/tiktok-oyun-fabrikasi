@@ -83,3 +83,15 @@ Köprü ayrıca durum iletisi yollar; oyun bunu panelde gösterir, olay saymaz:
 | `GET /#yayin` | Yalnız sahne (panel gizli). |
 | `GET /durum` | `{ durum, bagliSayfa, sayac }` JSON. |
 | WebSocket (herhangi bir yol) | Olay akışı. Köprü yalnız yollar; istemciden veri beklemez. |
+
+Ana sayfa kipinde (`node kopru.js --ana-sayfa`, `BASLAT.bat` böyle açar) adresler başkadır:
+
+| Adres | Yanıt |
+| --- | --- |
+| `GET /` | Ana sayfa (`cekirdek/ana-sayfa.html`; pakette köprünün yanında). |
+| `GET /api/oyunlar` | `{ anaSayfa, paket, oyunlar: [{ id, ad, aciklama }], aktif: { oyun, ad, kip, kullanici } \| null, durum }`. |
+| `POST /api/baslat` | Gövde `{ oyun, kip: "deneme" \| "canli", kullanici }`. Çalışanı durdurur, seçileni başlatır; yanıt `{ tamam, adres }` ya da `{ tamam: false, hata }`. Yalnız köprünün kendi sayfasından kabul edilir (Host, Origin, JSON gövde). Kullanıcı adı: harf, rakam, `_`, `.`; 2-24 karakter. |
+| `GET /oyun/<id>/` | Çalışan oyunun sayfası, köprüye bağlı (`/olay/<id>`), masada "← Oyunlar" bağlantısı. Çalışmayan oyun için ana sayfaya yönlendirir. |
+| `GET /oyun/<id>/muzik/<dosya>` | O oyunun isteğe bağlı hazır parçaları. |
+| `GET /onizleme/<id>/` | Aynı oyun köprüsüz ve sessiz; ana sayfadaki kartın önizlemesi (`#yayin` ile). |
+| WebSocket `/olay/<id>` | O oyunun olayları; başka oyun çalışırken olay gelmez. |

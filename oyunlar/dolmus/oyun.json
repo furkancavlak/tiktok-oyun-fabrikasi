@@ -1,4 +1,6 @@
 {
   "ad": "Müsait Bir Yerde",
-  "paket": "dolmus"
+  "paket": "dolmus",
+  "aciklama": "Yorum yazan dolmuşa biner, hediye atanın parası elden ele şoföre gider, en çok hediye atan ön koltuğa oturur.",
+  "vitrin": false
 }
