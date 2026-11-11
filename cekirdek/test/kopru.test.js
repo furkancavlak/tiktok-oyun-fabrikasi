@@ -213,19 +213,35 @@ function baslat(klasor, args) { const c = spawn(process.execPath, ['kopru.js', .
     // Ana sayfa tarayıcıda: kartlar, metinler textContent ile, önizlemeler köprüsüz ve sessiz
     const actx = await b.newContext({ viewport: { width: 1366, height: 768 } });
     const ap = await sayfaAc(actx, A + '/'); await bekle(3500);
-    const ad1 = await ap.evaluate(() => ({ kart: [...document.querySelectorAll('.kart:not(.yap) h2')].map(h => h.textContent), yap: !!document.querySelector('.kart.yap'), etiket: document.querySelectorAll('.kart:not(.yap) img, .kart:not(.yap) .icerik b').length, xss: !!window.__xss, ifr: [...document.querySelectorAll('.ekran iframe')].map(f => f.getAttribute('src')) }));
-    kontrol('Ana sayfa: her oyunun kartı, ad ve cümle düz metin (HTML olarak yazılmaz), "Kendi oyununu yap" kartı', JSON.stringify(ad1.kart) === JSON.stringify(['Birinci Oyun', 'İkinci Oyun', '<img src=x onerror="window.__xss=1">Üç']) && ad1.yap && ad1.etiket === 0 && !ad1.xss, ad1);
+    const ad1 = await ap.evaluate(() => ({ kart: [...document.querySelectorAll('.kart h3')].map(h => h.textContent), yap: !document.getElementById('yap').hidden, etiket: document.querySelectorAll('.kart img, .kart h3 *, .kart .aciklama *').length, xss: !!window.__xss, ifr: [...document.querySelectorAll('.ekran iframe')].map(f => f.getAttribute('src')) }));
+    kontrol('Ana sayfa: her oyunun kartı, ad ve cümle düz metin (HTML olarak yazılmaz), "Kendi oyununu yap" boş kabini', JSON.stringify(ad1.kart) === JSON.stringify(['Birinci Oyun', 'İkinci Oyun', '<img src=x onerror="window.__xss=1">Üç']) && ad1.yap && ad1.etiket === 0 && !ad1.xss, ad1);
     kontrol('Ana sayfa: görünen kartlarda canlı önizleme (/onizleme/<ad>/#yayin)', ad1.ifr.length === 3 && ad1.ifr.every(s => /^\/onizleme\/[\w-]+\/#yayin$/.test(s)), ad1.ifr);
     const cerceve = ap.frames().find(f => /\/onizleme\/a-oyun\//.test(f.url()));
     const on = cerceve ? await cerceve.evaluate(() => ({ kopru: typeof window.OYUN_KOPRU, kisi: CanliOyun.durum().kisi, ses: CanliOyun.durum().ses, sesDugme: getComputedStyle(document.getElementById('ses-cagri')).display, yayin: document.body.classList.contains('yayin'), geri: !!document.querySelector('.ana-don') })).catch(e => ({ hata: e.message })) : { hata: 'önizleme çerçevesi yok' };
     kontrol('Önizleme köprüye bağlanmaz, kendi kalabalığıyla oynar, sessizdir, ses düğmesi gizli, yalnız sahne', on.kopru === 'undefined' && on.kisi >= 3 && on.ses === false && on.sesDugme === 'none' && on.yayin && !on.geri, on);
-    // Kullanıcı adı boşken Yayına bağlan: sayfa geçmez, alanın yanında ne eksik olduğunu söyler, odak alana gider
+    // Kullanıcı adı kayıtlı değilken: Dene öne çıkar; Yayına bağlan sayfayı geçirmez, kutuyu parlatır, ne yapılacağını söyler, odak alana gider
+    const adsiz = await ap.evaluate(() => { const k = document.querySelector('.kart[data-oyun="a-oyun"]'), r = e => getComputedStyle(e.querySelector('i')).backgroundImage; return { kayitli: document.body.classList.contains('kayitli'), dene: r(k.querySelector('.dene')), bagla: r(k.querySelector('.bagla')), denePasif: k.querySelector('.dene').disabled, alt: k.querySelector('.bagla small').textContent }; });
     await ap.click('.kart[data-oyun="a-oyun"] .bagla'); await bekle(300);
-    const bosAd = await ap.evaluate(() => ({ url: location.pathname, hata: document.getElementById('ad-hata').textContent, gorunur: !document.getElementById('ad-hata').hidden, odak: document.activeElement && document.activeElement.id }));
-    kontrol('Ana sayfa: kullanıcı adı boşken Yayına bağlan geçmez, eksik olanı alanın yanında söyler, odak alana gider', bosAd.url === '/' && bosAd.gorunur && /kullanıcı adını yaz/.test(bosAd.hata) && bosAd.odak === 'kullanici' && kayit() === '', bosAd);
-    await ap.fill('#kullanici', '@Test_Kullanici'); await ap.reload(); await bekle(800);
-    const hatirla = await ap.inputValue('#kullanici');
-    kontrol('Ana sayfa: kullanıcı adı bu tarayıcıda hatırlanır, baştaki @ atılır', hatirla === 'Test_Kullanici', hatirla);
+    const bosAd = await ap.evaluate(() => ({ url: location.pathname, not: document.getElementById('ad-not').textContent, gorunur: !document.getElementById('ad-not').hidden, parlak: document.getElementById('hesap').classList.contains('uyar'), odak: document.activeElement && document.activeElement.id }));
+    kontrol('Ana sayfa: ad kayıtlı değilken sarı Dene yanar ve çalışır, kırmızı Yayın sönüktür ve "önce adını kaydet" der', !adsiz.kayitli && !adsiz.denePasif && /255, 224, 122/.test(adsiz.dene) && !/255, 138, 112/.test(adsiz.bagla) && adsiz.alt === 'önce adını kaydet', adsiz);
+    kontrol('Ana sayfa: adsız Yayına bağlan geçmez, kutuyu vurgular, ne yapılacağını söyler, odak alana gider', bosAd.url === '/' && bosAd.gorunur && bosAd.parlak && /adını yaz ve Kaydet/.test(bosAd.not) && bosAd.odak === 'kullanici' && kayit() === '', bosAd);
+    // Yazmak tek başına kaydetmez; Kaydet (Enter) kaydeder, kutu "kayıtlı" hâline geçer, düğmeler yer değiştirir
+    await ap.fill('#kullanici', 'ali veli'); await ap.press('#kullanici', 'Enter'); await bekle(200);
+    const bozukAd = await ap.evaluate(() => ({ not: document.getElementById('ad-not').textContent, form: !document.getElementById('ad-form').hidden, kayitli: document.body.classList.contains('kayitli') }));
+    kontrol('Ana sayfa: geçersiz ad kaydedilmez, alanın altında düz bir dille söylenir', bozukAd.form && !bozukAd.kayitli && /harf, rakam/.test(bozukAd.not), bozukAd);
+    await ap.fill('#kullanici', '@Test_Kullanici'); await bekle(100);
+    const yazinca = await ap.evaluate(() => document.body.classList.contains('kayitli') || (() => { try { return localStorage.getItem('fabrika-kullanici'); } catch (e) { return null; } })());
+    await ap.press('#kullanici', 'Enter'); await bekle(300);
+    const kay = await ap.evaluate(() => { const k = document.querySelector('.kart[data-oyun="a-oyun"]'), r = e => getComputedStyle(e.querySelector('i')).backgroundImage; return { gor: !document.getElementById('kayitli-gor').hidden, form: !document.getElementById('ad-form').hidden, ad: document.getElementById('kayitli-ad').textContent, etiket: document.querySelector('.kayit-etiket').textContent, dene: r(k.querySelector('.dene')), bagla: r(k.querySelector('.bagla')), alt: k.querySelector('.bagla small').textContent }; });
+    kontrol('Ana sayfa: yazmak kaydetmez; Enter ile kaydedilir, "@ad Kayıtlı" görünür, kırmızı Yayın yanar ve "@ad" der', !yazinca && kay.gor && !kay.form && kay.ad === '@Test_Kullanici' && kay.etiket === 'Kayıtlı' && /255, 138, 112/.test(kay.bagla) && kay.alt === '@Test_Kullanici', { yazinca, ...kay });
+    await ap.reload(); await bekle(800);
+    const hatirla = await ap.evaluate(() => ({ ad: document.getElementById('kayitli-ad').textContent, gor: !document.getElementById('kayitli-gor').hidden }));
+    kontrol('Ana sayfa: kayıtlı ad sayfa yeniden açılınca kayıtlı gelir', hatirla.gor && hatirla.ad === '@Test_Kullanici', hatirla);
+    await ap.click('#degistir'); await bekle(150);
+    const deg = await ap.evaluate(() => ({ form: !document.getElementById('ad-form').hidden, deger: document.getElementById('kullanici').value, kayitli: document.body.classList.contains('kayitli'), odak: document.activeElement.id }));
+    await ap.click('#kaydet'); await bekle(200);
+    const degSonra = await ap.evaluate(() => document.getElementById('kayitli-ad').textContent);
+    kontrol('Ana sayfa: Değiştir düzenlemeye döner (ad alanda, odak alanda), Kaydet düğmesi yeniden kaydeder', deg.form && deg.deger === 'Test_Kullanici' && !deg.kayitli && deg.odak === 'kullanici' && degSonra === '@Test_Kullanici', { ...deg, sonra: degSonra });
     // Dene: API'ye sorar, oyunun sayfasına geçer; olaylar gelir; geri dönüş bağlantısı var
     await ap.click('.kart[data-oyun="a-oyun"] .dene'); await ap.waitForURL(/\/oyun\/a-oyun\/$/, { timeout: 8000 }).catch(() => { }); await bekle(4500);
     let od = await ap.evaluate(() => { const g = document.querySelector('.ana-don'); return { url: location.pathname, ...CanliOyun.durum(), geri: g && g.textContent, geriHref: g && g.getAttribute('href'), adres: document.getElementById('bag-adres').value }; });
@@ -255,6 +271,24 @@ function baslat(klasor, args) { const c = spawn(process.execPath, ['kopru.js', .
     await api({ oyun: 'b-oyun', kip: 'deneme' }); await bekle(1200);
     const durum2 = JSON.parse((await al(A + '/api/oyunlar')).govde);
     kontrol('Canlıdan canlıya ve canlıdan denemeye geçince eski TikTok bağlantısı kapanır (her bağlanmaya bir kopma)', kayit() === 'bkbk' && durum2.aktif.oyun === 'b-oyun' && durum2.aktif.kip === 'deneme', { kayit: kayit(), aktif: durum2.aktif });
+    // "Şu an açık" şeridi ve Durdur (POST /api/durdur)
+    const dur = (b2) => gonder(kp, '/api/durdur', {}, b2);
+    const durRet = [await dur({ origin: 'http://kotu.example' }), await dur({ 'sec-fetch-site': 'cross-site' }), await dur({ 'content-type': 'text/plain' })].map(r => r.kod);
+    kontrol('POST /api/durdur başka siteden ya da JSON olmadan gelince geri çevrilir, oyun sürer', JSON.stringify(durRet) === '[403,403,415]' && JSON.parse((await al(A + '/api/oyunlar')).govde).aktif.oyun === 'b-oyun', durRet);
+    await ap.goto(A + '/'); await bekle(1200);
+    const serit = await ap.evaluate(() => ({ gor: !document.getElementById('calisan').hidden, oyun: document.getElementById('cal-oyun').textContent, kip: document.getElementById('cal-kip').textContent, durum: document.getElementById('cal-durum').textContent, don: document.getElementById('cal-don').getAttribute('href') }));
+    kontrol('Ana sayfa: bir oyun çalışırken "Şu an açık" şeridi oyunu, kipi, motorun durum cümlesini ve Oyuna dön bağlantısını gösterir', serit.gor && serit.oyun === 'İkinci Oyun' && serit.kip === 'deneme' && /Deneme kipi/.test(serit.durum) && serit.don === '/oyun/b-oyun/', serit);
+    await ap.click('#cal-durdur'); await bekle(600);
+    const durSonra = await ap.evaluate(() => ({ gor: !document.getElementById('calisan').hidden, rozet: [...document.querySelectorAll('.acik-rozet')].some(r => !r.hidden) }));
+    const s1 = toplam(JSON.parse((await al(A + '/durum')).govde)); await bekle(1500); const s2 = toplam(JSON.parse((await al(A + '/durum')).govde));
+    const bos2 = JSON.parse((await al(A + '/api/oyunlar')).govde);
+    kontrol('Ana sayfadan Durdur: sahte olaylar durur, motor boşta kalır, şerit kaybolur', !durSonra.gor && !durSonra.rozet && s1 === s2 && bos2.aktif === null && (await al(A + '/oyun/b-oyun/')).kod === 302, { serit: durSonra, olay: [s1, s2], aktif: bos2.aktif });
+    await api({ oyun: 'a-oyun', kip: 'canli', kullanici: 'Test_Kullanici' }); await bekle(900);
+    const seritCanli = await ap.evaluate(() => new Promise(r => setTimeout(() => r({ gor: !document.getElementById('calisan').hidden, kip: document.getElementById('cal-kip').textContent, canli: document.getElementById('calisan').classList.contains('canli'), yardim: document.getElementById('yardim-ac').classList.contains('parla'), durum: document.getElementById('cal-durum').textContent }), 2300)));
+    const durCanli = await dur(); await bekle(400);
+    kontrol('Canlı yayında şerit "@ad yayını" ve motorun cümlesini gösterir; Durdur TikTok bağlantısını kapatır', seritCanli.gor && seritCanli.canli && seritCanli.yardim && seritCanli.kip === '@Test_Kullanici yayını' && /@Test_Kullanici yayınına bağlandı/.test(seritCanli.durum) && durCanli.kod === 200 && durCanli.j.aktif === null && kayit() === 'bkbkbk', { serit: seritCanli, kayit: kayit() });
+    const yeniden = await api({ oyun: 'a-oyun', kip: 'deneme' }); const y1 = toplam(JSON.parse((await al(A + '/durum')).govde)); await bekle(2000); const y2 = toplam(JSON.parse((await al(A + '/durum')).govde));
+    kontrol('Durdurduktan sonra yeniden başlatmak çalışır (olaylar yine gelir)', yeniden.kod === 200 && y2 - y1 >= 3, { kod: yeniden.kod, olay: y2 - y1 });
     // Müzik: ana sayfa kipinde her oyunun kendi muzik/ klasörü kendi adresinden
     fs.mkdirSync(path.join(kl, 'oyunlar', 'a-oyun', 'muzik'), { recursive: true }); fs.writeFileSync(path.join(kl, 'oyunlar', 'a-oyun', 'muzik', '_t.js'), 'mz');
     const mz2 = [(await al(A + '/oyun/a-oyun/muzik/_t.js')).govde, (await al(A + '/oyun/b-oyun/muzik/_t.js')).kod, (await al(A + '/oyun/a-oyun/muzik/..%2F..%2Fkopru.js')).kod, (await al(A + '/onizleme/a-oyun/muzik/_t.js')).kod];

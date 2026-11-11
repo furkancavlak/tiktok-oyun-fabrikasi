@@ -9,13 +9,13 @@ dokunmaz; burada adı geçen kancaları doldurur.
 ```
 cekirdek/
   sayfa.html, stil.css      sayfa iskeleti (sahne + yayın masası paneli); metinler OYUN ayarından doldurulur
-  ana-sayfa.html            BASLAT.bat ile açılan ana sayfa (oyun kartları); köprü sunar, derlemeye girmez
+  ana-sayfa.html            BASLAT.bat ile açılan ana sayfa (oyun salonu: her oyun bir kabin; kabin rengi oyun kimliğinden kendiliğinden seçilir); köprü sunar, derlemeye girmez
   js/NN-*.js                çekirdek parçaları (aşağıda)
   test/                     ortak.js, cekirdek.test.js (her oyuna uygulanır), muzik.test.js (bütün oyunlar),
                             kopru.test.js, araclar.test.js
 oyunlar/<ad>/
   oyun.json                 { "ad": "Görünen Ad", "paket": "dosya-adi", "aciklama": "Tek cümle." }
-                            aciklama: ana sayfadaki kartta görünen tek, düz cümle; kurallardan yazılır
+                            aciklama: ana sayfadaki oyun kabininde görünen tek, düz cümle; kurallardan yazılır
                             ("Yorum yazan halaya girer, beğeni tempoyu artırır, en çok hediye atan mendili alır.").
                             İsteğe bağlı "vitrin": false oyunu ana sayfadan gizler (komut satırından yine açılır).
   js/00-ayar.js             const OYUN = { … }  (HER ZAMAN İLK birleştirilir)

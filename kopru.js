@@ -23,7 +23,8 @@
  *
  * Ana sayfa kipi (--ana-sayfa): köprü oyunsuz ve kullanıcı adsız açılır, / adresinde ana sayfayı
  * (cekirdek/ana-sayfa.html; pakette köprünün yanında) sunar. Sayfadaki düğmeler POST /api/baslat ile hangi oyunun
- * hangi kipte (deneme ya da canlı) çalışacağını söyler; köprü çalışanı durdurup yenisini başlatır. Oyunlar:
+ * hangi kipte (deneme ya da canlı) çalışacağını söyler; köprü çalışanı durdurup yenisini başlatır. POST /api/durdur
+ * çalışanı durdurur; köprü boşta bekler (ana sayfada bu pencereye "motor" denir). Oyunlar:
  * köprünün yanında oyun.html varsa yalnız o (paket), yoksa derlenmiş her oyunlar/<ad>/ ("vitrin": false olanlar hariç).
  */
 'use strict';
@@ -89,7 +90,7 @@ function yayinla(nesne) {
   for (const s of istemciler) { if (!alici(s)) continue; try { s.write(c); } catch (e) { istemciler.delete(s); } }
 }
 function durumBildir(ileti) { sonDurum = ileti; yaz(ileti); yayinla({ tip: 'kopru', ileti }); }
-const BEKLEYEN_OYUN = 'Bu oyun şu an çalışmıyor. Ana sayfaya dönüp Dene ya da Yayına bağlan düğmesine bas.';
+const BEKLEYEN_OYUN = 'Bu oyun şu an çalışmıyor. Ana sayfaya dönüp Dene ya da Yayın düğmesine bas.';
 
 const sunucu = http.createServer((req, res) => {
   const yol = (req.url || '/').split('?')[0];
@@ -229,7 +230,7 @@ function dinle() {
     if (DENEME) denemeBaslat(); else tiktokBaslat();
     if (args.includes('--ac')) tarayicidaAc('http://localhost:' + PORT + '/'); // köprü dinlemeye başladıktan sonra
   });
-  process.on('SIGINT', () => { console.log('\nKöprü kapatıldı.'); process.exit(0); });
+  process.on('SIGINT', () => { console.log(ANA ? '\nMotor kapatıldı.' : '\nKöprü kapatıldı.'); process.exit(0); });
 }
 function tarayicidaAc(adres) { // varsayılan tarayıcıda açar
   const { exec } = require('child_process');
@@ -298,6 +299,7 @@ function anaSayfaIstegi(req, res, yol) {
     return;
   }
   if (yol === '/api/baslat') { baslatIstegi(req, res); return; }
+  if (yol === '/api/durdur') { durdurIstegi(req, res); return; }
   if (yol === '/durum') { jsonYaz(res, 200, { durum: sonDurum, bagliSayfa: istemciler.size, sayac, aktif: anaDurum().aktif }); return; }
   const m = /^\/(oyun|onizleme)\/([^/]+)(\/.*)?$/.exec(yol);
   const o = m && OYUN_DESEN.test(m[2]) ? vitrindekiler().find(x => x.id === m[2]) : null;
@@ -340,7 +342,9 @@ const DENEME_ADLARINI_SIL = '<script>try{for(var i=localStorage.length-1;i>=0;i-
 const ONIZLEME_EK = '<script>window.OYUN_MUZIK_KAPALI=true;window.AudioContext=undefined;window.webkitAudioContext=undefined;' +
   '(function(){var r=window.requestAnimationFrame.bind(window);window.requestAnimationFrame=function(f){var t0=performance.now();' +
   'return r(function k(t){if(t-t0<24)return r(k);f(t);});};})();</script>\n<style>#ses-cagri,#cik-yayin{display:none!important}</style>';
-function baslatIstegi(req, res) {
+// Ana sayfanın POST istekleri (başlat, durdur) için ortak kapı: yalnız köprünün kendi sayfasından, JSON gövdeyle,
+// en çok 4 KB. Geçerse gövdeyi nesne olarak işleve verir; geçmezse yanıtı kendisi yazar.
+function postAl(req, res, isle) {
   if (req.method !== 'POST') { res.writeHead(405, { allow: 'POST' }); res.end(); return; }
   if (!yerelIstek(req, true)) { jsonYaz(res, 403, { tamam: false, hata: 'Bu istek ana sayfadan gelmedi; geri çevrildi.' }); req.resume(); return; }
   if (!/^application\/json\b/i.test(String(req.headers['content-type'] || ''))) { jsonYaz(res, 415, { tamam: false, hata: 'İstek JSON değil.' }); req.resume(); return; }
@@ -352,7 +356,26 @@ function baslatIstegi(req, res) {
     let g;
     try { g = JSON.parse(govde); } catch (e) { jsonYaz(res, 400, { tamam: false, hata: 'İstek okunamadı.' }); return; }
     if (!g || typeof g !== 'object') { jsonYaz(res, 400, { tamam: false, hata: 'İstek okunamadı.' }); return; }
-    const o = typeof g.oyun === 'string' && OYUN_DESEN.test(g.oyun) ? vitrindekiler().find(x => x.id === g.oyun) : null;
+    isle(g);
+  });
+}
+// Ana sayfadaki "Durdur": çalışan oyunun sahte olay saatini ya da TikTok bağlantısını kapatır, motor boşta bekler.
+function durdurIstegi(req, res) {
+  postAl(req, res, () => { oyunDurdur(); jsonYaz(res, 200, { tamam: true, ...anaDurum() }); });
+}
+function oyunDurdur() {
+  if (!calisan) return;
+  const eski = calisan;
+  calisan = null;
+  try { if (eski.durdur) eski.durdur(); } catch (e) { }
+  const c = cerceve(JSON.stringify({ tip: 'kopru', ileti: 'Oyun ana sayfadan durduruldu. Yeniden başlatmak için ana sayfaya dön.' }));
+  for (const s of istemciler) if (s.oyun === eski.oyun) { try { s.write(c); } catch (e) { } }
+  sonDurum = 'Oyun durduruldu.';
+  console.log('\n  Durduruldu: ' + eski.ad + '. Motor açık, ana sayfadan yeni oyun seçilebilir.');
+}
+function baslatIstegi(req, res) {
+  postAl(req, res, g => {
+    const o =typeof g.oyun === 'string' && OYUN_DESEN.test(g.oyun) ? vitrindekiler().find(x => x.id === g.oyun) : null;
     if (!o) { jsonYaz(res, 404, { tamam: false, hata: 'Bu oyun bulunamadı. Sayfayı yenileyip yeniden dene.' }); return; }
     if (g.kip !== 'deneme' && g.kip !== 'canli') { jsonYaz(res, 400, { tamam: false, hata: 'Kip "deneme" ya da "canli" olmalı.' }); return; }
     let ad = '';
@@ -432,7 +455,7 @@ function tiktokBaslat(kullaniciAdi = KULLANICI) {
   try { Kutuphane = require('tiktok-live-connector'); }
   catch (e) {
     console.log('  "tiktok-live-connector" kurulu değil. Bu klasörde bir kez şunu çalıştır:\n\n      npm install\n\n  Sonra köprüyü yeniden başlat. (İnternet olmadan denemek için: node kopru.js --deneme)\n');
-    durumBildir('Köprü çalışıyor ama TikTok kütüphanesi kurulu değil. Klasörde "npm install" çalıştır.');
+    durumBildir('TikTok kütüphanesi kurulu değil. BASLAT.bat ile yeniden aç ya da klasörde "npm install" çalıştır.');
     return () => {};
   }
   const Sinif = Kutuphane.TikTokLiveConnection || Kutuphane.WebcastPushConnection; // yeni ve eski sürüm adları

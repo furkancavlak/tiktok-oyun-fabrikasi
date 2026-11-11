@@ -65,7 +65,7 @@ kanca iki dosyada tanımlı kalmasın.
 
 Sonra şu sırayla ilerle; her adımdan sonra derleyip kareye bak:
 
-1. `oyun.json` içindeki `aciklama`: ana sayfadaki kartta görünen tek, düz cümle. Kurallar belli olunca yaz;
+1. `oyun.json` içindeki `aciklama`: ana sayfadaki oyun kabininde görünen tek, düz cümle. Kurallar belli olunca yaz;
    şablondan gelen cümle geçicidir. Örnek: "Yorum yazan halaya girer, beğeni tempoyu artırır, en çok hediye atan
    mendili alıp halayın başına geçer." Jargon yok; izleyici ne yapar, oyunda ne olur.
    `js/00-ayar.js`: yazılar, kademeler (`etki` metniyle), tohum kalabalık, sahte yorumlar, kapasite.
@@ -173,8 +173,8 @@ geçirme.
 Kullanıcıya kısa ve dürüst bir özet ver:
 
 - Oyun ne yapıyor (kurallar tablosu).
-- Nasıl açılır: `BASLAT.bat` dosyasına çift tıkla, ana sayfada oyunun kartında **Dene** (ya da
-  `node kopru.js --deneme --oyun <ad> --ac`). Kartın cümlesi `oyun.json` içindeki `aciklama`; yazıldığından emin ol.
+- Nasıl açılır: `BASLAT.bat` dosyasına çift tıkla, ana sayfada oyunun kabininde sarı **Dene** (ya da
+  `node kopru.js --deneme --oyun <ad> --ac`). Kabinin cümlesi `oyun.json` içindeki `aciklama`; yazıldığından emin ol.
 - Kare dosyasının yeri ve müzik önizlemesi (`test/cikti/<ad>/muzik-onizleme.wav`): kullanıcı dinleyip karar verir.
 - Neyin testle, neyin gözle doğrulandığı; neyin **hiç** doğrulanmadığı (ses kulakla dinlenmedi, gerçek yayın
   denenmedi, hareket yalnız karelerden görüldü gibi).

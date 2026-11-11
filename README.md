@@ -26,9 +26,11 @@ Gerekenler: Node.js 18 veya üstü (https://nodejs.org, LTS sürümü).
 
 1. Depoyu indir (GitHub'da **Code → Download ZIP**) ve klasörü aç.
 2. `BASLAT.bat` dosyasına çift tıkla. İlk seferde gereken kütüphane iner; bu bir kez olur.
-3. Tarayıcıda ana sayfa açılır: oyunlar canlı önizlemeleriyle yan yana durur.
-   - **Dene**: oyun sahte izleyicilerle açılır, hiçbir hesaba bağlanmaz.
-   - **Yayına bağlan**: sayfanın üstüne TikTok kullanıcı adını yaz, sonra bu düğmeye bas. Köprü yayını yalnızca okur.
+3. Tarayıcıda ana sayfa açılır: bir oyun salonu, her oyun bir kabin, ekranında oyunun canlı önizlemesi.
+   - Sarı **Dene**: oyun sahte izleyicilerle açılır, hiçbir hesaba bağlanmaz, ad gerekmez.
+   - Kırmızı **Yayın**: önce sağ üstteki bilete TikTok kullanıcı adını yaz, **Kaydet**'e (ya da Enter'a) bas;
+     düğme yanar, basınca kendi canlı yayınına bağlanır. Köprü yayını yalnızca okur.
+   - Açık oyun üstteki şeritte görünür: **Oyuna dön** ya da **Durdur**.
 4. Açılan siyah pencere oyunların motorudur: açık kalsın, kapatınca oyunlar durur. Oyundan ana sayfaya
    **← Oyunlar** bağlantısıyla dönülür.
 
