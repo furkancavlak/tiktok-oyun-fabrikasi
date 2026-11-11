@@ -174,6 +174,55 @@ const CEKIMLER = ['drone', 'yan', 'on', 'kus', 'tur', 'yakin', 'kenar', 'vinc'];
   });
   kontrol('Uzun süre sessiz kalan araba kenara çekip yoldan çıkar', cikis.cikti && cikis.silindi, cikis);
 
+  // Süper araba: yalnız TEK bir hediyenin birim değeri (jeton) eşiğe (SUPER_ESIK = 1000) ulaşırsa; seri (adet), toplam
+  // ve 999 saymaz. Kasa o anda bir kez değişir, ikinci büyük hediyede an yine kalkar ama kasa yeniden değişmez.
+  await bosalt();
+  await p.evaluate(() => { for (let i = 0; i < 9; i++) CanliOyun.olay({ tip: 'yorum', kullanici: { id: 's' + i, ad: 'super' + i }, metin: 'x' }); });
+  await p.waitForTimeout(600);
+  const tip = id => p.evaluate(i => { const k = CanliOyun._test.D.oy.get(i); return k && k.ar && k.ar.tip; }, id);
+  await O({ tip: 'hediye', kullanici: { id: 's1', ad: 'super1' }, jeton: 999 });
+  await O({ tip: 'hediye', kullanici: { id: 's2', ad: 'super2' }, jeton: 1, adet: 1000 });
+  for (let i = 0; i < 10; i++) await O({ tip: 'hediye', kullanici: { id: 's3', ad: 'super3' }, jeton: 100 });
+  d = await durum();
+  kontrol('999 jetonluk hediye, 1 jetonluk hediyeden 1000\'lik seri ve on tane 100\'lük hediye süper araba yapmaz', d.superAraba.length === 0 && d.superDegisim === 0 && (await tip('s2')) !== 'super' && (await tip('s3')) !== 'super', { super: d.superAraba, s3: d.sira.find(x => x[0] === 'super3') });
+  await O({ tip: 'hediye', kullanici: { id: 's4', ad: 'super4' }, jeton: 1000 });
+  d = await durum();
+  // olay rejiye gider: ya bekliyor, ya süper araba çekimi başladı, ya bekleme süresinde geniş çekimin üstünde kartı çıktı,
+  // ya da aynı hediyenin drift şovu (en büyük olay) sırada: şovun kartı "SÜPER ARABA · DRIFT ŞOV" der (60-cizim.js)
+  const sKart = await p.evaluate(() => { const D = CanliOyun._test.D, R = D.reji, k = D.oy.get('s4'); return { an: D.superAn && D.superAn.k.id, b0: D.superAn && D.superAn.b0, olay: !!(R.olay && R.olay.tur === 'super' && R.olay.k === k) || !!(R.cekim && R.cekim.ad === 'super' && R.cekim.k === k) || !!(R.vurgu && R.vurgu.k === k && R.vurgu.ust === 'SÜPER ARABA'), sov: !!(D.drift && D.drift.k === k) || D.driftKuyruk.includes(k) }; });
+  kontrol('Tek seferde 1000 jetonluk hediye o anda kasayı süper arabaya çevirir; an onundur, olay rejiye süper araba olarak gider', (await tip('s4')) === 'super' && d.superAraba.join() === 'super4' && d.superDegisim === 1 && sKart.an === 's4' && (sKart.olay || sKart.sov), { d: d.superAraba, sKart });
+  await p.waitForTimeout(400);
+  await O({ tip: 'hediye', kullanici: { id: 's4', ad: 'super4' }, jeton: 1000 });
+  const sKart2 = await p.evaluate(() => CanliOyun._test.D.superAn.b0);
+  d = await durum();
+  kontrol('Aynı izleyicinin ikinci 1000 jetonluk hediyesi anı yeniden başlatır, kasayı ikinci kez değiştirmez', sKart2 > sKart.b0 && d.superDegisim === 1 && (await tip('s4')) === 'super', { b0: [sKart.b0, sKart2], degisim: d.superDegisim });
+  await p.waitForTimeout(600);
+  d = await durum();
+  kontrol('Süper arabanın sahibi gelin arabasıysa gelin süsü süper arabanın üstündedir', d.lider === 'super4' && d.gelinSusu.join() === 'super', { lider: d.lider, sus: d.gelinSusu });
+  // çıkıp geri gelen yine süper arabayla gelir (lider sahneden çıkmaz: lider olmayan bir süper araba sahibi denenir)
+  await O({ tip: 'hediye', kullanici: { id: 's5', ad: 'super5' }, jeton: 1000 });
+  await p.waitForTimeout(300);
+  const geri = await p.evaluate(async () => {
+    const D = CanliOyun._test.D, k = D.oy.get('s5');
+    const lider = D.lider === k;
+    k.son = -1e6;
+    for (let i = 0; i < 40 && D.oy.has('s5'); i++) await new Promise(r => setTimeout(r, 200));
+    const silindi = !D.oy.has('s5');
+    CanliOyun.olay({ tip: 'yorum', kullanici: { id: 's5', ad: 'super5' }, metin: 'geldim' });
+    await new Promise(r => setTimeout(r, 300));
+    const y = D.oy.get('s5');
+    return { lider, silindi, yeniKayit: y !== k, tip: y && y.ar && y.ar.tip };
+  });
+  kontrol('Süper araba kazanan çıkıp aynı yayında geri gelince yine süper arabayla gelir', !geri.lider && geri.silindi && geri.yeniKayit && geri.tip === 'super', geri);
+  // havuzlar: 36 arabanın altısı süper arabayken her çizilen arabanın dört tekerleği, iki plakası durur, WebGL hata yazmaz
+  await bosalt();
+  await p.evaluate(() => { for (let i = 0; i < 36; i++) CanliOyun.olay({ tip: 'yorum', kullanici: { id: 'h' + i, ad: 'havuz' + i }, metin: 'x' }); });
+  const glSuper = hatalar.length;
+  await p.evaluate(() => { for (let i = 0; i < 6; i++) CanliOyun.olay({ tip: 'hediye', kullanici: { id: 'h' + (i * 5), ad: 'havuz' + (i * 5) }, jeton: 1000 }); });
+  await p.waitForTimeout(1500);
+  const hv = await p.evaluate(() => CanliOyun.durum().ornek);
+  kontrol('Altı süper arabayla 36 arabada örnek havuzları tam (tekerlek 4, plaka 2 araba başına), WebGL hata yazmaz', hv.super === 6 && hv.araba === 36 && hv.teker === hv.araba * 4 && hv.plaka === hv.araba * 2 && hatalar.length === glSuper, { hv, gl: hatalar.slice(glSuper, glSuper + 2) });
+
   // Taşma: 36 araba sahnedeyken 1,7 saniyede 30 kişi daha girer (çıkanlar birikir). Örnek havuzları taşmaz, WebGL
   // hata yazmaz, her çizilen arabanın dört tekerleği ve iki plakası durur (denetim: test/cikti/denetim-3b/tasma2.js).
   await bosalt();
@@ -239,10 +288,13 @@ const CEKIMLER = ['drone', 'yan', 'on', 'kus', 'tur', 'yakin', 'kenar', 'vinc'];
     D.tekerOlc = {};
     const b0 = CanliOyun.durum().vurus;
     for (let i = 0; i < 36; i++) CanliOyun.olay({ tip: 'hediye', kullanici: { id: 'z' + i, ad: 'zipla' + i }, jeton: i % 3 ? 1 : 50 });
+    // iki süper araba da ölçülsün (kendi tekerlek havuzu): tek seferde 1000 jetonluk hediye
+    for (const i of [7, 20]) CanliOyun.olay({ tip: 'hediye', kullanici: { id: 'z' + i, ad: 'zipla' + i }, jeton: 1000 });
     while (CanliOyun.durum().vurus < b0 + 4) await bekle(50);
     return Object.fromEntries(Object.entries(D.tekerOlc).map(([t, o]) => [t, { kemer: +o.kemer.toFixed(3), esik: +o.esik.toFixed(3), n: o.n }]));
   });
-  const tipler = ['sedan', 'hatch', 'kombi', 'van', 'pikap'];
+  // görünümün bütün kasa tipleri (hazır modellerde sedan, kombi, van, süper araba; ?araba=kod ile beş kodlu kasa + süper)
+  const tipler = (await durum()).arabaTipleri;
   kontrol('Zıplarken, yaylanırken, yatarken tekerlek gövdeye girmez (her kasa tipi: lastik kemerin altında, eşiğin altında)', tipler.every(t => tk[t] && tk[t].kemer > 0.01 && tk[t].esik > 0.05), tk);
 
   // Çarpışma: akış ve hediyelerle (sollama, katılan, çıkan, drift, yeni gelin arabası, şerit sayısı değişimi) 3, 9, 17
@@ -256,7 +308,7 @@ const CEKIMLER = ['drone', 'yan', 'on', 'kus', 'tur', 'yakin', 'kenar', 'vinc'];
       D.carpisma = { cift: 0, enAz: Infinity, kare: 0 };
       // Denetçinin ölçüsü (denetim-3b-2/carpisma.js, gecis.js): çizilen kutular (gövde, ayna hariç) 5 cm'den çok
       // kesişiyor mu, bir arabanın kenarı yol çizgisinden (4,3 m) taşıyor mu. Kendi çözücünün ölçüsünden bağımsız.
-      const DIM = { sedan: [-2.22, 2.24, 1.66], hatch: [-1.93, 1.94, 1.62], kombi: [-2.27, 2.26, 1.68], van: [-2.33, 2.34, 1.82], pikap: [-2.38, 2.38, 1.72] };
+      const DIM = { sedan: [-2.22, 2.24, 1.66], hatch: [-1.93, 1.94, 1.62], kombi: [-2.27, 2.26, 1.68], van: [-2.33, 2.34, 1.82], pikap: [-2.38, 2.38, 1.72], super: [-2.28, 2.13, 1.84] };
       const rect = k => { const d = DIM[k.ar.tip], e = k._M.elements, nn = Math.hypot(e[0], e[2]), fx = e[0] / nn, fz = e[2] / nn, mid = (d[0] + d[1]) / 2; return { c: [e[12] + fx * mid, e[14] + fz * mid], u: [fx, fz], hl: (d[1] - d[0]) / 2, hw: d[2] / 2 }; };
       const pen = (A, Bb) => { let m = 1e9; const ax = [A.u, [-A.u[1], A.u[0]], Bb.u, [-Bb.u[1], Bb.u[0]]], dc = [Bb.c[0] - A.c[0], Bb.c[1] - A.c[1]], prj = (R, v) => R.hl * Math.abs(R.u[0] * v[0] + R.u[1] * v[1]) + R.hw * Math.abs(-R.u[1] * v[0] + R.u[0] * v[1]); for (const v of ax) m = Math.min(m, prj(A, v) + prj(Bb, v) - Math.abs(dc[0] * v[0] + dc[1] * v[1])); return m; };
       const olc = { kare: 0, kesisenKare: 0, enDerin: 0, kaldirimKare: 0 };
@@ -299,7 +351,7 @@ const CEKIMLER = ['drone', 'yan', 'on', 'kus', 'tur', 'yakin', 'kenar', 'vinc'];
     await bekle(6000);
       // Denetçinin ölçüsü (denetim-3b-2/carpisma.js, gecis.js): çizilen kutular (gövde, ayna hariç) 5 cm'den çok
       // kesişiyor mu, bir arabanın kenarı yol çizgisinden (4,3 m) taşıyor mu. Kendi çözücünün ölçüsünden bağımsız.
-      const DIM = { sedan: [-2.22, 2.24, 1.66], hatch: [-1.93, 1.94, 1.62], kombi: [-2.27, 2.26, 1.68], van: [-2.33, 2.34, 1.82], pikap: [-2.38, 2.38, 1.72] };
+      const DIM = { sedan: [-2.22, 2.24, 1.66], hatch: [-1.93, 1.94, 1.62], kombi: [-2.27, 2.26, 1.68], van: [-2.33, 2.34, 1.82], pikap: [-2.38, 2.38, 1.72], super: [-2.28, 2.13, 1.84] };
       const rect = k => { const d = DIM[k.ar.tip], e = k._M.elements, nn = Math.hypot(e[0], e[2]), fx = e[0] / nn, fz = e[2] / nn, mid = (d[0] + d[1]) / 2; return { c: [e[12] + fx * mid, e[14] + fz * mid], u: [fx, fz], hl: (d[1] - d[0]) / 2, hw: d[2] / 2 }; };
       const pen = (A, Bb) => { let m = 1e9; const ax = [A.u, [-A.u[1], A.u[0]], Bb.u, [-Bb.u[1], Bb.u[0]]], dc = [Bb.c[0] - A.c[0], Bb.c[1] - A.c[1]], prj = (R, v) => R.hl * Math.abs(R.u[0] * v[0] + R.u[1] * v[1]) + R.hw * Math.abs(-R.u[1] * v[0] + R.u[0] * v[1]); for (const v of ax) m = Math.min(m, prj(A, v) + prj(Bb, v) - Math.abs(dc[0] * v[0] + dc[1] * v[1])); return m; };
       const olc = { kare: 0, kesisenKare: 0, enDerin: 0, kaldirimKare: 0 };

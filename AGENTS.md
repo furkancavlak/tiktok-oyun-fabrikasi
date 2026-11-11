@@ -60,8 +60,12 @@ docs/YAYIN.md         yayıncı için: nasıl yayına verilir
    seçenek de açılmaz. Köprü yalnız `127.0.0.1` dinler.
 3. **Dışarıdan gelen her şey `olay(o)` üzerinden girer.** Sahte izleyici, köprü ve testler aynı kapıyı kullanır.
 4. **Gerçek yayında sahte ad görünmez.** Köprüden açılan sayfada otomatik kalabalık kapalıdır.
-5. **Ses ve görsel üretimdir.** Depoya ses dosyası, görsel, hazır model eklenmez; karakterler kodla çizilir.
-   Var olan bir şarkının notası, başka bir yayının çizimi, adı ya da müziği kopyalanmaz. Mekanik alınabilir.
+5. **Ses ve görsel üretimdir.** Depoya ses dosyası ve görsel eklenmez; karakterler kodla çizilir. Tek istisna hazır
+   3B modellerdir: serbest lisanslı (CC0 / kamu malı) modeller derleme girdisi olarak `kitaplik/<paket>/` altına,
+   lisans metniyle yan yana girer; `araclar/` altındaki bir araç onları tek `oyun.html`'e gömer (ör.
+   `araclar/kitaplik-araba.js` → `kitaplik/araba-modelleri.js`), çalışırken hiçbir şey indirilmez. Marka adı, arma, logo
+   taşıyan model alınmaz. Var olan bir şarkının notası, başka bir yayının çizimi, adı ya da müziği kopyalanmaz.
+   Mekanik alınabilir.
 6. **Oyun tek dosyadır**, çalışırken dış bağımlılığı yoktur (yalnız Google Fonts; yüklenmezse yedek yazı
    tipiyle çalışır). Çerçeve, paketleyici, `import` / `export` eklenmez.
 7. **Sahne 9:16'dır**, çizim 720×1280 sanal ölçekte yapılır. Alt beşte bir (1024 ve sonrası) TikTok'un yorum

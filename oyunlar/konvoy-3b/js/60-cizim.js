@@ -358,13 +358,17 @@ function oyunCiz() {
 // gelin arabası. Bu arabanın küçük etiketi çizilmez: ad bir kez, büyük yazılır.
 // Çıkmakta olan ya da kaydı yenilenmiş araba kartı taşımaz (konu yanlış kişiyi göstermesin).
 const kartGecerli = k => k && k.ar && !k.cikiyor && D.oy.get(k.id) === k;
+// Tek seferde 1000 jetonluk hediye hem süper arabayı hem drift şovunu başlatır; reji şovu seçer (en büyük olay). Şovun
+// kartı o zaman süper arabayı da söyler: an kaybolmasın (10-oyun.js superAraba, D.superAn).
+const superYeni = k => D.superAn && D.superAn.k === k && B - D.superAn.b0 < DRIFT_V * 3;
+const sovUst = k => superYeni(k) ? 'SÜPER ARABA · DRIFT ŞOV' : 'DRIFT ŞOV!';
 function kartKonusu() {
   const R = D.reji, ad = R.cekim && R.cekim.ad;
   if (ad === 'sov' && D.drift && kartGecerli(D.drift.k))
-    return { k: D.drift.k, ust: 'DRIFT ŞOV!' };
+    return { k: D.drift.k, ust: sovUst(D.drift.k) };
   // bekleme süresinde gelen olay: geniş çekimin üstünde büyük ad (ve halka)
   if (R.vurgu && B - R.vurgu.b0 < R.vurgu.sure && kartGecerli(R.vurgu.k) && genisMi(R.cekim))
-    return { k: R.vurgu.k, ust: R.vurgu.ust, halka: true };
+    return { k: R.vurgu.k, ust: R.vurgu.ust === 'DRIFT ŞOV!' ? sovUst(R.vurgu.k) : R.vurgu.ust, halka: true };
   if (ad === 'yakin' && kartGecerli(R.konu))
     return { k: R.konu, ust: (R.konu.sn + 1) + '. araba' + (R.konu.jeton > 0 ? ' · ' + R.konu.jeton + ' jeton' : '') };
   if (ad === 'lider' && D.lider)
@@ -519,7 +523,7 @@ function oyunUst() {
     c.lineWidth = 4;
     c.strokeStyle = MUREKKEP;
     c.strokeText(ust, x, y - 42);
-    c.fillStyle = ad === 'sov' ? RENK.sicak : RENK.vurgu;
+    c.fillStyle = ust.startsWith('SÜPER ARABA') ? SUPER_RENK : ad === 'sov' ? RENK.sicak : RENK.vurgu;
     c.fillText(ust, x, y - 42);
     c.globalAlpha = 1;
   }

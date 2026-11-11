@@ -102,10 +102,12 @@ Sahne 720x1280 sanal ölçekte çizilir, TikTok'un dikey yayınına göre. Alt k
 
 MIT. Ayrıntı `LICENSE` dosyasında.
 
+Gelin Konvoyu 3B, three.js (MIT) ile çizilir; arabaları ve sokak eşyaları serbest lisanslı (CC0) hazır modellerdir. Modelleri herkese açık paylaştıkları için Kenney (www.kenney.nl) ve Quaternius'a (quaternius.com) teşekkürler. Lisans metinleri `kitaplik/` altında, modellerin yanında.
+
 ## English summary
 
 TikTok Game Factory is a repo for vertical, interactive games played by viewers of a TikTok live stream. A comment puts a viewer into the game, likes raise a shared gauge, gifts trigger tiered effects, and the top gifter gets a special role. The repo contains a shared core (`cekirdek/`), an example game (a halay line dance, `oyunlar/halay/`), a game template (`sablon/`), a bridge (`kopru.js`) and tools (`araclar/`). Open the repo in Claude Code, describe a game in one sentence, and the agent builds it on the core.
 
 Quick try without TikTok: `npm install`, `node araclar/derle.js halay`, `node kopru.js --deneme --oyun halay --ac`. Live: `node kopru.js <username> --oyun <name> --ac`. `node araclar/paket.js <name>` builds a double-click package for a non-programmer streamer.
 
-Limits: the bridge reads streams through the unofficial `tiktok-live-connector` library, which depends on a third-party signing service (Euler Stream) that may limit or stop free use. TikTok offers no official public API for live comments and gifts. Streaming from a phone is not supported. No music files are shipped. Not affiliated with or endorsed by TikTok. Documentation is in Turkish. MIT licence.
+Limits: the bridge reads streams through the unofficial `tiktok-live-connector` library, which depends on a third-party signing service (Euler Stream) that may limit or stop free use. TikTok offers no official public API for live comments and gifts. Streaming from a phone is not supported. No music files are shipped. Not affiliated with or endorsed by TikTok. Documentation is in Turkish. MIT licence. Gelin Konvoyu 3B uses three.js (MIT) and CC0 models: thanks to Kenney (www.kenney.nl) and Quaternius (quaternius.com).
