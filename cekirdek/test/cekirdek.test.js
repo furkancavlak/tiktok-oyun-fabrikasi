@@ -4,7 +4,7 @@
 // Çalıştırma: node cekirdek/test/cekirdek.test.js <ad>   (ad verilmezse halay)
 'use strict';
 const fs = require('fs');
-const { OYUN_AD, OYUN_URL, CIKTI, KADEME, tarayici, raporla, kontrolcu } = require('./ortak');
+const { OYUN_AD, OYUN_URL, CIKTI, KADEME, tarayici, raporla, kontrolcu, bekle, hazirBekle, kareBekle } = require('./ortak');
 const { sonuc, kontrol } = kontrolcu();
 
 (async () => {
@@ -15,7 +15,7 @@ const { sonuc, kontrol } = kontrolcu();
     p.on('console', m => { if (m.type() === 'error' && !/ERR_TUNNEL|Failed to load resource/.test(m.text())) hatalar.push(m.text()); });
     p.on('pageerror', e => hatalar.push('SAYFA HATASI: ' + e.message + '\n' + (e.stack || '').split('\n').slice(0, 3).join('\n')));
     await p.goto(OYUN_URL + (hash || ''));
-    await p.waitForTimeout(600);
+    await hazirBekle(p);
     return p;
   };
   const p = await ac(1280, 800);
@@ -30,7 +30,8 @@ const { sonuc, kontrol } = kontrolcu();
   // ---------- KURALLAR ----------
   await bosalt();
   let d = await durum(); kontrol('Boşaltınca sahne boş', d.kisi === 0 && d.lider === null, d.kisi);
-  await p.waitForTimeout(120); kontrol('Boş sahnede sıra kutusu oyunun boş yazısını gösterir', (await p.textContent('#sira-liste')).includes(AYAR.bos), AYAR.bos);
+  await bekle(p, 'sıra kutusu boş yazısını gösteriyor', b2 => document.getElementById('sira-liste').textContent.includes(b2), AYAR.bos, 3000);
+  kontrol('Boş sahnede sıra kutusu oyunun boş yazısını gösterir', (await p.textContent('#sira-liste')).includes(AYAR.bos), AYAR.bos);
   await O({ tip: 'begeni', kullanici: { id: 'a', ad: 'Ali' }, adet: 10 });
   d = await durum(); kontrol('Beğeni oyuna sokmaz, coşkuyu artırır', d.kisi === 0 && d.cosku > 0.05, d.cosku.toFixed(3));
   await O({ tip: 'yorum', kullanici: { id: 'a', ad: 'Ali' }, metin: 'selam' });
@@ -71,7 +72,8 @@ const { sonuc, kontrol } = kontrolcu();
   // boşta kalan çıkar
   await bosalt();
   await p.evaluate(() => { for (let i = 0; i < 6; i++) CanliOyun.olay({ tip: 'yorum', kullanici: { id: 'b' + i, ad: 'bos' + i }, metin: 'x' }); CanliOyun.olay({ tip: 'hediye', kullanici: { id: 'b5', ad: 'bos5' }, jeton: 100 }); CanliOyun._test.zamanEkle(250); });
-  await p.waitForTimeout(5500);
+  // Kare döngüsü 45 karede bir en çok bir sessizi çıkarır: beş kişi ~4 sn (eskiden sabit 5,5 sn).
+  await bekle(p, 'sessiz kalanlar çıktı (1 kişi, lider bos5)', () => { const d2 = CanliOyun.durum(); return d2.kisi === 1 && d2.lider === 'bos5'; }, undefined, 15000);
   d = await durum(); kontrol('4 dakika sessiz kalan çıkar, hediye atan ve lider kalır', d.kisi === 1 && d.lider === 'bos5', d.sira);
 
   // ---------- KÖTÜ NİYETLİ / BOZUK GİRDİ ----------
@@ -129,12 +131,15 @@ const { sonuc, kontrol } = kontrolcu();
     CanliOyun.olay({ tip: 'yorum', kullanici: { id: 'm3', ad: 'kotu_ad' }, metin: 'yasak slogan' });
     CanliOyun.olay({ tip: 'hediye', kullanici: { id: 'm1', ad: 'Mert' }, jeton: 5 });
   });
-  await p.waitForTimeout(450);
+  // Yayın masası 250 ms'de bir yazılır (masaYaz).
+  await bekle(p, 'yayın masası yazıldı (3 kişi, 45 jeton, 3 satır)', () => document.getElementById('d-kisi').textContent === '3' && document.getElementById('d-jeton').textContent === '45' && document.querySelectorAll('#kisi-liste li[data-id]').length === 3, undefined, 3000);
   const ms = await p.evaluate(() => { const t = id => document.getElementById(id).textContent; return { kisi: t('d-kisi'), jeton: t('d-jeton'), lider: t('d-lider'), bag: t('d-bag'), kare: t('d-kare'), satir: [...document.querySelectorAll('#kisi-liste li[data-id]')].map(li => li.dataset.id + ':' + li.querySelector('.ad').textContent), sekmeGizli: document.getElementById('bolum-deneme').hidden === false && document.getElementById('bolum-yayin').hidden === true }; });
   kontrol('Durum şeridi: kişi sayısı, toplam jeton, lider ve bağlantı canlı yazar', ms.kisi === '3' && ms.jeton === '45' && ms.lider === 'Lale' && ms.bag === 'Deneme' && /\d/.test(ms.kare), ms);
   kontrol('Sahnedekiler listesi jetona göre sıralı', ms.satir.join(',') === 'm2:Lale,m1:Mert,m3:kotu_ad', ms.satir);
   const mod = await p.evaluate(async () => {
     const T = CanliOyun._test, bekle = ms2 => new Promise(r => setTimeout(r, ms2)), satir = id => [...document.querySelectorAll('#kisi-liste li')].find(li => li.dataset.id === id);
+    // durum beklemesi: kosul doğru olunca ya da sinir dolunca döner (sonraki kontrol durumu kendisi sınar)
+    const durumBekle = (kosul, sinir) => new Promise(r => { const t0 = performance.now(); (function d() { if (kosul()) r(true); else if (performance.now() - t0 > sinir) r(false); else setTimeout(d, 25); })(); });
     const r = {};
     // adını gizle: sıralamadaki düğmeyle
     r.balonVardi = !!T.D.oy.get('m3').balon;
@@ -150,14 +155,15 @@ const { sonuc, kontrol } = kontrolcu();
     CanliOyun.olay({ tip: 'hediye', kullanici: { id: 'm2', ad: 'Lale' }, jeton: 500 });
     CanliOyun.olay({ tip: 'yorum', kullanici: { id: 'm2', ad: 'Lale' }, metin: 'geri geldim' });
     r.donmedi = CanliOyun.durum();
-    // olay akışından çıkar
-    await bekle(250);
+    // olay akışından çıkar (akış 6 karede bir yazılır; eskiden sabit 250 ms)
+    await durumBekle(() => [...document.getElementById('gunluk').children].some(li => li.dataset.id === 'm1'), 3000);
     const akis = [...document.getElementById('gunluk').children].find(li => li.dataset.id === 'm1');
     r.akisSatir = !!akis;
     if (akis) akis.querySelector('.g-cikar').click();
     await bekle(30);
     r.akistanCikti = CanliOyun.durum();
-    await bekle(300);
+    // çıkarılanlar listesi yayın masasıyla (250 ms'de bir) yazılır; eskiden sabit 300 ms
+    await durumBekle(() => document.getElementById('mod-liste').querySelectorAll('li[data-id]').length === 3 && /2 çıkarılan · 1 gizli/.test(document.getElementById('mod-ozet').textContent), 3000);
     r.modListe = document.getElementById('mod-liste').querySelectorAll('li[data-id]').length;
     r.ozet = document.getElementById('mod-ozet').textContent;
     // geri al: Yayın sekmesindeki listeden
@@ -213,11 +219,13 @@ const { sonuc, kontrol } = kontrolcu();
       else CanliOyun.olay({ tip: 'hediye', kullanici: { id, ad: id }, jeton: M[i % M.length] }); }
     return { ms: performance.now() - t0, n, d: CanliOyun.durum(), gunluk: document.getElementById('gunluk').children.length, bildirim: document.getElementById('bildirim').children.length };
   }, MINLER);
-  await p.waitForTimeout(3000);
+  // Selden sonra kare döngüsü 90 kare daha çizmeli (eskiden sabit 3 sn ≈ 180 kare). kareMs 20 karelik kayan
+  // ortalamadır: 90 karede oturur, selin parçacıkları da daha sönmediği için ölçüm eskisinden gevşek değildir.
+  const selAkti = await kareBekle(p, 90, 10000);
   d = await durum();
   kontrol('20.000 olay tek seferde işlenir', sel.ms < 4000, Math.round(sel.ms) + ' ms');
   kontrol('Selde parçacık, günlük ve bildirim sınırlı kalır', sel.d.parca <= 460 && sel.gunluk <= 40 && sel.bildirim <= 3, { parca: sel.d.parca, gunluk: sel.gunluk, bildirim: sel.bildirim });
-  kontrol('Selden sonra oyun akmaya devam eder', d.kisi === KAP && d.kareMs < 40, { kisi: d.kisi, kareMs: +d.kareMs.toFixed(1) });
+  kontrol('Selden sonra oyun akmaya devam eder', selAkti && d.kisi === KAP && d.kareMs < 40, { kareAkti: selAkti, kisi: d.kisi, kareMs: +d.kareMs.toFixed(1) });
   await p.locator('#sahne').screenshot({ path: CIKTI + '/t-sel.png' });
 
   // ---------- MÜZİK SAATİ ----------
@@ -348,10 +356,11 @@ const { sonuc, kontrol } = kontrolcu();
   // ---------- YAYIN GÖRÜNÜMÜ, 1080×1920, BAŞARIM ----------
   const y = await ac(1080, 1920, '#yayin');
   await y.evaluate(n => { for (let i = 0; i < n; i++) CanliOyun.olay({ tip: 'hediye', kullanici: { id: 'y' + i, ad: 'izleyici_' + i }, jeton: 5 + i }); }, KAP);
-  await y.waitForTimeout(6000);
+  // Tam kalabalıkla 180 kare (eskiden sabit 6 sn): kareMs'nin 20 karelik ortalaması dolu sahnede oturur.
+  const yAkti = await kareBekle(y, 180, 20000);
   const yd = await y.evaluate(() => ({ w: document.getElementById('tuval').width, h: document.getElementById('tuval').height, panel: getComputedStyle(document.getElementById('panel')).display, sahne: document.getElementById('sahne').getBoundingClientRect().toJSON(), d: CanliOyun.durum() }));
   kontrol('Yayın görünümü: tuval 1080×1920, panel gizli', yd.w === 1080 && yd.h === 1920 && yd.panel === 'none' && Math.round(yd.sahne.width) === 1080, { tuval: yd.w + '×' + yd.h, panel: yd.panel });
-  kontrol('1080×1920, ' + yd.d.kisi + ' kişi: kare başına işlem süresi (yazılımsal çizimde)', yd.d.kisi === KAP && yd.d.kareMs < 33, +yd.d.kareMs.toFixed(1) + ' ms');
+  kontrol('1080×1920, ' + yd.d.kisi + ' kişi: kare başına işlem süresi (yazılımsal çizimde)', yAkti && yd.d.kisi === KAP && yd.d.kareMs < 33, +yd.d.kareMs.toFixed(1) + ' ms' + (yAkti ? '' : ' (kare döngüsü 180 kare çizmedi)'));
   await y.screenshot({ path: CIKTI + '/t-yayin-1080.png' });
   await y.close();
   for (const [w, h] of [[1920, 1080], [900, 1600], [360, 640], [820, 700], [2560, 1440]]) {
@@ -617,7 +626,7 @@ const { sonuc, kontrol } = kontrolcu();
     fs.writeFileSync(gy, sarili);
     const hp = await b.newPage({ viewport: { width: 1280, height: 800 } });
     hp.on('pageerror', e => hatalar.push('SAYFA HATASI (hediye): ' + e.message));
-    await hp.goto(pathToFileURL(gy).href); await hp.waitForTimeout(600);
+    await hp.goto(pathToFileURL(gy).href); await hazirBekle(hp);
     const hk = await hp.evaluate(async () => {
       const O = CanliOyun.olay, T = CanliOyun._test, son = () => (window.__kanca || []).slice(-1)[0];
       document.getElementById('bosalt').click(); window.__kanca = [];
@@ -682,7 +691,7 @@ const { sonuc, kontrol } = kontrolcu();
   const hs = await b.newPage({ viewport: { width: 720, height: 800 } }), hsHata = [];
   hs.on('pageerror', e => hsHata.push(e.message));
   await hs.goto(OYUN_URL);
-  await hs.waitForTimeout(600);
+  await hazirBekle(hs);
   const kirik = await hs.evaluate(async () => {
     const D = CanliOyun._test.D, oy = D.oy;
     D.oy = null;

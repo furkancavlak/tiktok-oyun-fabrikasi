@@ -3,7 +3,7 @@
 // Çekirdek testleri ayrıca çalışır (cekirdek/test/cekirdek.test.js konvoy). Çalıştırma: node oyunlar/konvoy/test.js konvoy
 'use strict';
 const path = require('path');
-const { OYUN_URL, CIKTI, tarayici, raporla, kontrolcu } = require(path.join(__dirname, '..', '..', 'cekirdek', 'test', 'ortak'));
+const { OYUN_URL, CIKTI, tarayici, raporla, kontrolcu, bekle: sayfaBekle, hazirBekle } = require(path.join(__dirname, '..', '..', 'cekirdek', 'test', 'ortak'));
 const { sonuc, kontrol } = kontrolcu();
 
 (async () => {
@@ -13,7 +13,7 @@ const { sonuc, kontrol } = kontrolcu();
   p.on('pageerror', e => hatalar.push('SAYFA HATASI: ' + e.message));
   p.on('console', m => { if (m.type() === 'error' && !/ERR_TUNNEL|Failed to load resource/.test(m.text())) hatalar.push(m.text()); });
   await p.goto(OYUN_URL);
-  await p.waitForTimeout(600);
+  await hazirBekle(p);
   await p.evaluate(() => { if (document.getElementById('oto').getAttribute('aria-pressed') === 'true') document.getElementById('oto').click(); });
   const bosalt = () => p.evaluate(() => { document.getElementById('bosalt').click(); });
   const O = o => p.evaluate(o2 => CanliOyun.olay(o2), o);
@@ -72,7 +72,8 @@ const { sonuc, kontrol } = kontrolcu();
   kontrol('50–199 jeton: konvoy zigzag yapar', hepsi(kd[50]) && kd[50].zigzag && kd[199].zigzag && !kd[199].fisek, [kd[50], kd[199]]);
   kontrol('200–999 jeton: havai fişek ve davul şovu başlar', kd[200].fisek && kd[200].sov && kd[999].fisek && kd[999].drift === 0, [kd[200], kd[999]]);
   kontrol('1000+ jeton: gönderen drift kuyruğuna girer, fişek de atılır', kd[1000].drift === 1 && kd[1000].fisek && kd[50000].drift === 1, [kd[1000], kd[50000]]);
-  await p.waitForTimeout(2500);
+  // Drift sırası gelen öne sürülür ve büyür (eskiden sabit 2,5 sn): beklenen durum kontrolün kendisidir.
+  await sayfaBekle(p, 'drift kd1000: yıldız, öne çıktı (z < -3), büyüdü (> 1,3)', () => { const D = CanliOyun._test.D; return CanliOyun.durum().drift === 'kd1000' && !!D.drift && D.drift.k.yildiz && D.drift.k.z < -3 && (D.drift.k.olcek || 1) > 1.3; }, undefined, 8000);
   d = await durum();
   const dr = await p.evaluate(() => { const D = CanliOyun._test.D; return D.drift && { ad: D.drift.k.ad, yildiz: D.drift.k.yildiz, x: +D.drift.k.x.toFixed(2), z: +D.drift.k.z.toFixed(2), olcek: +(D.drift.k.olcek || 1).toFixed(2) }; });
   kontrol('Drift sırası gelen en öne çıkar, büyür ve yıldız olur', d.drift === 'kd1000' && dr && dr.yildiz && dr.z < -3 && dr.olcek > 1.3, dr);
@@ -114,10 +115,13 @@ const { sonuc, kontrol } = kontrolcu();
   await bosalt();
   const cikis = await p.evaluate(async () => {
     for (let i = 0; i < 4; i++) CanliOyun.olay({ tip: 'yorum', kullanici: { id: 'c' + i, ad: 'cik' + i }, metin: 'x' });
-    await new Promise(r => setTimeout(r, 1500));
+    // durum beklemesi: kosul doğru olunca ya da sinir dolunca döner (kontrol durumu kendisi sınar)
+    const durumBekle = (kosul, sinir) => new Promise(r => { const t0 = performance.now(); (function d() { if (kosul()) r(true); else if (performance.now() - t0 > sinir) r(false); else setTimeout(d, 25); })(); });
     const D = CanliOyun._test.D, k = D.oy.get('c3');
+    // önce araba yerine varır (eskiden sabit 1,5 sn), sonra sessiz kalınca çekilip silinir (eskiden sabit 2,5 sn)
+    await durumBekle(() => Math.hypot(k.x - k.hedefX, k.z - k.hedefZ) < 0.2, 6000);
     k.son = -1e6;
-    await new Promise(r => setTimeout(r, 2500));
+    await durumBekle(() => !D.sira.includes(k) && !D.oy.has('c3'), 8000);
     return { cikti: !D.sira.includes(k), silindi: !D.oy.has('c3'), gitti: !!k.gitti, x: +k.x.toFixed(2) };
   });
   kontrol('Uzun süre sessiz kalan araba kenara çekip yoldan çıkar', cikis.cikti && cikis.silindi, cikis);

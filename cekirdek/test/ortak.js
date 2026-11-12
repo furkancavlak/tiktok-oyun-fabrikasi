@@ -36,6 +36,28 @@ async function tarayiciAc(ek = []) {
   return b;
 }
 
+// Sabit uyku yerine durum beklemesi: kosul (sayfada çalışır) doğru olunca hemen döner. Süre (sinir) eski sabit
+// beklemeden kısa değildir, yavaş bilgisayar da geçer. Süre dolarsa beklenen durumun adını yazar ve false döner;
+// ardından gelen kontrol o durumu kendisi sınar ve kalır (bekleme hiçbir kontrolü atlatmaz, sayıyı değiştirmez).
+async function bekle(p, ad, kosul, arg, sinir = 10000) {
+  try {
+    await p.waitForFunction(kosul, arg, { timeout: sinir, polling: 50 });
+    return true;
+  } catch (e) {
+    if (!e || e.name !== 'TimeoutError') throw e;
+    console.log('BEKLEME DOLDU (' + sinir / 1000 + ' sn): ' + ad);
+    return false;
+  }
+}
+// Oyun açıldı: CanliOyun._test var ve kare döngüsü en az n kare çizdi (eskiden sabit 600 ms beklenirdi).
+const hazirBekle = (p, n = 2, sinir = 10000) =>
+  bekle(p, 'oyun hazır (CanliOyun._test ve ' + n + ' kare)', n2 => !!(window.CanliOyun && CanliOyun._test && CanliOyun._test.olcum().kare >= n2), n, sinir);
+// Kare döngüsü bundan sonra n kare daha çizdi (oyun akıyor).
+async function kareBekle(p, n, sinir = 10000) {
+  const k0 = await p.evaluate(() => CanliOyun._test.olcum().kare);
+  return bekle(p, n + ' kare daha çizildi (kare döngüsü akıyor)', ([a, b]) => CanliOyun._test.olcum().kare >= a + b, [k0, n], sinir);
+}
+
 function raporla(sonuc) {
   const kalan = sonuc.filter(s => s[0] === 'KALDI').length;
   for (const s of sonuc) console.log(s[0], '|', s[1], s[2] ? '| ' + s[2].slice(0, 330) : '');
@@ -48,4 +70,4 @@ function kontrolcu() {
     ayrinti === undefined ? '' : typeof ayrinti === 'string' ? ayrinti : JSON.stringify(ayrinti, (x, v) => typeof v === 'bigint' ? v + 'n' : v)]);
   return { sonuc, kontrol };
 }
-module.exports = { KOK, OYUN_AD, OYUN_HTML, OYUN, OYUN_URL, CIKTI, KADEME, tarayici: tarayiciAc, raporla, kontrolcu };
+module.exports = { KOK, OYUN_AD, OYUN_HTML, OYUN, OYUN_URL, CIKTI, KADEME, tarayici: tarayiciAc, raporla, kontrolcu, bekle, hazirBekle, kareBekle };
