@@ -57,7 +57,8 @@ function hashDogrula(yol, beklenen) {
 function paketDenetle(kl) {
   const sorun = [], var_ = y => fs.existsSync(path.join(kl, y));
   for (const y of ['node/node.exe', 'node/LICENSE', 'node_modules/tiktok-live-connector/package.json', 'kopru.js', 'package.json', 'BASLAT.bat', 'BASLAT.command',
-    'BASLAT.sh', 'cekirdek/node-yok.html', 'cekirdek/ana-sayfa.html', 'SURUM.txt', 'oyunlar/halay/oyun.html', 'oyunlar/konvoy/oyun.html', 'oyunlar/vur-duzelsin/oyun.html'])
+    'BASLAT.sh', 'cekirdek/node-yok.html', 'cekirdek/ana-sayfa.html', 'SURUM.txt', 'oyunlar/halay/oyun.html', 'oyunlar/konvoy/oyun.html', 'oyunlar/konvoy-3b/oyun.html',
+    'oyunlar/vur-duzelsin/oyun.html', 'kitaplik/LICENSE-three.txt'])
     if (!var_(y)) sorun.push('eksik: ' + y);
   for (const y of ['.git', 'test/cikti', 'dist', 'node_modules/playwright', 'node_modules/playwright-core', 'node/npm', 'node/npm.cmd', 'node/node_modules'])
     if (var_(y)) sorun.push('olmamalı: ' + y);
