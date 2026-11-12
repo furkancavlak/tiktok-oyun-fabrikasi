@@ -282,6 +282,64 @@ const CEKIMLER = ['drone', 'yan', 'on', 'kus', 'tur', 'yakin', 'kenar', 'vinc'];
   const izB = await superAnIzle('n5', 8000);
   d = await durum();
   kontrol('(b) Gelin arabası olmayan birinin 1000\'liği: kart "SÜPER ARABA" + ad + "1.000 jetonluk hediye", süper araba çekimi, gelin arabası aynı', d.lider === 'ikinci0' && d.superAraba.join() === 'ikinci5' && izB.cekim && izB.kartIlk !== null && izB.kartIlk < 3000 && izB.ustler.includes('SÜPER ARABA') && izB.altlar.includes('1.000 jetonluk hediye') && !izB.pankart, { lider: d.lider, izB });
+
+  // Süper araba sırası (50-reji.js superIsle): her süper araba hediyesi kendi çekimini alır, kart üstünde kalmaz.
+  // (1) Bekleme süresinde (başka bir olay çekimi az önce bitti): yine bir sonraki ölçü çizgisinde (en çok 5 vuruşta)
+  // o arabanın süper araba çekimi. (2) Başka bir olay çekimi sürerken: o bittiğinde arada geniş çekim olmadan sıradaki
+  // çekim süper araba. (3) Üç izleyiciden art arda üç süper araba: üç çekim, hediye sırasıyla, her birinde o izleyicinin
+  // arabası kadrajın oyuncu şeridinde (505–1006, kenarlarda taşma yok) bütün çekim boyunca.
+  const kuyrukIzle = (ms, durSart) => p.evaluate(async ([ms, durSart]) => {
+    const R = CanliOyun._test.D.reji, iz = [], dur = durSart ? new Function('iz', 'return ' + durSart) : null;
+    let son = null;
+    const t0 = performance.now();
+    while (performance.now() - t0 < ms) {
+      const c = R.cekim;
+      if (c !== son) { iz.push({ ad: c.ad, k: c.k ? c.k.id : null, b: +CanliOyun.durum().vurus.toFixed(2), n: 0, bandda: 0 }); son = c; }
+      const kd = R.kadraj, x = iz[iz.length - 1];
+      if (kd) { x.n++; if (kd[1] >= 505 && kd[3] <= 1006 && kd[0] >= 0 && kd[2] <= 720 && kd[4] === 0) x.bandda++; }
+      if (dur && dur(iz)) break;
+      await new Promise(r => setTimeout(r, 50));
+    }
+    return iz;
+  }, [ms, durSart || '']);
+  const GENIS_AD = ['arka', 'drone', 'ucsol', 'ucsag', 'kus', 'vinc'];
+  const kuyrukHazir = async () => {
+    await bosalt();
+    await p.evaluate(() => { CanliOyun._test.D.reji.zorla = null; for (let i = 0; i < 20; i++) CanliOyun.olay({ tip: 'yorum', kullanici: { id: 'q' + i, ad: 'kuyruk' + i }, metin: 'x' }); });
+    await bekle(p, 'konvoy yerinde, geniş çekimde', g => g.includes(CanliOyun.durum().cekim) && CanliOyun._test.D.sira.length === 20, GENIS_AD, 8000);
+    await kareBekle(p, 10);
+  };
+  const GENIS_SART = "['arka','drone','ucsol','ucsag','kus','vinc'].includes(iz[iz.length - 1].ad)";
+  // (1) bekleme süresinde
+  await kuyrukHazir();
+  await p.evaluate(() => { CanliOyun._test.D.reji.sonOlay = null; CanliOyun.olay({ tip: 'hediye', kullanici: { id: 'q12', ad: 'kuyruk12' }, jeton: 10 }); });
+  const k1once = await kuyrukIzle(15000, "iz.length >= 2 && iz.slice(0, -1).some(x => x.k === 'q12') && " + GENIS_SART);
+  const k1 = await p.evaluate(() => {
+    const R = CanliOyun._test.D.reji, b = CanliOyun.durum().vurus, so = R.sonOlay;
+    const r = { b0: +b.toFixed(2), beklemede: !!so && so.bitis !== null && b - so.bitis < Math.max(16, so.bitis - so.b) };
+    CanliOyun.olay({ tip: 'hediye', kullanici: { id: 'q15', ad: 'kuyruk15' }, jeton: 1000 });
+    return r;
+  });
+  const k1iz = await kuyrukIzle(8000, "iz.some(x => x.ad === 'super') && iz[iz.length - 1].n > 30");
+  const k1s = k1iz.find(x => x.ad === 'super');
+  kontrol('Süper araba sırası (1): başka bir olay çekiminin bekleme süresinde gelen 1000\'lik en çok 5 vuruşta kendi çekimini alır, araba şeritte', k1.beklemede && !!k1s && k1s.k === 'q15' && k1s.b - k1.b0 <= 5 && k1s.n > 10 && k1s.bandda === k1s.n, { once: k1once.map(x => x.ad + (x.k ? ':' + x.k : '')), k1, iz: k1iz });
+  // (2) başka bir olay çekimi sürerken
+  await kuyrukHazir();
+  await p.evaluate(() => { CanliOyun._test.D.reji.sonOlay = null; CanliOyun.olay({ tip: 'hediye', kullanici: { id: 'q12', ad: 'kuyruk12' }, jeton: 10 }); });
+  await kuyrukIzle(8000, "iz.some(x => x.k === 'q12')");
+  const k2 = await p.evaluate(() => {
+    const c = CanliOyun._test.D.reji.cekim, r = { cekim: c.ad, k: c.k ? c.k.id : null };
+    CanliOyun.olay({ tip: 'hediye', kullanici: { id: 'q16', ad: 'kuyruk16' }, jeton: 1000 });
+    return r;
+  });
+  const k2iz = await kuyrukIzle(12000, "iz.length >= 2 && iz[iz.length - 1].n > 30");
+  kontrol('Süper araba sırası (2): başka bir olay çekimi sürerken gelen 1000\'lik, o çekim bitince arada geniş çekim olmadan sıradaki çekimi alır, araba şeritte', ['lider', 'yakin', 'sollama'].includes(k2.cekim) && k2.k === 'q12' && k2iz.length >= 2 && k2iz[1].ad === 'super' && k2iz[1].k === 'q16' && k2iz[1].n > 10 && k2iz[1].bandda === k2iz[1].n, { k2, iz: k2iz });
+  // (3) üç izleyiciden art arda üç süper araba
+  await kuyrukHazir();
+  await p.evaluate(() => { for (const i of [5, 10, 18]) CanliOyun.olay({ tip: 'hediye', kullanici: { id: 'q' + i, ad: 'kuyruk' + i }, jeton: 1000 }); });
+  const k3iz = await kuyrukIzle(30000, "iz.filter(x => x.ad === 'super').length >= 3 && iz[iz.length - 1].ad !== 'super'");
+  const k3s = k3iz.filter(x => x.ad === 'super');
+  kontrol('Süper araba sırası (3): art arda üç 1000\'lik üç süper araba çekimi alır, hediye sırasıyla, her birinde o arabanın kendisi bütün çekim boyunca şeritte', k3s.map(x => x.k).join() === 'q5,q10,q18' && k3s.every(x => x.n > 10 && x.bandda === x.n) && k3iz.filter(x => !GENIS_AD.includes(x.ad) && x.ad !== 'super').length === 0, k3iz);
   // havuzlar: 36 arabanın altısı süper arabayken her çizilen arabanın dört tekerleği, iki plakası durur, WebGL hata yazmaz
   await bosalt();
   await p.evaluate(() => { for (let i = 0; i < 36; i++) CanliOyun.olay({ tip: 'yorum', kullanici: { id: 'h' + i, ad: 'havuz' + i }, metin: 'x' }); });
@@ -579,22 +637,25 @@ const CEKIMLER = ['drone', 'yan', 'on', 'kus', 'tur', 'yakin', 'kenar', 'vinc'];
     for (let i = 0; i < 36; i++) CanliOyun.olay({ tip: 'yorum', kullanici: { id: 'f' + i, ad: 'sel' + i }, metin: 'x' });
     await bekle(2000);
     const iz = [];
-    let son = null, genis = 0, top = 0, t = performance.now();
+    let son = null, genis = 0, top = 0, ust = 0, t = performance.now();
     for (let i = 0; i < 60; i++) {
       const k = D.sira[1 + Math.floor(Math.random() * 30)];
       if (k) CanliOyun.olay({ tip: 'hediye', kullanici: { id: k.id, ad: k.ad }, jeton: [1, 10, 50, 200, 1000, 40][i % 6] });
       for (let j = 0; j < 20; j++) {
         const c = D.reji.cekim, now = performance.now();
-        if (son) { top += now - t; if (GENIS.includes(son.ad)) genis += now - t; }
+        if (son) { top += now - t; if (GENIS.includes(son.ad)) genis += now - t; if (son.ad === 'super') ust += now - t; }
         t = now;
         if (c !== son) { iz.push(c.ad); son = c; }
         await bekle(50);
       }
     }
-    const ardisik = iz.some((a, i) => i && !GENIS.includes(a) && !GENIS.includes(iz[i - 1]));
-    return { pay: +(genis / top).toFixed(3), ardisik, sira: iz.join(' ') };
+    // süper araba çekimi istisnadır: başka bir olay çekiminin hemen ardından gelebilir (sırası beklemez)
+    const ardisik = iz.some((a, i) => i && a !== 'super' && !GENIS.includes(a) && !GENIS.includes(iz[i - 1]));
+    return { pay: +(genis / (top - ust)).toFixed(3), payTum: +(genis / top).toFixed(3), superPay: +(ust / top).toFixed(3), ardisik, sira: iz.join(' ') };
   });
-  kontrol('Hediye selinde (60 sn, saniyede bir hediye) geniş çekim sürenin en az yarısı, yakın çekimler art arda gelmez', sel2.pay >= 0.5 && !sel2.ardisik, sel2);
+  // Bu selde her altıncı hediye 1000 jeton (dakikada on süper araba): süper araba çekimleri kuralın istisnasıdır. Kural
+  // onların dışındaki sürede aynı kalır: geniş çekim en az yarı (pay). Bütün süreye oranı (payTum) rapor için yazılır.
+  kontrol('Hediye selinde (60 sn, saniyede bir hediye) süper araba çekimleri dışındaki sürenin en az yarısı geniş çekim, yakın çekimler art arda gelmez (süper araba çekimi hariç)', sel2.pay >= 0.5 && !sel2.ardisik, sel2);
   await bosalt();
   await p.evaluate(() => { for (let i = 0; i < 20; i++) CanliOyun.olay({ tip: 'yorum', kullanici: { id: 'u' + i, ad: 'ust' + i }, metin: 'x' }); });
   await p.waitForTimeout(2500);

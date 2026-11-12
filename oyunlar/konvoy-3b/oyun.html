@@ -59220,8 +59220,8 @@ function parcaKur(i) {
     ekle(cam.bitir(), MALZ.camli, false);
   if (!tabela.bos())
     ekle(tabela.bitir(), MALZ.tabela, false);
-  if (!bayrak.bos())
-    ekle(bayrak.bitir(), MALZ.bayrak, false, false);
+  // bayraklı ipler ayrı parça: yüksekten bakan süper araba çekiminde kameranın yakınındakiler gizlenir (50-reji.js parkGizle)
+  const bayrakMesh = bayrak.bos() ? null : ekle(bayrak.bitir(), MALZ.bayrak, false, false);
   let parkMesh = null;
   if (!park.bos()) {
     parkMesh = ekle(park.bitir(), MALZ.renkli, true);
@@ -59230,7 +59230,7 @@ function parcaKur(i) {
   DUNYA.sahne.add(grup);
   // arka sıralar, bahçeler, cami: kalite düşünce (zayıf ekran kartı) gizlenir
   const uzakMesh = uzak.bos() ? null : ekle(uzak.bitir(), MALZ.renkli, false);
-  DUNYA.parcalar.set(i, { grup, wx: ox, wz: oz, s0, park: parkMesh, kenar: kenarM, uzak: uzakMesh, insan });
+  DUNYA.parcalar.set(i, { grup, wx: ox, wz: oz, s0, park: parkMesh, kenar: kenarM, uzak: uzakMesh, insan, bayrak: bayrakMesh });
 }
 
 /* ---- yol kenarı: ağaçlar, direkler, bayraklı ipler ---- */
@@ -60714,7 +60714,7 @@ function parkArabasi(Y, M, r) {
  * sov (en büyük hediye: gönderenin arabasına geçer, etrafında dönerek yaklaşır) · lider (yeni gelin arabası öne geçer) ·
  * super (süper araba kazanan: önden, araba büyük kartın üstünde; aynı hediyenin drifti sürerse onun çevresinde
  * dönerek driftin sonuna dek) · sollama (öne geçen).
- * Süper araba anları ayrı bir sırada bekler (superSira, superIsle): her süper araba hediyesi ekranda duyurulur.
+ * Süper araba anları ayrı bir sırada bekler (superSira, superIsle): her süper araba hediyesi kendi çekimini alır.
  * Kesmeler vuruş saatinin (B) ölçü çizgilerinde olur. Çoğu sert kesmedir; bazı çiftler 2–4 vuruşta yumuşakça
  * birbirine akar (drone alçalıp yan çekime iner gibi). En kısa çekim 8 vuruş; art arda iki çekim aynı yandan ve aynı
  * yükseklikten olmaz. Olay çekimleri programı keser, bitince programa geri verir.
@@ -61141,11 +61141,28 @@ const CEKIM = {
       const yon = T.clone().addScaledVector(S, c.yan * 0.1).normalize();
       yon.y = 0.22;
       yon.normalize();
-      const d = yakinlas(c, 'd', sigdir(merkez, yon, arabaKoseleri(k, []), SUPER_FOV, 4, 24, SUPER_MERKEZ, 0, SUPER_ALT), 3) * (1.08 - 0.06 * yumusak(Math.min(1, t / 12)));
+      const kose = arabaKoseleri(k, []), yaklas = 1.08 - 0.06 * yumusak(Math.min(1, t / 12));
+      const d = yakinlas(c, 'd', sigdir(merkez, yon, kose, SUPER_FOV, 4, 24, SUPER_MERKEZ, 0, SUPER_ALT), 3) * yaklas;
       let poz = { p: merkez.clone().addScaledVector(yon, d), h: merkez, fov: SUPER_FOV, merkezY: SUPER_MERKEZ };
-      const dr = D.drift;
+      const dr = D.drift, l = k.gl + k.ox;
+      // Araba drift atmıyorsa (sırası gelen süper araba konvoyun içinde; şeridinde ya da öne geçerken geçiş yolunda)
+      // alçak önden bakış öndeki arabaların üstünden geçer, onlar arabayı örter. Kamera o zaman yükselir: önden dörtte üç,
+      // ~45° yukarıdan; çevresindeki arabalar kadrajda aşağıda kalır, arabayı örtmez. Bu yükseklikte kameranın yakınındaki
+      // bayraklı ipler gizlenir (parkGizle). Drift başlayınca (araba öne fırlar) iki vuruşta alçak önden bakışa akar.
+      const yanda = !(dr && dr.k === k);
+      const w = yakinlas(c, 'yanW', yanda ? 1 : 0, 1.2);
+      if (w > 0.001) {
+        const yonY = T.clone().multiplyScalar(0.8).addScaledVector(S, (l > 0.3 ? 1 : l < -0.3 ? -1 : c.yan) * 0.4).normalize();
+        yonY.y = 1.0;
+        yonY.normalize();
+        const dY = yakinlas(c, 'dY', sigdir(merkez, yonY, kose, SUPER_FOV, 4, 16, SUPER_MERKEZ, 0, SUPER_ALT), 3) * yaklas;
+        const pY = merkez.clone().addScaledVector(yonY, dY), e = yumusak(w);
+        poz.p.lerp(pY, e);
+      }
       if (dr && dr.k === k) {
-        c.sure = Math.max(c.sure, Math.ceil(t) + 4);
+        // drift sürdükçe çekim uzar; sırada başka süper araba bekliyorsa uzamaz (superIsle onu SUPER_EN_AZ'da keser)
+        if (!D.reji.superSira.length)
+          c.sure = Math.max(c.sure, Math.ceil(t) + 4);
         if (dr.donus !== null) {
           if (c.sovB0 === undefined)
             c.sovB0 = B;
@@ -61266,13 +61283,13 @@ function rejiOlay(tur, k) {
   const R = D.reji;
   if (!DUNYA.r)
     return;
-  // Süper araba: kendi sırasına girer (en çok dört; aynı kişinin eskisi yenisiyle yer değiştirir). Aynı kişinin bekleyen
+  // Süper araba: kendi sırasına girer (aynı kişinin eskisi yenisiyle yer değiştirir; taşma sınırı 24). Aynı kişinin bekleyen
   // gelin arabası ya da hediye olayı bu anın içindedir: kartın alt satırı söyler.
   if (tur === 'super') {
     const an = D.superAn && D.superAn.k === k ? D.superAn : { k, b0: B, birim: SUPER_ESIK, yeni: false, lider: false };
     R.superSira = R.superSira.filter(a => a.k !== k);
     R.superSira.push(an);
-    if (R.superSira.length > 4)
+    if (R.superSira.length > 24)
       R.superSira.shift();
     if (R.olay && R.olay.k === k && R.olay.tur !== 'sov')
       R.olay = null;
@@ -61313,50 +61330,48 @@ function konuGitti(c) {
     return false;
   return c.k.cikiyor || D.oy.get(c.k.id) !== c.k;
 }
-// Süper araba sırasını işler (her karede; kesme yalnız ölçü çizgisinde). Sıranın başındaki an:
-// · o arabanın olay çekimi sürüyorsa (süper araba, şov, gelin arabası, öne geçiş, hediye) kesmeden o çekime bağlanır:
-//   kart "SÜPER ARABA" der ve en az 8 vuruş daha ekranda kalır;
-// · başka birinin olay çekimi sürüyorsa o bitene dek bekler (an kaybolmaz);
-// · geniş çekimde kart ve halka hemen çıkar; ölçü çizgisinde bekleme süresi dolduysa süper araba çekimine keser,
-//   dolmadıysa kart geniş çekimin üstünde kalır (8 vuruş);
-// · kısa bir ara kesme (yakın, yan, ön, tur, kenar) sürüyorsa onun bitişini bekler.
-// Başka birinin drift şovu bekliyorsa önce o gelir (şov o anda olur, süper araba bekleyebilir). Kesti mi döner.
+// Süper araba sırası (her karede; kesme yalnız ölçü çizgisinde). Kural: her süper araba hediyesi kendi çekimini alır,
+// hiçbiri yalnız karta düşmez, hiçbiri atlanmaz; sıra hediyelerin geliş sırasıdır (aynı kişinin ikincisi eskisinin yerine
+// sona geçer, "Yine … jeton" der). Sıranın başındaki an:
+// · o arabanın olay çekimi sürüyorsa (kendi süper araba çekimi, şov, gelin arabası, öne geçiş, hediye) kesmeden o çekime
+//   bağlanır: kart "SÜPER ARABA" der ve en az 8 vuruş daha ekranda kalır;
+// · olay çekimi olmayan her çekimde (geniş ya da kısa ara kesme) kart hemen çıkar ve bir sonraki ölçü çizgisinde
+//   süper araba çekimine kesilir; bekleme süresi (olayKesebilir) süper arabayı bekletmez;
+// · başka birinin olay çekimi sürüyorsa (başka bir süper araba da) o çekim en az SUPER_EN_AZ vuruş sürdükten sonraki ilk
+//   ölçü çizgisinde biter ve arada geniş çekim olmadan süper araba çekimi gelir. Sırada biri bekliyorsa süper araba
+//   çekimi de SUPER_EN_AZ vuruşta biter (driftin sonunu beklemez): sıra erir.
+// Kesti mi döner.
+const SUPER_EN_AZ = 8;
 function superIsle(c, t, z, olcuBasi) {
   const R = D.reji;
   R.superSira = R.superSira.filter(a => kartGecerli(a.k));
   const an = R.superSira[0];
-  if (!an || (R.olay && R.olay.tur === 'sov' && R.olay.k !== an.k))
+  if (!an)
     return false;
   const olayda = OLAY_CEKIMLERI.includes(c.ad) || !!c.olay;
   if (olayda && c.k === an.k) {
     R.superSira.shift();
     c.an = an;
     c.kartB0 = B;
-    c.enAz = B + 8;
+    c.enAz = B + SUPER_EN_AZ;
     return false;
   }
-  if (olayda)
-    return false;
-  // Kart hemen çıkar (kesmeyi ölçü çizgisine, ara kesmenin bitişine dek beklemez; 60-cizim.js kartKonusu süper araba
-  // vurgusunu olay çekimi dışındaki her çekimde gösterir); kesilince kart aynı yerde kalır, yeniden belirmez (kartB0).
-  // Bekleyiş vurgunun süresini aşarsa vurgu tazelenir.
-  const vurguVar = R.vurgu && R.vurgu.an === an && B - R.vurgu.b0 < R.vurgu.sure;
-  if (!vurguVar)
-    R.vurgu = { k: an.k, b0: B, sure: 8, ust: 'SÜPER ARABA', an };
-  // kesme yalnız geniş çekimden (kısa bir ara kesme sürüyorsa onun bitişini bekler: iki yakın çekim art arda gelmez)
-  if (!olcuBasi || !GENIS.includes(c.ad))
-    return false;
-  if (olayKesebilir({ tur: 'super' }, c, t)) {
-    R.superSira.shift();
-    if (R.olay && R.olay.k === an.k)
-      R.olay = null;
-    R.sonOlay = { b: B, bitis: null };
-    kes('super', z, { k: an.k, an, kartB0: R.vurgu && R.vurgu.an === an ? R.vurgu.b0 : undefined }, false);
-    return true;
+  if (!olayda) {
+    // Kart hemen çıkar (60-cizim.js kartKonusu süper araba vurgusunu olay çekimi dışındaki her çekimde gösterir);
+    // kesilince kart aynı yerde kalır, yeniden belirmez (kartB0). Bekleyiş vurgunun süresini aşarsa vurgu tazelenir.
+    const vurguVar = R.vurgu && R.vurgu.an === an && B - R.vurgu.b0 < R.vurgu.sure;
+    if (!vurguVar)
+      R.vurgu = { k: an.k, b0: B, sure: 8, ust: 'SÜPER ARABA', an };
   }
-  if (R.vurgu && R.vurgu.an === an)
-    R.superSira.shift();
-  return false;
+  if (!olcuBasi || (olayda && (t < SUPER_EN_AZ || c.enAz > B)))
+    return false;
+  R.superSira.shift();
+  if (R.olay && R.olay.k === an.k)
+    R.olay = null;
+  kes('super', z, { k: an.k, an, kartB0: R.vurgu && R.vurgu.an === an ? R.vurgu.b0 : undefined }, false);
+  // bekleme kesmeden SONRA kurulur (kes, biten olay çekiminin beklemesini kapatır)
+  R.sonOlay = { b: B, bitis: null };
+  return true;
 }
 function rejiSifirla() {
   const R = D.reji;
@@ -61658,6 +61673,9 @@ function parkGizle() {
     const yakin = Math.abs(p.s0 + PARCA / 2 - s) < 75;
     if (p.park)
       p.park.visible = !(y < 3 && l > 1.5 && yakin);
+    // süper araba çekiminde kamera yüksekten bakar: ipler ve bayrakları önüne girmesin
+    if (p.bayrak)
+      p.bayrak.visible = !(D.reji.cekim && D.reji.cekim.ad === 'super' && y > 3.4 && Math.abs(p.s0 + PARCA / 2 - s) < 60);
     if (p.uzak)
       p.uzak.visible = KALITE_KADEME[KALITE.kademe].uzak;
     for (const yan of ['-1', '1'])
@@ -61682,7 +61700,8 @@ function kameraSec(ad) {
 
 /* ---- masa: "Bu oyunda" kartı (docs/KANCALAR.md "Yayın masası") ----
  * Yayıncının bu oyuna özgü denetimleri, iki kipte de: kamera (Otomatik ya da bir çekimi sabitle; klavye tuşu düğmenin
- * üstünde yazar) ve arabaların görünümü (hazır modeller ya da kodla çizilmiş; sayfa yeniden açılır). Ekran kartı
+ * üstünde yazar) ve, yalnız deneme kipinde, arabaların görünümü (hazır modeller ya da kodla çizilmiş; sayfa yeniden
+ * açılır, sahne boşalır: canlı yayında bir tık uzakta durmaz). Ekran kartı
  * yetişmiyorsa kalite uyarısı da burada çıkar (60-cizim.js kaliteUyar). Yazılar sabit, textContent ile.
  */
 const CEKIM_AD = { drone: 'Drone', yan: 'Yan', on: 'Ön', kus: 'Kuş', tur: 'Tur', yakin: 'Yakın', kenar: 'Kenar', vinc: 'Vinç' };
@@ -61724,6 +61743,8 @@ function masaOyunKur() {
     '#bu-oyunda .k3-baslik{font-size:12px;color:var(--soluk);margin-right:2px}' +
     '#bu-oyunda .k3-grup .dugme{padding:2px 5px;font-size:11.5px;line-height:1.2;border-radius:7px}' +
     '#bu-oyunda .k3-araba{margin-left:6px;border-style:dashed}' +
+    // canlı yayında yok: sayfayı yeniden açar, sahneyi boşaltır (kip <html data-kip>'te, 60-panel.js kipUygula)
+    'html[data-kip="canli"] #bu-oyunda .k3-araba{display:none}' +
     '#bu-oyunda .k3-grup kbd{all:unset;font-weight:800;font-size:10.5px;opacity:.6;margin-right:3px}';
   const kam = k3Grup('kamera-sec', 'Kamera');
   kam.append(k3Dugme('Otomatik', '0', 'Reji çekimleri kendisi seçer (klavyede 0)', () => kameraSec(null)));
