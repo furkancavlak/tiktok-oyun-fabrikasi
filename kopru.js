@@ -344,10 +344,29 @@ const KURULUM_NEDEN = {
 // yoktur; kütüphane de paketin içindedir, eksikse indirmek yerine paketin eksik olduğu söylenir.
 const PAKET_NODU = path.resolve(process.execPath).toLowerCase() === path.join(__dirname, 'node', process.platform === 'win32' ? 'node.exe' : 'node').toLowerCase();
 const kutuphane = { durum: 'bilinmiyor', basladi: 0, neden: '', cocuk: null };
-function kutuphaneVarMi() { try { require.resolve('tiktok-live-connector'); return true; } catch (e) { return false; } }
+// Kütüphane hazır mı: yarım kalmış bir kurulum (elektrik kesildi, motor sert kapatıldı, ZIP yarım açıldı) klasörde
+// tiktok-live-connector'ı bırakıp bağımlılıklarını bırakmayabilir; yalnız dosyanın varlığına bakmak "hazır" der ama
+// canlı başlatma çöker. Bu yüzden hazır = (1) kurulum kilidi yoksa ya da "bitti" diyorsa ve (2) kütüphane kısa ömürlü
+// ayrı bir node sürecinde gerçekten yükleniyorsa. Motorun kendi sürecinde denenmez (yarım modül önbelleği bozmasın).
+// Sonuç bir sonraki kuruluma kadar saklanır (her /api/oyunlar isteğinde süreç açılmaz).
+let kutuphaneYuklenir = null;
+function kilitBitmemis() { try { const k = JSON.parse(fs.readFileSync(KILIT, 'utf8')); return !(k && k.bitti === true); } catch (e) { return fs.existsSync(KILIT); } }
+function kutuphaneVarMi(tazele = false, kilidiYoksay = false) {
+  if (!tazele && kutuphaneYuklenir !== null) return kutuphaneYuklenir;
+  let sonuc = false;
+  try {
+    require.resolve('tiktok-live-connector');
+    if (kilidiYoksay || !kilitBitmemis()) {
+      const y = require('child_process').spawnSync(process.execPath, ['-e', "require('tiktok-live-connector')"], { cwd: __dirname, windowsHide: true, stdio: 'ignore', timeout: 30000 });
+      sonuc = y.status === 0;
+    }
+  } catch (e) { sonuc = false; }
+  kutuphaneYuklenir = sonuc;
+  return sonuc;
+}
 function kutuphaneDurum() {
   if (kutuphane.durum === 'bilinmiyor' && kutuphaneVarMi()) kutuphane.durum = 'hazir';
-  return { durum: kutuphane.durum, sure: kutuphane.durum === 'iniyor' ? Math.round((Date.now() - kutuphane.basladi) / 1000) : 0, neden: kutuphane.neden };
+  return { durum: kutuphane.durum, sure: kutuphane.durum === 'iniyor' ? Math.max(0, Math.round((Date.now() - kutuphane.basladi) / 1000)) : 0, neden: kutuphane.neden };
 }
 // Kurulumun başarısızlık nedeni: npm'in son satırlarından düz bir cümle seçilir (ham satırlar yalnız konsola yazılır).
 function kurulumNedeni(kod, cikti, baslamadi) {
@@ -385,18 +404,51 @@ const KURULUM_KOMUTU = 'npm install --omit=dev --no-audit --no-fund --prefix . -
 // Kilit silinmez: kurulum bitince { bitti: true } yazılır.
 const KILIT = path.join(__dirname, '.kurulum-kilidi.json');
 const surecYasiyor = pid => { if (!(pid > 0)) return false; try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+// Kilit sıkı okunur: alanların türü ve aralığı tutmazsa, kilit kurulum sınırından eskiyse ya da ileri tarihliyse bayattır.
+// Kaydedilen bir süreç ancak "bizim kurucumuz" olabilecekse sayılır: yaşıyor, adı node / npm / cmd (başka sistemlerde
+// sh de) ve kilitten önce başlamamış, kilidin son yazılışından sonra da başlamamış (aynı numarayı sonradan alan başka bir
+// süreç, sistem süreci ya da uzun süredir çalışan ilgisiz bir program sayılmaz).
+const pidGecerli = p => Number.isInteger(p) && p > 4 && p < 2147483648 && p !== process.pid;
+const surecBilgiOnbellek = new Map();
+function surecBilgisi(pid) { // { ad, basladi } ya da null (okunamadı)
+  if (surecBilgiOnbellek.has(pid)) return surecBilgiOnbellek.get(pid);
+  let b = null;
+  try {
+    const cp = require('child_process');
+    if (process.platform === 'win32') {
+      const c = cp.execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', '$p=Get-Process -Id ' + pid + ' -ErrorAction SilentlyContinue; if($p){ $p.ProcessName + "|" + ([DateTimeOffset]$p.StartTime).ToUnixTimeMilliseconds() }'], { encoding: 'utf8', windowsHide: true, timeout: 15000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+      const m = /^([^|]+)\|(\d+)$/.exec(c); if (m) b = { ad: m[1], basladi: +m[2] };
+    } else {
+      const c = cp.execFileSync('ps', ['-o', 'etimes=,comm=', '-p', String(pid)], { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+      const m = /^(\d+)\s+(.+)$/.exec(c); if (m) b = { ad: m[2].split('/').pop(), basladi: Date.now() - +m[1] * 1000 };
+    }
+  } catch (e) { b = null; }
+  surecBilgiOnbellek.set(pid, b);
+  return b;
+}
+function bizimKurucu(pid, k) {
+  if (!surecYasiyor(pid)) return false;
+  const b = surecBilgisi(pid);
+  if (!b || !/^(node|npm|cmd|sh|bash|dash)(\.exe)?$/i.test(b.ad)) return false;
+  const pay = 3000, son = Number.isFinite(k.yazildi) ? k.yazildi : k.basladi + Math.max(KURULUM_SINIR, 60e3);
+  return b.basladi >= k.basladi - pay && b.basladi <= son + pay;
+}
 function kilitOku() {
   try {
-    const k = JSON.parse(fs.readFileSync(KILIT, 'utf8'));
-    const pidler = [k && k.pid, ...((k && k.pidler) || [])].map(Number).filter(p => p > 0 && p !== process.pid);
-    if (k && !k.bitti && Date.now() - (+k.basladi || 0) < Math.max(KURULUM_SINIR, 60e3) && pidler.some(surecYasiyor)) return k;
+    const k = JSON.parse(fs.readFileSync(KILIT, 'utf8')), simdi = Date.now();
+    if (!k || typeof k !== 'object' || Array.isArray(k) || k.bitti === true) return null;
+    if (!Number.isFinite(k.basladi) || k.basladi > simdi + 5000 || simdi - k.basladi > Math.max(KURULUM_SINIR, 60e3)) return null;
+    if (k.pidler !== undefined && !Array.isArray(k.pidler)) return null;
+    const pidler = [k.pid, ...(k.pidler || [])].filter(pidGecerli);
+    if (!pidGecerli(k.pid)) return null;
+    return pidler.slice(0, 32).some(p => bizimKurucu(p, k)) ? k : null;
   } catch (e) { }
   return null;
 }
 // Windows'ta motor sert kapatılınca (Görev Yöneticisi) motorun doğrudan çocuğu (kabuk) onunla ölür, kabuğun açtığı npm
 // yaşamaya devam eder. Bu yüzden kilit, kurulum başladıktan kısa süre sonra doğrudan çocuğun altındaki süreçleri de
 // (npm) kaydeder; kilit bunlardan biri yaşadıkça geçerlidir. Başka sistemlerde kurulum ayrı süreç grubudur.
-function kilitYaz(pid, pidler = []) { try { fs.writeFileSync(KILIT, JSON.stringify({ pid, pidler, basladi: kutuphane.basladi || Date.now(), motor: process.pid })); } catch (e) { } }
+function kilitYaz(pid, pidler = []) { try { fs.writeFileSync(KILIT, JSON.stringify({ pid, pidler, basladi: kutuphane.basladi || Date.now(), yazildi: Date.now(), motor: process.pid })); } catch (e) { } }
 function altSurecler(pid, sonra) {
   if (process.platform !== 'win32') { sonra([]); return; }
   const komut = '$a=@(' + Number(pid) + ');$t=@();for($i=0;$i -lt 4 -and $a.Count;$i++){$a=@(Get-CimInstance Win32_Process | ? { $a -contains $_.ParentProcessId } | % { $_.ProcessId });$t+=$a};$t -join ","';
@@ -406,19 +458,23 @@ function altSurecler(pid, sonra) {
 }
 function kilitBirak() { try { if (fs.existsSync(KILIT)) fs.writeFileSync(KILIT, JSON.stringify({ bitti: true, zaman: Date.now() })); } catch (e) { } }
 function kilitBekle(k) {
-  kutuphane.durum = 'iniyor'; kutuphane.basladi = +k.basladi || Date.now(); kutuphane.neden = '';
+  kutuphane.durum = 'iniyor'; kutuphane.basladi = Math.min(Date.now(), +k.basladi || Date.now()); kutuphane.neden = '';
   console.log('  TikTok kütüphanesi başka bir pencerede hâlâ iniyor; bitmesi bekleniyor (ikinci kurulum başlatılmaz).');
   const t = setInterval(() => {
     if (kilitOku()) return;
     clearInterval(t);
-    if (kutuphaneVarMi()) { kutuphane.durum = 'hazir'; console.log('  TikTok kütüphanesi indi. Yayın düğmeleri hazır.\n'); return; }
+    // Beklenen kurulumun süreçlerinin bittiğini bu motor gördü. Onu başlatan motor sert kapatıldıysa kilide "bitti"
+    // yazacak kimse kalmamıştır; kütüphane ayrı bir süreçte gerçekten yükleniyorsa kurulum tamam sayılır, kilit kapatılır.
+    // (Açılışta bitmemiş kilit ve yaşamayan kurucu görülürse ise kurulum yarım sayılır ve yeniden yapılır.)
+    if (kutuphaneVarMi(true, true)) { kilitBirak(); kutuphane.durum = 'hazir'; console.log('  TikTok kütüphanesi indi. Yayın düğmeleri hazır.\n'); return; }
     kutuphane.durum = 'bilinmiyor';
     kutuphaneHazirla(); // öbür kurulum kütüphanesiz bitti: bu motor kendisi dener
   }, 1000);
 }
 function kutuphaneHazirla() {
   if (kutuphane.durum === 'iniyor' || kutuphane.durum === 'hazir' || kutuphane.cocuk) return;
-  if (kutuphaneVarMi()) { kutuphane.durum = 'hazir'; return; }
+  const baskasiSuruyor = kilitOku(); // başka bir motorun süren kurulumu: "hazır" denmez, beklenir (aşağıda)
+  if (!baskasiSuruyor && kutuphaneVarMi(true)) { kutuphane.durum = 'hazir'; return; }
   if (PAKET_NODU) {
     kutuphane.durum = 'hata'; kutuphane.neden = KURULUM_NEDEN.paketEksik;
     console.log('  TikTok kütüphanesi hazır paketin içinde bulunamadı (node_modules eksik). ZIP\'i yeniden indirip çıkar.\n');
@@ -445,14 +501,16 @@ function kutuphaneHazirla() {
   // o bitene kadar "iniyor" denir, sonra kütüphaneye bakılır (N2, kurulum kilidi).
   const baskasi = kilitOku();
   if (baskasi) { kilitBekle(baskasi); return; }
-  kutuphane.durum = 'iniyor'; kutuphane.basladi = Date.now(); kutuphane.neden = '';
+  kutuphane.durum = 'iniyor'; kutuphane.basladi = Date.now(); kutuphane.neden = ''; kutuphaneYuklenir = null;
   console.log('  TikTok kütüphanesi iniyor (yalnız ilk sefer, yaklaşık bir dakika). Beklerken ana sayfada Dene çalışır.');
   const { spawn } = require('child_process');
   let son = '', bitti = false, c = null;
   const bitir = (kod, neden) => {
     if (bitti) return;
-    bitti = true; clearTimeout(sinir); kutuphane.cocuk = null; kilitBirak();
-    if (kod === 0 && kutuphaneVarMi()) { kutuphane.durum = 'hazir'; console.log('  TikTok kütüphanesi indi. Yayın düğmeleri hazır.\n'); return; }
+    bitti = true; clearTimeout(sinir); kutuphane.cocuk = null;
+    // Kilit yalnız npm başarıyla bittiyse "bitti" olur; yarıda kalan kurulum sonraki açılışta yeniden yapılır.
+    if (kod === 0) kilitBirak();
+    if (kod === 0 && kutuphaneVarMi(true)) { kutuphane.durum = 'hazir'; console.log('  TikTok kütüphanesi indi. Yayın düğmeleri hazır.\n'); return; }
     kutuphane.durum = 'hata';
     kutuphane.neden = neden || kurulumNedeni(kod, son, false);
     const iz = son.trim().split(/\r?\n/).filter(Boolean).slice(-2).join(' | ').slice(0, 300);
@@ -728,8 +786,9 @@ function cevir(tur, d) {
 function hediyeKimlik(d, g) {
   const dolu = (...a) => a.find(v => (typeof v === 'string' && v.trim() !== '' && v.trim() !== '0') || ((typeof v === 'number' || typeof v === 'bigint') && v != 0));
   // Önce ANSI kaçışları (ESC [ … harf) ve Unicode biçim karakterleri (Cf: U+061C, U+2060, U+FEFF, yön işaretleri …; emoji
-  // birleştiricisi U+200D kalır) ile görünmez dolgu harfleri (U+115F, U+1160, U+3164, U+FFA0, U+2800) atılır.
-    const duz = v => v === undefined ? '' : String(v).replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]/g, '').replace(/\x1b[@-_]?/g, '').replace(/(?!\u200d)[\p{Cf}\u115f\u1160\u3164\uffa0\u2800]/gu, '').replace(/[\u0000-\u001f\u007f​-‏‪-‮⁦-⁩]/g, ' ').replace(/\s+/g, ' ').trim();
+  // birleştiricisi U+200D yalnız iki emoji arasında kalır) ile görünmez dolgu ve birleşik harfler (U+034F, U+115F, U+1160,
+  // U+17B4, U+17B5, U+180B–180D, U+3164, U+FFA0, U+2800) atılır; OSC / DCS kaçışları içindeki metinle birlikte gider.
+    const duz = v => v === undefined ? '' : String(v).replace(/\x1b[\]P_^X][\s\S]*?(?:\x07|\x1b\\|$)|[\x9d\x90\x9e\x9f][\s\S]*?(?:\x07|\x9c|$)/g, '').replace(/(?:\x1b\[|\x9b)[0-9;?]*[ -\/]*[@-~]/g, '').replace(/\x1b[@-_]?/g, '').replace(/(?!\u200d)[\p{Cf}\u034f\u115f\u1160\u17b4\u17b5\u180b-\u180d\u3164\uffa0\u2800]/gu, '').replace(/(?<![\p{Extended_Pictographic}\u{1F3FB}-\u{1F3FF}\uFE0F])\u200d|\u200d(?![\p{Extended_Pictographic}])/gu, '').replace(/[\u0000-\u001f\u007f-\u009f\u200b\u200c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, ' ').replace(/\s+/g, ' ').trim();
   const id = Array.from(duz(dolu(d.giftId, g.id, g.gift_id))).slice(0, 32).join('');
   const tam = Array.from(duz(dolu(d.giftName, g.giftName, g.name))), ad = tam.length > 40 ? tam.slice(0, 39).join('') + '…' : tam.join('');
   if (!id && !ad) return null;
@@ -754,47 +813,87 @@ function ilet(tur, d) {
 // lib/tiktokSignatureProvider.js): UserOfflineError "LIVE has ended" / "User might be offline." / "Your IP or country might
 // be blocked by TikTok.", ExtractRoomIdError "Failed to retrieve room_id from page source. …", SignatureError "Failed to
 // sign request", InitialFetchError, NoWSUpgradeError. Ağ hataları (got / axios): ENOTFOUND, EAI_AGAIN, ETIMEDOUT …
-// Hatanın adı, iletisi, kodu ve iç içe hataları birlikte aranır. Döner: { tur, cumle, baglanti, ek, ham }.
+// Önce hata SINIFININ adına bakılır (kütüphanenin kendi sınıfları), sonra kütüphanenin gerçek iletilerine dar, başı
+// sabitlenmiş kalıplarla. Emin olunamayan her durumda genel cümle verilir; yayıncının adını yanlış yazdığını ima eden
+// cümle yalnız kütüphane bunu açıkça söylediğinde çıkar. Hiçbir erişim istisna fırlatamaz (getter'ı fırlatan, toString'i
+// fırlatan, prototipsiz nesne, Proxy, döngülü hata): her okuma korunur, en kötü durumda sabit genel cümle döner.
+const BH = {
+  genel: 'TikTok\'a bağlanılamadı.',
+  internet: 'TikTok\'a ulaşılamadı: internet bağlantısı yok ya da çok yavaş. İnterneti kontrol et; motor kendisi yeniden dener.',
+  engel: 'TikTok bu bağlantıyı doğrulama (captcha) istedi ya da bu ağdan / bölgeden engelledi. Biraz sonra yeniden dene ya da başka bir ağdan (ör. telefonun interneti) bağlan.',
+  imza: 'TikTok bağlantısı için gereken imza hizmeti şu an isteği geri çevirdi ya da yanıt vermiyor. Bu, kütüphanenin dayandığı başka bir şirketin hizmetidir; senin hatan değil. Birkaç dakika bekle, motor kendisi yeniden dener.',
+  oda: 'Yayın odası bulunamadı. Kullanıcı adını kontrol et (profil linkindeki ad, @ olmadan); ad doğruysa yayını TikTok\'ta başlat, köprü kendiliğinden bağlanır.'
+};
+const NET_KOD = new Set(['ENOTFOUND', 'EAI_AGAIN', 'ENETUNREACH', 'ENETDOWN', 'EHOSTUNREACH', 'ETIMEDOUT', 'ESOCKETTIMEDOUT']);
+const guvenliAl = (o, k) => { try { return o === null || o === undefined || (typeof o !== 'object' && typeof o !== 'function') ? undefined : o[k]; } catch (e) { return undefined; } };
+const guvenliYazi = v => {
+  try {
+    if (v === null || v === undefined) return '';
+    if (typeof v === 'string') return v;
+    if (typeof v === 'symbol') return v.description ? 'Symbol(' + v.description + ')' : 'Symbol()';
+    if (typeof v === 'object' || typeof v === 'function') { const m = guvenliAl(v, 'message'); return typeof m === 'string' ? m : ''; }
+    return String(v);
+  } catch (e) { return ''; }
+};
+const kisaYazi = (v, n) => guvenliYazi(v).slice(0, 4000).replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n);
+// Bir hatanın sınıf adı, adı, kodu ve iletisi; hiçbiri istisna fırlatmaz.
+function hataOzet(x) {
+  const yapici = guvenliAl(x, 'constructor'), sinif = guvenliAl(yapici, 'name'), ad = guvenliAl(x, 'name'), kod = guvenliAl(x, 'code');
+  return { sinif: typeof sinif === 'string' ? sinif : '', ad: typeof ad === 'string' ? ad : '', kod: typeof kod === 'string' ? kod : '', ileti: kisaYazi(x, 2000) };
+}
+const sinifMi = (o, ...adlar) => adlar.includes(o.sinif) || adlar.includes(o.ad);
+// Hatanın kendisinde ya da nedenlerinde (cause, requestErr) bir ağ kodu var mı (en çok 4 kat; döngüye girmez).
+function agKodu(x, gorulen = new Set(), d = 0) {
+  if (!x || typeof x !== 'object' || d > 4 || gorulen.has(x)) return false;
+  gorulen.add(x);
+  const o = hataOzet(x);
+  if (NET_KOD.has(o.kod) || /^getaddrinfo (ENOTFOUND|EAI_AGAIN) /.test(o.ileti)) return true;
+  return agKodu(guvenliAl(x, 'cause'), gorulen, d + 1) || agKodu(guvenliAl(x, 'requestErr'), gorulen, d + 1);
+}
 function baglantiHatasi(e, kullaniciAdi) {
-  // Bileşik hata (2.x fetchRoomIdComposite: HTML yolu, API yolu, son çare Euler Stream; üst iletide yalnız "Failed to
-  // retrieve Room ID from all sources."): iç hatalar kaynak kaynak konsola yazılır; Euler'in "lack of permission" ya da
-  // sınır iletisi son çarenin kapalı olduğunu söyler, nedeni HTML / API yolunun hatası belirler.
-  const ic = e && e.config && Array.isArray(e.config.requestErrs) ? e.config.requestErrs : null;
-  if (ic && ic.length) {
-    const kaynak = x => { const t = String((x && x.message) || x); return /Euler/i.test(t) ? 'euler' : /Html/i.test(t) ? 'html' : /Api/i.test(t) ? 'api' : 'kaynak'; };
-    const ayrinti = ic.map(x => '  ' + kaynak(x) + ': ' + String((x && (x.message || x.code)) || x).replace(/\s+/g, ' ').slice(0, 300));
-    const asil = ic.filter(x => kaynak(x) !== 'euler').map(x => [x && x.constructor && x.constructor.name, x && x.code, x && x.message, x && x.cause && x.cause.code].filter(Boolean).join(' ')).join(' | ');
-    const ad = '@' + kullaniciAdi, ham = String(e.message) + ' | ' + ayrinti.join(' | ');
-    if (/user_not_found|user not found|does ?n.t exist|not exist/i.test(asil))
-      return { tur: 'kullanici-yok', baglanti: 'hata', cumle: ad + ' adında bir TikTok hesabı bulunamadı. Adı kontrol et: profil adresindeki ad, @ olmadan.', ek: '', ham, ayrinti };
-    if (asil && /ENOTFOUND|EAI_AGAIN|ENETUNREACH|ENETDOWN|EHOSTUNREACH|ETIMEDOUT|ESOCKETTIMEDOUT|timed? ?out|getaddrinfo|socket hang up/i.test(asil) && !/status|Failed to extract|SIGI_STATE/i.test(asil))
-      return { tur: 'internet', baglanti: 'hata', cumle: 'TikTok\'a ulaşılamadı: internet bağlantısı yok ya da çok yavaş. İnterneti kontrol et; motor kendisi yeniden dener.', ek: '', ham, ayrinti };
-    if (/captcha|blocked|IP or country|\b403\b|status code 403|\b429\b/i.test(asil))
-      return { tur: 'engel', baglanti: 'hata', cumle: 'TikTok bu bağlantıyı doğrulama (captcha) istedi ya da bu ağdan / bölgeden engelledi. Biraz sonra yeniden dene ya da başka bir ağdan (ör. telefonun interneti) bağlan.', ek: '', ham, ayrinti };
-    return { tur: 'oda-yok', baglanti: 'hata', kisa: true, cumle: 'Yayın odası bulunamadı. Kullanıcı adını kontrol et (profil linkindeki ad, @ olmadan); ad doğruysa yayını TikTok\'ta başlat, köprü kendiliğinden bağlanır.', ek: '', ham, ayrinti };
+  try { return baglantiHatasiIc(e, String(kullaniciAdi || '')); }
+  catch (x) { return { tur: 'diger', baglanti: 'hata', cumle: BH.genel, ek: '', ham: '(hata okunamadı)' }; }
+}
+function baglantiHatasiIc(e, kullaniciAdi) {
+  const o = hataOzet(e), ad = '@' + kullaniciAdi, ham = [o.sinif, o.ad, o.kod, o.ileti].filter(Boolean).join(' ') || '(boş hata)';
+  const sonuc = (tur, cumle, ekler = {}) => Object.assign({ tur, baglanti: 'hata', cumle, ek: '', ham }, ekler);
+  const canliDegil = () => sonuc('canli-degil', ad + ' şu an canlı yayında değil.', { baglanti: 'bekliyor', kisa: true, ek: 'yayın açılınca kendiliğinden bağlanır' });
+  // 2.x bileşik hata (fetchRoomIdComposite: HTML yolu, API yolu, son çare Euler Stream). İç hatalar kaynak kaynak konsola
+  // yazılır; Euler'in "lack of permission" / sınır iletisi son çarenin kapalı olduğunu söyler, nedeni HTML / API yolu belirler.
+  const ic = guvenliAl(guvenliAl(e, 'config'), 'requestErrs');
+  if (sinifMi(o, 'InvalidResponseCompositeError') || (o.ileti === 'Failed to retrieve Room ID from all sources.' && Array.isArray(ic))) {
+    const liste = Array.isArray(ic) ? ic.slice(0, 10).filter(x => x !== e) : [];
+    const kaynak = t => /Euler/i.test(t) ? 'euler' : /Html/i.test(t) ? 'html' : /Api/i.test(t) ? 'api' : 'kaynak';
+    const ozetler = liste.map(x => ({ x, o: hataOzet(x) }));
+    const ayrinti = ozetler.map(({ o: a }) => '  ' + kaynak(a.ileti) + ': ' + (a.ileti || a.kod || '(boş)').slice(0, 300));
+    const asil = ozetler.filter(({ o: a }) => kaynak(a.ileti) !== 'euler');
+    const ek = { ayrinti, ham: o.ileti + ' | ' + ayrinti.join(' | ') };
+    if (asil.length && asil.every(({ x }) => agKodu(x))) return sonuc('internet', BH.internet, ek);
+    if (asil.some(({ o: a }) => /Are you captcha-blocked by TikTok\?|you might be blocked by TikTok\.|status code 403\b/.test(a.ileti))) return sonuc('engel', BH.engel, ek);
+    return sonuc('oda-yok', BH.oda, { ...ek, kisa: true });
   }
-  const parca = [], gez = (x, d) => {
-    if (!x || d > 4) return;
-    if (typeof x !== 'object') { parca.push(String(x)); return; }
-    parca.push([x.constructor && x.constructor.name, x.name, x.code, x.message, x.info].filter(Boolean).join(' '));
-    for (const a of [x.cause, x.requestErr, ...((x.config && x.config.requestErrs) || []), ...(Array.isArray(x.errors) ? x.errors : [])]) gez(a, d + 1);
-  };
-  gez(e, 0);
-  const ham = parca.join(' | ') || String(e), m = String((e && e.message) || e);
-  const ad = '@' + kullaniciAdi;
-  if (/UserOfflineError|isn.t online|LIVE has ended|User might be offline|\boffline\b|not.*live/i.test(ham) && !/IP or country/i.test(ham))
-    return { tur: 'canli-degil', baglanti: 'bekliyor', kisa: true, cumle: ad + ' şu an canlı yayında değil.', ek: 'yayın açılınca kendiliğinden bağlanır', ham };
-  if (/ENOTFOUND|EAI_AGAIN|ENETUNREACH|ENETDOWN|EHOSTUNREACH|ETIMEDOUT|ESOCKETTIMEDOUT|ConnectTimeoutError|timed? ?out|getaddrinfo|socket hang up/i.test(ham))
-    return { tur: 'internet', baglanti: 'hata', cumle: 'TikTok\'a ulaşılamadı: internet bağlantısı yok ya da çok yavaş. İnterneti kontrol et; motor kendisi yeniden dener.', ek: '', ham };
-  if (/InvalidUniqueIdError|user_not_found|user not found|does ?n.t exist|not exist/i.test(ham))
-    return { tur: 'kullanici-yok', baglanti: 'hata', cumle: ad + ' adında bir TikTok hesabı bulunamadı. Adı kontrol et: profil adresindeki ad, @ olmadan.', ek: '', ham };
-  if (/captcha|IP or country|blocked by TikTok|might be blocked|NoWSUpgradeError|websocket upgrade/i.test(ham))
-    return { tur: 'engel', baglanti: 'hata', cumle: 'TikTok bu bağlantıyı doğrulama (captcha) istedi ya da bu ağdan / bölgeden engelledi. Biraz sonra yeniden dene ya da başka bir ağdan (ör. telefonun interneti) bağlan.', ek: '', ham };
-  if (/SignAPIError|Signature\w*Error|PremiumFeatureError|InitialFetchError|Rate Limited|Too many connections|rate.?limit|sign server|Failed to sign|Sign Error|Empty Cookies|Empty Payload|Premium Feature|eulerstream|\b429\b/i.test(ham))
-    return { tur: 'imza', baglanti: 'hata', cumle: 'TikTok bağlantısı için gereken imza hizmeti şu an isteği geri çevirdi ya da yanıt vermiyor. Bu, kütüphanenin dayandığı başka bir şirketin hizmetidir; senin hatan değil. Birkaç dakika bekle, motor kendisi yeniden dener.', ek: '', ham };
-  if (/ExtractRoomIdError|Failed to retrieve Room ?ID|Failed to retrieve room_id|Failed to extract Room ID/i.test(ham))
-    return { tur: 'oda-yok', baglanti: 'hata', kisa: true, cumle: 'Yayın odası bulunamadı. Kullanıcı adını kontrol et (profil linkindeki ad, @ olmadan); ad doğruysa yayını TikTok\'ta başlat, köprü kendiliğinden bağlanır.', ek: '', ham };
-  return { tur: 'diger', baglanti: 'hata', cumle: 'TikTok\'a bağlanılamadı (' + m.slice(0, 140) + ').', ek: '', ham };
+  if (sinifMi(o, 'UserOfflineError')) return /^Your IP or country might be blocked by TikTok\.$/.test(o.ileti) ? sonuc('engel', BH.engel) : canliDegil();
+  if (sinifMi(o, 'ConnectTimeoutError')) return sonuc('internet', BH.internet);
+  if (sinifMi(o, 'SignAPIError', 'SignatureRateLimitError', 'SignatureMissingTokensError', 'PremiumFeatureError', 'AuthenticatedWebSocketConnectionError', 'SignatureError', 'InitialFetchError'))
+    return agKodu(e) ? sonuc('internet', BH.internet) : sonuc('imza', BH.imza);
+  if (sinifMi(o, 'NoWSUpgradeError')) return sonuc('engel', BH.engel);
+  if (sinifMi(o, 'InvalidUniqueIdError')) return sonuc('kullanici-yok', ad + ' adı geçersiz görünüyor. Profil adresindeki adı @ olmadan yaz.');
+  if (sinifMi(o, 'ExtractRoomIdError')) { // 1.x: "Failed to retrieve room_id from page source. <iç ileti>"
+    const icI = o.ileti.replace(/^Failed to retrieve room_id from page source\. ?/, '');
+    if (/^User might be offline\.$/.test(icI)) return canliDegil();
+    if (/^Your IP or country might be blocked by TikTok\.$/.test(icI)) return sonuc('engel', BH.engel);
+    if (/getaddrinfo (ENOTFOUND|EAI_AGAIN)|\b(ENOTFOUND|EAI_AGAIN|ETIMEDOUT)\b/.test(icI)) return sonuc('internet', BH.internet);
+    return sonuc('oda-yok', BH.oda, { kisa: true });
+  }
+  if (agKodu(e)) return sonuc('internet', BH.internet);
+  // Sınıf adı yoksa (düz Error, eski sürüm, sınıf adı silinmiş derleme): kütüphanenin kendi iletileri, tam ya da başından.
+  if (/^(LIVE has ended|The requested user isn't online :\(|User might be offline\.)$/.test(o.ileti)) return canliDegil();
+  if (/^Your IP or country might be blocked by TikTok\.$|Are you captcha-blocked by TikTok\?$|you might be blocked by TikTok\.$/.test(o.ileti)) return sonuc('engel', BH.engel);
+  if (/^\[(Rate Limited|Sign Error|Empty Cookies|Empty Payload|Premium Feature)\]|^\[Connect Error\] Failed to connect to sign server\.|^Failed to sign request/.test(o.ileti)) return sonuc('imza', BH.imza);
+  if (/^Timed out whilst connecting to WebSocket$/.test(o.ileti)) return sonuc('internet', BH.internet);
+  if (o.ileti === 'Failed to retrieve Room ID from all sources.') return sonuc('oda-yok', BH.oda, { kisa: true });
+  const kisa = kisaYazi(e, 140);
+  return sonuc('diger', kisa ? 'TikTok\'a bağlanılamadı (' + kisa + ').' : BH.genel);
 }
 // Döndürdüğü işlev bağlantıyı ve bekleyen yeniden denemeyi durdurur (ana sayfadan başka oyuna geçilince).
 // Durdurulduktan sonra eski bağlantıdan gelen olay, bağlanma yanıtı ya da kopma bildirimi yok sayılır.
@@ -823,7 +922,7 @@ function tiktokBaslat(kullaniciAdi = KULLANICI) {
     if (durdu) return;
     try { if (baglanti && baglanti.disconnect) baglanti.disconnect(); } catch (e) {}
     try { baglanti = new Sinif(KULLANICI, { enableExtendedGiftInfo: false, processInitialData: false }); }
-    catch (e) { durumBildir('Bağlantı kurulamadı: ' + e.message, 'hata'); return; }
+    catch (e) { durumBildir('Bağlantı kurulamadı: ' + (kisaYazi(e, 140) || 'kütüphane açılamadı') + '.', 'hata'); return; }
     const bu = baglanti, gecerli = () => !durdu && bu === baglanti;
     deneniyor = true;
     const dinle = (sabit, ad, fn) => { try { bu.on(E[sabit] || K[sabit] || ad, (...a) => { if (gecerli()) fn(...a); }); } catch (e) {} };
@@ -835,7 +934,7 @@ function tiktokBaslat(kullaniciAdi = KULLANICI) {
     dinle('MEMBER', 'member', d => ilet('member', d));
     dinle('STREAM_END', 'streamEnd', () => { bekleme = 30; yenidenDene('Yayın sona erdi.'); });
     dinle('DISCONNECTED', 'disconnected', () => { if (bagli) yenidenDene('TikTok bağlantısı koptu.'); });
-    dinle('ERROR', 'error', e => yaz('Uyarı:', (e && (e.info || e.message)) || e));
+    dinle('ERROR', 'error', e => { try { yaz('Uyarı:', kisaYazi(guvenliAl(e, 'info'), 500) || kisaYazi(e, 500) || '(okunamayan uyarı)'); } catch (x) { } });
     Promise.resolve().then(() => bu.connect()).then(durum => {
       if (!gecerli()) { try { bu.disconnect(); } catch (e) {} return; }
       deneniyor = false; bagli = true; bekleme = 15;
@@ -843,10 +942,12 @@ function tiktokBaslat(kullaniciAdi = KULLANICI) {
     }).catch(e => {
       if (!gecerli()) return;
       deneniyor = false;
-      const h = baglantiHatasi(e, KULLANICI);
-      yaz('TikTok bağlantı hatası (' + h.tur + '), kütüphanenin iletisi: ' + String((e && e.message) || e).slice(0, 600)); // ekran görüntüsünden tanı için
-      for (const satir of h.ayrinti || []) console.log(satir); // bileşik hatada kaynak başına bir satır: html / api / euler
-      if (!h.ayrinti && h.ham !== String((e && e.message) || e)) console.log('  ayrıntı: ' + h.ham.slice(0, 1500));
+      const h = baglantiHatasi(e, KULLANICI); // istisna fırlatmaz
+      try { // konsol satırları ekran görüntüsünden tanı içindir; burada bir şey ters giderse yalnız yazılmaz
+        yaz('TikTok bağlantı hatası (' + h.tur + '), kütüphanenin iletisi: ' + (kisaYazi(e, 600) || '(okunamadı)'));
+        for (const satir of h.ayrinti || []) console.log(satir); // bileşik hatada kaynak başına bir satır: html / api / euler
+        if (!h.ayrinti && h.ham && h.ham !== kisaYazi(e, 600)) console.log('  ayrıntı: ' + h.ham.slice(0, 1500));
+      } catch (x) { }
       // Ana sayfa kipinde Yayın düğmesi beklemeden yeniden dener: uzun beklemede bunu söyle.
       const not = h.kisa && ANA ? 'hemen denemek için ana sayfada Yayın\'a yeniden bas' : '';
       yenidenDene(h.cumle, h.baglanti, [h.ek, not].filter(Boolean).join('; '), h.kisa);

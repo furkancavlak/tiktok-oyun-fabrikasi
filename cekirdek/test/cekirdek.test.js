@@ -659,6 +659,11 @@ const { sonuc, kontrol } = kontrolcu();
     const n5 = await p.evaluate(() => { const c = CanliOyun.cevir, h = ad => (c({ tip: 'hediye', kullanici: { id: 'n5' }, jeton: 1, hediye: { id: '7', ad } }) || {}).hediye;
       return { arap: h('Ro\u061Cse\u2060'), dolgu: h('\u3164\u3164 \u115F\uFFA0'), ansi: h('\u001b[31mKırmızı\u001b[0m'), bom: h('\uFEFFGül\u2800'), izleyici: (() => { /* hediye: sahne doluyken de girer (yorumcu dolu sahneye giremez) */ CanliOyun.olay({ tip: 'hediye', jeton: 1, adet: 1, kullanici: { id: 'n5-ad', ad: '\u3164Ay\u2060şe' }, metin: 'x' }); const k = CanliOyun._test.D.oy.get('n5-ad'); return k && k.ad; })() }; });
     kontrol('N5: sayfa da hediye adından ve izleyici adından U+061C, U+2060, U+FEFF, dolgu harflerini ve ANSI kaçışlarını atar; boş kalan hediye adı düşer', n5.arap.ad === 'Rose' && JSON.stringify(n5.dolgu) === '{"id":"7"}' && n5.ansi.ad === 'Kırmızı' && n5.bom.ad === 'Gül' && n5.izleyici === 'Ayşe', n5);
+    // Denetim 4 (7): emoji arasındaki U+200D kalır (izleyici adında da), başka yerdeki gider; OSC kaçışı metniyle; U+034F / U+17B4 / U+17B5 gider
+    const t7 = await p.evaluate(() => { const c = CanliOyun.cevir, h = ad => ((c({ tip: 'hediye', kullanici: { id: 't7' }, jeton: 1, hediye: { id: '7', ad } }) || {}).hediye || {}).ad;
+      CanliOyun.olay({ tip: 'hediye', kullanici: { id: 't7-ad', ad: 'Aile 👨\u200d👩\u200d👧' }, jeton: 1 }); /* hediye: sahne dolu olsa da girer */ const k = CanliOyun._test.D.oy.get('t7-ad');
+      return { aile: h('Aile 👨\u200d👩\u200d👧'), kodcu: h('👩\u200d💻'), yalniz: h('a\u200db'), osc: h('\u001b]0;title x\u0007Gül'), birlesik: h('x\u034fy\u17b4z\u17b5'), izleyici: k && k.ad }; });
+    kontrol('Denetim 4: sayfa temizleyicisi emoji birleşimlerini bölmez (hediye ve izleyici adında), harf arasındaki U+200D, OSC kaçışı (metniyle) ve U+034F / U+17B4 / U+17B5 atılır', t7.aile === 'Aile 👨\u200d👩\u200d👧' && t7.kodcu === '👩\u200d💻' && t7.yalniz === 'ab' && t7.osc === 'Gül' && t7.birlesik === 'xyz' && t7.izleyici === 'Aile 👨\u200d👩\u200d👧', t7);
   }
   // ==== HEDİYE KİMLİĞİ — sonu ====
 

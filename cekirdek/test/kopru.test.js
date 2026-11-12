@@ -1079,6 +1079,106 @@ else{console.error('npm ERR! network (taklit)');process.exit(1);}`);
       kontrol('Bağlanma hataları (iki kütüphane kuşağı): yayın yok / oda yok / imza hizmeti / internet / captcha-engel / diğer ayrı düz cümleler; yayın yok "bekliyor", gerisi "hata"; ham ileti konsolda', Object.entries(sonuc).filter(([a]) => / /.test(a)).every(([, v]) => v.iyi), Object.fromEntries(Object.entries(sonuc).filter(([a, v]) => / /.test(a) && !v.iyi)));
       kontrol('Bağlanma hatasının cümlesi ana sayfanın şeridinde ve oyunun Yayın sekmesinde aynen görünür', sonuc.ayni === true, { serit: sonuc.serit, yayin: sonuc.yayinSekmesi });
     }
+    // ==== DENETİM 4 (yarım kurulum, hata biçimleri, sınıflandırma, kilit, temizleyici) — başı ====
+    {
+      // (1) Yarım kalmış kurulum "hazir" sayılmaz: kaynak düzeninde yeniden kurulur, paket Node'unda "paket eksik" denir
+      const kutKur = (kl, tur) => {
+        const k = path.join(kl, 'node_modules', 'tiktok-live-connector'); fs.mkdirSync(k, { recursive: true });
+        fs.writeFileSync(path.join(k, 'package.json'), JSON.stringify({ name: 'tiktok-live-connector', version: '0.0.0', main: 'index.js' }));
+        if (tur === 'bagimlilik-yok') fs.writeFileSync(path.join(k, 'index.js'), "require('kayip-bagimlilik-deneme'); module.exports = {};");
+        if (tur === 'kilit-bitmemis') {
+          fs.writeFileSync(path.join(k, 'index.js'), 'module.exports = {};');
+          fs.writeFileSync(path.join(kl, '.kurulum-kilidi.json'), JSON.stringify({ pid: 999999, pidler: [], basladi: Date.now() - 2000, yazildi: Date.now() - 1500 }));
+        }
+      };
+      const yarim = {};
+      for (const tur of ['yalniz-klasor', 'bagimlilik-yok', 'kilit-bitmemis']) {
+        // kaynak düzeni (sistemdeki node, package.json kütüphaneyi istiyor): yeniden kurulum başlar
+        const kl = anaKur('yarim-' + tur); kutKur(kl, tur); fs.writeFileSync(path.join(kl, 'kurulum-mod2.txt'), 'eksik');
+        const m = motor(kl, ['--kurulum-betigi', T2]); await acik(kp);
+        await bekleKosul(async () => oku(kl, 'kurulum-sayac2.txt') && ['hata', 'hazir'].includes((await durumA()).kutuphane.durum), 10000);
+        const d = (await durumA()).kutuphane;
+        yarim['kaynak ' + tur] = { sayac: oku(kl, 'kurulum-sayac2.txt'), durum: d.durum, iyi: oku(kl, 'kurulum-sayac2.txt') === 'e' && (tur === 'kilit-bitmemis' ? d.durum === 'hazir' : d.durum === 'hata') };
+        m.kill('SIGKILL'); await bekle(300);
+        // paket düzeni (köprünün yanındaki node\node.exe ile): npm yok, "paket eksik"
+        if (process.platform === 'win32') {
+          const pk = anaKur('yarim-paket-' + tur); kutKur(pk, tur); fs.mkdirSync(path.join(pk, 'node'));
+          try { fs.linkSync(process.execPath, path.join(pk, 'node', 'node.exe')); } catch (e) { fs.copyFileSync(process.execPath, path.join(pk, 'node', 'node.exe')); }
+          const c = spawn(path.join(pk, 'node', 'node.exe'), ['kopru.js', '--ana-sayfa', '--port', String(kp)], { cwd: pk });
+          await acik(kp); await bekleKosul(async () => (await durumA()).kutuphane.durum === 'hata', 8000);
+          const pd = (await durumA()).kutuphane;
+          yarim['paket ' + tur] = { durum: pd.durum, neden: pd.neden, iyi: pd.durum === 'hata' && pd.neden === K.KURULUM_NEDEN.paketEksik };
+          c.kill('SIGKILL'); await bekle(300);
+        }
+      }
+      kontrol('Yarım kurulum (yalnız kütüphane klasörü, eksik bağımlılık, "bitti" demeyen kilit) "hazir" sayılmaz: kaynak düzeninde kurulum yeniden yapılır (kilit tamamlanınca "hazir"), paketin kendi Node\'unda "Hazır paket eksik" denir', Object.values(yarim).every(v => v.iyi), yarim);
+
+      // (3) Okunamayan hata biçimleri motoru düşürmez; sayfa genel cümleyi gösterir
+      const sekiller = "const y={getter:()=>{const e={};Object.defineProperty(e,'message',{get(){throw new Error('getter boom');}});return e;},tostring:()=>({toString(){throw new Error('ts boom');}}),proxy:()=>new Proxy({},{get(){throw new Error('proxy boom');}}),prototipsiz:()=>Object.create(null)};";
+      const kl3 = anaKur('hata-sekil');
+      fs.mkdirSync(path.join(kl3, 'node_modules/tiktok-live-connector'), { recursive: true });
+      fs.writeFileSync(path.join(kl3, 'node_modules/tiktok-live-connector/index.js'), "const E=require('events'),fs=require('fs');" + sekiller + "class WebcastPushConnection extends E{connect(){return Promise.reject(y[fs.readFileSync('hata-tur.txt','utf8').trim()]());}disconnect(){}}module.exports={WebcastPushConnection};");
+      fs.writeFileSync(path.join(kl3, 'hata-tur.txt'), 'getter');
+      const m3 = motor(kl3, ['--kurulum-betigi', T2]); await acik(kp);
+      const sekil = {};
+      for (const t of ['getter', 'tostring', 'proxy', 'prototipsiz']) {
+        fs.writeFileSync(path.join(kl3, 'hata-tur.txt'), t);
+        await gonder(kp, '/api/baslat', { oyun: 'a-oyun', kip: 'canli', kullanici: 'Test_Kullanici' });
+        await bekleKosul(async () => { const d = await durumA(); return d.aktif && d.aktif.baglanti === 'hata'; }, 6000); await bekle(300);
+        const d = await durumA().catch(() => null);
+        sekil[t] = { ayakta: !!d && m3.exitCode === null, durum: d && d.durum };
+        if (t === 'proxy') { const sc = await b.newContext(), sp = await sayfaAc(sc, A + '/oyun/a-oyun/'); await bekle(2000); sekil.sayfa = await sp.evaluate(() => document.getElementById('bag-ileti').textContent); await sc.close(); }
+      }
+      kontrol('Kütüphane okunamayan bir hatayla (fırlatan getter, fırlatan toString, Proxy, prototipsiz nesne) reddedince motor ayakta kalır, durum "hata", sayfada genel cümle', ['getter', 'tostring', 'proxy', 'prototipsiz'].every(t => sekil[t].ayakta && /^TikTok'a bağlanılamadı\. \d+ saniye sonra yeniden denenecek\.$/.test(sekil[t].durum)) && /^TikTok'a bağlanılamadı\./.test(sekil.sayfa || ''), sekil);
+      m3.kill('SIGKILL'); await bekle(300);
+      // Sınıflandırıcı birim: hiçbir biçimde istisna yok
+      const tuhaf = [() => { const e = {}; Object.defineProperty(e, 'message', { get() { throw new Error('x'); } }); return e; }, () => new Proxy({}, { get() { throw new Error('p'); } }), () => ({ toString() { throw new Error('t'); } }), () => Object.create(null), () => null, () => undefined, () => 42, () => Symbol('s'), () => 'düz metin', () => new Error('A'.repeat(5e6)),
+        () => { const e = new Error('döngü'); e.cause = e; e.errors = [e]; return e; }, () => { const e = new Error('Failed to retrieve Room ID from all sources.'); e.config = { requestErrs: [new Error('[Html] x')] }; e.config.requestErrs.push(e); return e; },
+        () => Object.assign(new Error('x'), { config: { requestErrs: 'olmaz' } }), () => { const e = new Error('Failed to retrieve Room ID from all sources.'); e.config = { requestErrs: [null, undefined, 'y'] }; return e; }];
+      const birim = tuhaf.map(f => { try { const h = K.baglantiHatasi(f(), 'ayse'); return typeof h.cumle === 'string' && h.cumle.length > 0 && h.cumle.length < 400 && ['bekliyor', 'hata'].includes(h.baglanti); } catch (e) { return 'FIRLATTI: ' + e.message; } });
+      kontrol('Sınıflandırıcı hiçbir hata biçiminde (null, sayı, Symbol, döngülü, dev ileti, bozuk requestErrs …) istisna fırlatmaz, kısa bir cümle döner', birim.every(x => x === true), birim);
+
+      // (4) Yanıltıcı iletiler: "yayın yok" ya da "adını yanlış yazdın" denmez; gerçek iletiler yine doğru
+      const tur = (e) => K.baglantiHatasi(e, 'ayse').tur;
+      const adli = (ad, m) => Object.assign(new Error(m), { name: ad });
+      const yanilt = {
+        wsLive: tur(new Error('Websocket connection failed: could not connect to wss://webcast.tiktok.com/webcast/im/live')),
+        agOffline: tur(new Error('Request failed: network is offline')),
+        api404: tur(new Error('API Error 404 (Not Found) while fetching /api/live/detail')),
+        odaYok: tur(new Error('Room does not exist')),
+        adMetinde: tur(new Error('Failed for user offline_king_live'))
+      };
+      const dogru = {
+        canli2: tur(adli('UserOfflineError', "The requested user isn't online :(")), canli1: tur(new Error('LIVE has ended')),
+        engel1: tur(adli('UserOfflineError', 'Your IP or country might be blocked by TikTok.')), captcha: tur(new Error('Are you captcha-blocked by TikTok?')),
+        imza: tur(new Error('[Rate Limited] You have hit the rate limit. Too many connections started')), dns: tur(Object.assign(new Error('getaddrinfo ENOTFOUND www.tiktok.com'), { code: 'ENOTFOUND' })),
+        zaman: tur(adli('ConnectTimeoutError', 'Timed out whilst connecting to WebSocket'))
+      };
+      kontrol('Sınıflandırıcı: "network is offline", ".../live" adresli WebSocket hatası, "/api/live/detail" 404, "Room does not exist" ve iletide geçen ad genel cümleye düşer (yayın yok / hesap yok denmez); kütüphanenin gerçek iletileri yine doğru sınıfta', Object.values(yanilt).every(t => t === 'diger') && dogru.canli2 === 'canli-degil' && dogru.canli1 === 'canli-degil' && dogru.engel1 === 'engel' && dogru.captcha === 'engel' && dogru.imza === 'imza' && dogru.dns === 'internet' && dogru.zaman === 'internet', { yanilt, dogru });
+
+      // (6) Kilidin uç durumları: ilgisiz uzun ömürlü süreç, ileri tarih, metin olarak pidler, sistem süreci → bayat, hemen kurulur
+      const kilitler = {
+        ilgisizSurec: { pid: process.pid, pidler: [], basladi: Date.now() - 1000, yazildi: Date.now() - 500 },
+        ileriTarih: { pid: process.pid, pidler: [], basladi: Date.now() + 3600e3, yazildi: Date.now() + 3600e3 },
+        pidlerMetin: { pid: 999999, pidler: '4', basladi: Date.now() - 1000 },
+        sistemSureci: { pid: 4, pidler: [4], basladi: Date.now() - 1000 }
+      }, kilitSonuc = {};
+      for (const [ad, k] of Object.entries(kilitler)) {
+        const kl = anaKur('kilit-' + ad); fs.writeFileSync(path.join(kl, 'kurulum-mod2.txt'), 'eksik'); fs.writeFileSync(path.join(kl, '.kurulum-kilidi.json'), JSON.stringify(k));
+        const m = motor(kl, ['--kurulum-betigi', T2]); await acik(kp);
+        let enKucukSure = Infinity; const t0 = Date.now();
+        await bekleKosul(async () => { const d = await durumA(); enKucukSure = Math.min(enKucukSure, d.kutuphane.sure); return !!oku(kl, 'kurulum-sayac2.txt'); }, 12000);
+        kilitSonuc[ad] = { baslar: oku(kl, 'kurulum-sayac2.txt') === 'e', ms: Date.now() - t0, enKucukSure };
+        m.kill('SIGKILL'); await bekle(300);
+      }
+      kontrol('Kilit: kimliği ilgisiz (çok önce başlamış) bir sürece, sistem sürecine ait, ileri tarihli ya da pidler alanı metin olan kilit bayat sayılır, kurulum beklemeden başlar; süre hiç eksi görünmez', Object.values(kilitSonuc).every(v => v.baslar && v.enKucukSure >= 0), kilitSonuc);
+
+      // (7) Temizleyici: emoji arasındaki ZWJ kalır, başka yerdeki gider; OSC dizisi metniyle gider; U+034F, U+17B4, U+17B5 gider
+      const g7 = ad => ((K.cevir('gift', { uniqueId: 'a', giftId: '7', giftName: ad, giftType: 2, diamondCount: 1 }) || {}).hediye || {}).ad;
+      const t7 = { aile: g7('Aile 👨‍👩‍👧'), kodcu: g7('👩‍💻'), yalnizZwj: g7('a‍b'), osc: g7('\u001b]0;title x\u0007Gül'), birlesik: g7('x͏y឴z឵') };
+      kontrol('Köprü temizleyicisi: emoji birleşimleri (👨‍👩‍👧, 👩‍💻) bölünmez, harfler arasındaki U+200D atılır, OSC kaçışı metniyle gider, U+034F / U+17B4 / U+17B5 atılır', t7.aile === 'Aile 👨‍👩‍👧' && t7.kodcu === '👩‍💻' && t7.yalnizZwj === 'ab' && t7.osc === 'Gül' && t7.birlesik === 'xyz', t7);
+    }
+    // ==== DENETİM 4 — sonu ====
     // ==== DENETİM 3 (N1–N5, hazır paket) — sonu ====
   }
   // ==== DENETİM 2 (A–H) VE MAC / LINUX — sonu ====
