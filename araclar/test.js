@@ -4,14 +4,15 @@
  * varsa oyunun kendi testi (oyunlar/<ad>/test.js). En sonda bir kez köprü testi (cekirdek/test/kopru.test.js; kapısı
  * KOPRU_TEST_PORT ile seçilir, öntanım 8791), müzik testi (cekirdek/test/muzik.test.js: bütün oyunların müziği düzgün ve
  * birbirinden farklı mı; dinleme önizlemesi yazar) ve araç testi (cekirdek/test/araclar.test.js: yeni-oyun, derle, kare-cek).
- * --yalniz ile bölümlerin yalnız bir kısmı çalışır (kullanım metni aşağıda). Her bölümün süresi yazılır.
- * Biri bile kalırsa 1 koduyla çıkar. Tarayıcı: CHROME_PATH ya da playwright'ın Chromium'u (cekirdek/test/ortak.js).
+ * --yalniz ile bölümlerin yalnız bir kısmı çalışır, --serit 2 ile iki şerit aynı anda yürür (kullanım metni aşağıda).
+ * Her bölümün süresi yazılır. Biri bile kalırsa 1 koduyla çıkar.
+ * Tarayıcı: CHROME_PATH ya da playwright'ın Chromium'u (cekirdek/test/ortak.js).
  */
 'use strict';
-const { spawnSync } = require('child_process'), fs = require('fs'), path = require('path');
+const { spawn, spawnSync } = require('child_process'), fs = require('fs'), os = require('os'), path = require('path');
 const KOK = path.join(__dirname, '..');
 const BOLUMLER = ['derle', 'cekirdek', 'oyun', 'kopru', 'muzik', 'araclar'];
-const KULLANIM = `Kullanım: node araclar/test.js [<oyun>] [--yalniz <bölümler>]
+const KULLANIM = `Kullanım: node araclar/test.js [<oyun>] [--yalniz <bölümler>] [--serit 1|2]
 
   <oyun>               yalnız bu oyun (verilmezse oyunlar/ altındaki bütün oyunlar). Köprü, müzik ve araç
                        testleri oyun verilse de bir kez çalışır; istemiyorsan --yalniz kullan.
@@ -23,6 +24,10 @@ const KULLANIM = `Kullanım: node araclar/test.js [<oyun>] [--yalniz <bölümler
                          muzik     müzik testleri, bütün oyunlar birlikte (bir kez)
                          araclar   araç testleri (bir kez)
                        örnek: node araclar/test.js halay --yalniz cekirdek,oyun
+  --serit 2            iki şerit aynı anda: A şeridi oyun başına bölümler (derle, cekirdek, oyun),
+                       B şeridi köprü → müzik → araçlar. Her bölümün çıktısı bölüm bitince bütün olarak
+                       yazılır. Öntanım 1 şerit (hepsi sırayla). Bilgisayarda başka bir tarayıcı testi
+                       çalışıyorsa 1 şerit kullan: iki şerit makineyi yorar, kare süresi ölçümleri kalabilir.
   --yardim             bu metin`;
 function kullanim(hata) {
   if (hata) console.error(hata + '\n');
@@ -31,16 +36,19 @@ function kullanim(hata) {
 }
 
 const args = process.argv.slice(2);
-let istenen = null, yalniz = null;
+let istenen = null, yalniz = null, serit = '1';
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
   if (a === '--yardim' || a === '--help' || a === '-h') { console.log(KULLANIM); process.exit(0); }
   else if (a === '--yalniz') { yalniz = args[++i]; if (yalniz === undefined || yalniz.startsWith('--')) kullanim('--yalniz bir bölüm listesi ister.'); }
   else if (a.startsWith('--yalniz=')) yalniz = a.slice('--yalniz='.length);
+  else if (a === '--serit') serit = args[++i];
+  else if (a.startsWith('--serit=')) serit = a.slice('--serit='.length);
   else if (a.startsWith('--')) kullanim('Bilinmeyen seçenek: ' + a);
   else if (istenen === null) istenen = a;
   else kullanim('Fazla bağımsız değişken: ' + a);
 }
+if (serit !== '1' && serit !== '2') kullanim('--serit 1 ya da 2 olur.');
 let secili = null;
 if (yalniz !== null) {
   secili = new Set(yalniz.split(',').map(s => s.trim()).filter(Boolean));
@@ -50,32 +58,68 @@ if (yalniz !== null) {
 const ister = b => !secili || secili.has(b);
 
 const oyunlar = istenen ? [istenen] : fs.readdirSync(path.join(KOK, 'oyunlar')).filter(a => fs.existsSync(path.join(KOK, 'oyunlar', a, 'js', '00-ayar.js'))).sort();
-const sn = ms => (ms / 1000).toFixed(1);
-const sonuc = [], bas = Date.now();
-function calistir(ad, dosya, ...argv) {
-  console.log('\n==== ' + ad + ' ====');
-  const t0 = Date.now();
-  const r = spawnSync(process.execPath, [path.join(KOK, dosya), ...argv], { cwd: KOK, stdio: 'inherit' });
-  const d = r.status === 0 ? 'GEÇTİ' : 'KALDI', ms = Date.now() - t0;
-  sonuc.push([d, ad, ms]);
-  console.log('---- ' + ad + ': ' + d + ', ' + sn(ms) + ' sn');
-}
+// İşler iki şeride ayrılır. A: oyun başına bölümler (yalnız file:// sayfaları açar, kapı kullanmaz).
+// B: köprü (KOPRU_TEST_PORT P…P+11), müzik, araçlar (P+12). İki şerit aynı kapıyı tutmaz.
+const isler = [];
+const ekle = (sr, ad, dosya, ...argv) => isler.push({ no: isler.length, serit: sr, ad, dosya, argv });
 for (const ad of oyunlar) {
-  if (ister('derle')) calistir(ad + ': derleme güncel', 'araclar/derle.js', '--denetle', ad);
-  if (ister('cekirdek')) calistir(ad + ': çekirdek testleri', 'cekirdek/test/cekirdek.test.js', ad);
+  if (ister('derle')) ekle('A', ad + ': derleme güncel', 'araclar/derle.js', '--denetle', ad);
+  if (ister('cekirdek')) ekle('A', ad + ': çekirdek testleri', 'cekirdek/test/cekirdek.test.js', ad);
   if (ister('oyun') && fs.existsSync(path.join(KOK, 'oyunlar', ad, 'test.js')))
-    calistir(ad + ': oyun testleri', 'oyunlar/' + ad + '/test.js', ad);
+    ekle('A', ad + ': oyun testleri', 'oyunlar/' + ad + '/test.js', ad);
 }
-if (ister('kopru')) calistir('köprü testleri', 'cekirdek/test/kopru.test.js', oyunlar.includes('halay') ? 'halay' : oyunlar[0]);
+if (ister('kopru')) ekle('B', 'köprü testleri', 'cekirdek/test/kopru.test.js', oyunlar.includes('halay') ? 'halay' : oyunlar[0]);
 // Müzik: her zaman bütün oyunlar birlikte (oyunların müziği birbirinden farklı mı, ancak hepsine bakınca anlaşılır).
 // Önizlemeler: test/cikti/<ad>/muzik-onizleme.wav
-if (ister('muzik')) calistir('müzik testleri (bütün oyunlar)', 'cekirdek/test/muzik.test.js');
-if (ister('araclar')) calistir('araç testleri', 'cekirdek/test/araclar.test.js');
-console.log('\n==== ÖZET ====');
-for (const [d, ad, ms] of sonuc)
-  console.log(d, '|', ad, '|', sn(ms), 'sn');
-const kalan = sonuc.filter(s => s[0] === 'KALDI').length;
-if (!sonuc.length) console.log('\nSeçilen bölümlerden bu oyunda çalışacak bir şey yok.');
-console.log('Toplam süre: ' + sn(Date.now() - bas) + ' sn');
-console.log(kalan ? '\n' + kalan + ' bölüm kaldı.' : '\nHepsi geçti.');
-process.exit(kalan ? 1 : 0);
+if (ister('muzik')) ekle('B', 'müzik testleri (bütün oyunlar)', 'cekirdek/test/muzik.test.js');
+if (ister('araclar')) ekle('B', 'araç testleri', 'cekirdek/test/araclar.test.js');
+
+const sn = ms => (ms / 1000).toFixed(1);
+const sonuc = [];
+const bitti = (is, kod, ms) => {
+  const d = kod === 0 ? 'GEÇTİ' : 'KALDI';
+  sonuc.push({ no: is.no, d, ad: is.ad, ms });
+  return '---- ' + is.ad + ': ' + d + ', ' + sn(ms) + ' sn\n';
+};
+// 1 şerit: çıktı olduğu gibi akar.
+function sirayla(is) {
+  console.log('\n==== ' + is.ad + ' ====');
+  const t0 = Date.now();
+  const r = spawnSync(process.execPath, [path.join(KOK, is.dosya), ...is.argv], { cwd: KOK, stdio: 'inherit' });
+  process.stdout.write(bitti(is, r.status, Date.now() - t0));
+}
+// 2 şerit: bölümün çıktısı bir dosyada birikir (dosyaya yazım her işletim sisteminde eşzamanlıdır, çocuk
+// process.exit ile çıksa da yarım kalmaz), bölüm bitince bütün olarak yazılır: iki şeridin satırları karışmaz.
+async function biriktirerek(is, klasor) {
+  const dosya = path.join(klasor, is.no + '.txt'), fd = fs.openSync(dosya, 'w'), t0 = Date.now();
+  console.log('» başladı (şerit ' + is.serit + '): ' + is.ad);
+  const kod = await new Promise(res => {
+    const c = spawn(process.execPath, [path.join(KOK, is.dosya), ...is.argv], { cwd: KOK, stdio: ['ignore', fd, fd], windowsHide: true });
+    c.on('error', e => { fs.writeSync(fd, 'BAŞLATILAMADI: ' + e.message + '\n'); res(-1); });
+    c.on('exit', k => res(k));
+  });
+  fs.closeSync(fd);
+  const metin = fs.readFileSync(dosya, 'utf8');
+  fs.unlinkSync(dosya);
+  process.stdout.write('\n==== ' + is.ad + ' (şerit ' + is.serit + ') ====\n' + metin + (metin.endsWith('\n') || !metin ? '' : '\n') + bitti(is, kod, Date.now() - t0));
+}
+
+(async () => {
+  const bas = Date.now();
+  if (serit === '1') for (const is of isler) sirayla(is);
+  else {
+    const klasor = fs.mkdtempSync(path.join(os.tmpdir(), 'test-serit-'));
+    const yuru = async sr => { for (const is of isler.filter(x => x.serit === sr)) await biriktirerek(is, klasor); };
+    await Promise.all([yuru('A'), yuru('B')]);
+    fs.rmdirSync(klasor);
+  }
+  console.log('\n==== ÖZET ====');
+  sonuc.sort((a, b) => a.no - b.no);
+  for (const s of sonuc)
+    console.log(s.d, '|', s.ad, '|', sn(s.ms), 'sn');
+  const kalan = sonuc.filter(s => s.d === 'KALDI').length;
+  if (!sonuc.length) console.log('\nSeçilen bölümlerden çalışacak bir şey yok.');
+  console.log('Toplam süre: ' + sn(Date.now() - bas) + ' sn' + (serit === '2' ? ' (2 şerit)' : ''));
+  console.log(kalan ? '\n' + kalan + ' bölüm kaldı.' : '\nHepsi geçti.');
+  process.exit(kalan ? 1 : 0);
+})();
