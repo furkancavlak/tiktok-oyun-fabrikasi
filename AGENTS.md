@@ -95,6 +95,9 @@ docs/YAYIN.md         yayıncı için: nasıl yayına verilir
    Var olan bir şarkının notası, başka bir yayının çizimi, adı ya da müziği kopyalanmaz. Mekanik alınabilir.
 6. **Oyun tek dosyadır**, çalışırken dış bağımlılığı yoktur (yalnız Google Fonts; yüklenmezse yedek yazı
    tipiyle çalışır). Çerçeve, paketleyici, `import` / `export` eklenmez.
+   Tek istisna YouTube müziğidir (`cekirdek/js/12-youtube.js`, `docs/MUZIK.md`): resmî YouTube oynatıcısı (IFrame
+   Player API, youtube-nocookie.com) yalnız yayıncı Müzik bölümüne bir link yapıştırıp "Çal"a bastığında yüklenir.
+   Basılmadıkça oyun YouTube'a (ve fontlardan başka hiçbir yere) istek göndermez; testler bunu denetler.
 7. **Sahne 9:16'dır**, çizim 720×1280 sanal ölçekte yapılır. Alt beşte bir (1024 ve sonrası) TikTok'un yorum
    alanıdır, boş kalır.
 8. **Tek saat müziğin vuruşudur (`B`).** Hareket ve süreler vuruşla ölçülür. Saat geri gitmez.

@@ -631,6 +631,7 @@ class Muzik {
     this.hazirSira = 0;
     this.hz = null;
     this.calar = null;
+    this.disSessiz = false; // disSustur: başka bir kaynak (YouTube, 12-youtube.js) çalarken oyunun sesi kısık
   }
   simdi() { return this.acik ? this.ctx.currentTime : performance.now() / 1000; }
   beatAt(t) {
@@ -888,7 +889,7 @@ class Muzik {
       await p;
     if (!this.acik)
       this.tabanDegistir(true);
-    this.ses.son.gain.setTargetAtTime(this.duzey, this.ctx.currentTime, 0.05);
+    this.ses.son.gain.setTargetAtTime(this.disSessiz ? 0 : this.duzey, this.ctx.currentTime, 0.05);
     if (this.kaynak === 'hazir' && !this.hazirCal)
       this.hazirBaslat(this.hz ? this.hz.no : 0);
     return true;
@@ -905,8 +906,18 @@ class Muzik {
     this.duzey = v;
     if (this.calar)
       this.calar.volume = clamp(v / 0.7, 0, 1);
-    if (this.acik)
+    if (this.acik && !this.disSessiz)
       this.ses.son.gain.setTargetAtTime(v, this.ctx.currentTime, 0.05);
+  }
+  // Oyunun sesini dışarıdan kısar / geri açar (12-youtube.js: YouTube'dan şarkı çalarken). Yalnız duyulan ses değişir:
+  // üretilen müzik, hazır parça ve hediye zili sessiz akmaya devam eder; vuruş saati (B), hava, tempo, ses açık /
+  // kapalı durumu hiç değişmez. disSustur(false) her şeyi kaldığı hâliyle duyulur kılar.
+  disSustur(evet) {
+    this.disSessiz = !!evet;
+    if (this.calar)
+      this.calar.muted = this.disSessiz;
+    if (this.acik)
+      this.ses.son.gain.setTargetAtTime(this.disSessiz ? 0 : this.duzey, this.ctx.currentTime, 0.05);
   }
 
   /* ---- hazır parçalar ----
@@ -950,6 +961,7 @@ class Muzik {
       this.hz.bos = { b: this.enVurus, s: performance.now() / 1000, hiz: this.parcalar[this.hz.no].bpm / 60 * a.playbackRate };
     a.src = this.muzikKok + p.dosya;
     a.volume = clamp(this.duzey / 0.7, 0, 1);
+    a.muted = this.disSessiz;
     a.playbackRate = clamp(this.carpan, 1, 1.25);
     try {
       await a.play();

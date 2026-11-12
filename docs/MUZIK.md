@@ -210,6 +210,37 @@ Dikkat edilecekler:
 - Vuruş ölçümü kulakla doğrulanmaz. Hareket yarı ya da çift hızda görünürse `liste.js` yeniden üretilmeden
   düzelmez; betikteki 75–150 aralığını o parça için değiştir.
 
+## YouTube'dan şarkı (yayıncı için)
+
+Oyunun kendi müziği yerine kendi seçtiğin bir şarkıyı YouTube'dan çalabilirsin. Her oyunda aynı çalışır.
+
+1. Oyunu BASLAT ile aç (diskten çift tıklanarak açılan oyunda YouTube çalmaz: "YouTube müziği yalnız BASLAT ile
+   açılan oyunda çalışır." yazar).
+2. Yayın masasında **Müzik** sekmesine geç. "YouTube'dan şarkı" kutusuna linki yapıştır, **Çal**'a bas.
+   Kabul edilen linkler: `youtube.com/watch?v=…`, `youtu.be/…`, `youtube.com/shorts/…`, `youtube.com/live/…`,
+   `music.youtube.com/watch?v=…`; sonunda başka bilgiler ya da bir çalma listesi (`list=…`) olabilir.
+3. Oynatıcı kutunun içinde görünür. Şarkı çalarken oyunun kendi müziği susar; **Durdur**'a basınca, şarkı bitince
+   ya da **Oyunun müziğine dön**'e basınca oyunun müziği kaldığı yerden geri gelir. "YouTube sesi" kaydırıcısı
+   yalnız şarkının sesini ayarlar.
+4. "Yalnızca sahneyi göster" görünümünde şarkı çalmaya devam eder.
+
+Bilmen gerekenler:
+
+- **Telif sende.** Telifli şarkı çalarsan TikTok yayının sesini kısabilir ya da yayını kapatabilir, sorumluluk sende.
+  Kutunun altında da bu cümle yazar.
+- **Dans şarkıyı izlemez.** Hareket oyunun kendi temposunda sürer (ses kapalıyken olduğu gibi); şarkının temposuna
+  uymaya çalışılmaz. Ritmi tutturmak istiyorsan `muzik/` klasörüyle kendi parçalarını kullan ("Hazır parçalar").
+- **Bazı videolar çalmaz.** Sahibi başka sitelerde oynatmayı kapatmışsa "Bu video burada çalınamıyor…", video
+  silinmiş ya da gizliyse "Bu video bulunamadı…" yazar; oyunun müziği geri gelir, başka bir link dene. Plak
+  şirketlerinin resmî kliplerinin çoğu başka sitelerde çalmaya kapalıdır. İnternet yoksa "YouTube açılamadı…" yazar.
+- YouTube bazen videonun önünde reklam gösterebilir; bu oyunun elinde değildir.
+- Son çalışan link ve YouTube ses düzeyi o oyun için hatırlanır (tarayıcının kendi deposunda). Sayfa açılınca hiçbir
+  şey kendiliğinden çalmaz.
+- Nasıl çalışır: yalnız YouTube'un resmî oynatıcısı (IFrame Player API, `youtube-nocookie.com`). Şarkı indirilmez,
+  sesi ayrılmaz, aracı bir hizmet kullanılmaz. Oynatıcı ancak "Çal"a basınca yüklenir; basılmadıkça oyun YouTube'a
+  hiçbir istek göndermez (`AGENTS.md` değişmez 6). Kod: `cekirdek/js/12-youtube.js`; oyunun sesini kısan
+  `muzik.disSustur(evet)`.
+
 ## Adlar
 
 | Ad | Ne |
@@ -218,3 +249,5 @@ Dikkat edilecekler:
 | `TAKIMLAR`, `TAKIM`, `HAVALAR` | çekirdekteki takımlar, oyunun seçtiği takım, oyunun havaları (`CanliOyun._test` içinde de) |
 | `window.OYUN_MUZIK` | `oyunlar/<ad>/muzik/liste.js` içinde `muzik-hazirla.py` tarafından yazılan parça listesi |
 | `window.OYUN_MUZIK_KAPALI` | Doğruysa `muzik/` klasörü yok sayılır; testler üretilen müziği sınamak için bunu kullanır |
+| `muzik.disSustur(evet)`, `muzik.disSessiz` | Oyunun sesini dışarıdan kısar / geri açar (YouTube çalarken). Yalnız duyulan ses değişir; saat, hava, tempo, ses açık / kapalı aynı kalır |
+| `CanliOyun.youtube` | YouTube kutusu (`12-youtube.js`): `kur(kutu)`, `linkCoz(metin)`, `cal(link)`, `durdur()`, `don()`, `durum()` |

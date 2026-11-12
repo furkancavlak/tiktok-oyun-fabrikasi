@@ -370,6 +370,9 @@ cekirdek }`:
   `[x, y, w, h]`), `kisiler` (`ad`, `lider`, `bas: { x, y, r }`, `etiket: [x, y, w, h]`).
 - `cekirdek`: kamera, etiket, insan takımı ve çizim işlevleri (testler sahne dışı deneme için çağırır).
 
+`CanliOyun.youtube` → Müzik bölümündeki YouTube kutusu (`12-youtube.js`, `docs/MUZIK.md`): `kur(kutu)`,
+`linkCoz(metin)`, `cal(link)`, `durdur()`, `don()`, `durum()`. Oyun kodu buna dokunmaz.
+
 ## Yayın masası
 
 Sahnenin sağındaki masa yalnız yayıncıya görünür (`#yayin` görünümünde yoktur). İskeleti her oyunda aynıdır
