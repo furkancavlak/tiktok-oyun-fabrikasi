@@ -143,20 +143,30 @@ Köprü yalnız `127.0.0.1` dinler ve her kipte her isteğin `Host` başlığın
 | `GET /muzik/<dosya>` | Oyunun isteğe bağlı hazır parçaları. `liste.js` yoksa boş bir betik döner (konsola 404 düşmesin). |
 | WebSocket `/olay/<kimlik>` | Kimlik her açılışta yeni ve tahmin edilemez; köprü tam adresi açılışta pencereye yazar (`Olay adresi: ws://127.0.0.1:<kapı>/olay/<kimlik>`). Başka yol, kimliksiz `/olay` ya da yanlış kimlik, kaynağına bakılmadan el sıkışmadan önce 403 alır (başka bir sitenin kum havuzlu iframe'i `Origin: null` yollasa da). Diskten açılan `oyun.html` ya da başka bir program bağlanacaksa Yayın sekmesindeki adres alanına bu tam adres yazılır; düz `ws://127.0.0.1:8787` artık bağlanmaz. Olay akışı. Köprü yalnız yollar; istemciden veri beklemez. Kaynak (`Origin`) köprünün kendi adresi olmalı; bu kiplerde ayrıca kaynak bildirmeyen istemci ve diskten açılmış oyun sayfası (`null` ya da `file:`) kabul edilir, çünkü orada `oyun.html` dosyadan açılıp elle bağlanabilir. Başka bir sitenin kaynağı geri çevrilir. |
 
-Ana sayfa kipinde (`node kopru.js --ana-sayfa`, `BASLAT.bat` böyle açar) adresler başkadır:
+Ana sayfa kipinde (`node kopru.js --ana-sayfa`; `BASLAT.bat` bunu `--gizli` ile penceresiz açar) adresler başkadır:
 
 | Adres | Yanıt |
 | --- | --- |
 | `GET /` | Ana sayfa (`cekirdek/ana-sayfa.html`; pakette köprünün yanında). Açılışta yükleme sahnesi. |
-| `GET /api/oyunlar` | `{ anaSayfa, paket, platform: "windows" \| "mac" \| "linux", oyunlar: [{ id, ad, aciklama }], aktif: { oyun, ad, kip, kullanici, calistirma, baglanti } \| null, durum, kutuphane: { durum: "hazir" \| "iniyor" \| "hata", sure, neden } }`. |
+| `GET /api/oyunlar` | `{ anaSayfa, paket, platform: "windows" \| "mac" \| "linux", motor, arkaPlan, oyunlar: [{ id, ad, aciklama }], aktif: { oyun, ad, kip, kullanici, calistirma, baglanti } \| null, durum, kutuphane: { durum: "hazir" \| "iniyor" \| "hata", sure, neden } }`. |
 | `GET /durum` | `{ durum, bagliSayfa, sayac, aktif }` JSON. |
 | `POST /api/baslat` | Gövde `{ oyun, kip: "deneme" \| "canli", kullanici }`. Çalışanı durdurur, seçileni yeni bir başlatma kimliğiyle (`calistirma`) başlatır; eski başlatmanın soketleri kapatılır. Aynı oyun aynı kipte ve aynı adla yeniden istenirse bağlantı koparılmaz; TikTok'a henüz bağlı değilse hemen yeniden denenir. Yanıt `{ tamam, adres }` ya da `{ tamam: false, hata, alan }`. Kütüphane inmeden canlı istenirse 409 (`alan: "kutuphane"`). Kullanıcı adı: harf, rakam, `_`, `.`; 2-24 karakter; noktayla bitmez. |
 | `POST /api/durdur` | Gövde `{}`. Çalışan oyunun sahte olaylarını ya da TikTok bağlantısını kapatır; motor boşta bekler. |
 | `POST /api/kutuphane` | Gövde `{}`. İndirme başarısız olduysa yeniden dener. |
+| `POST /kapat` | Gövde `{}` ve başlık `X-Fabrika: kapat`. Çalışan oyunu durdurur, açık oyun sayfalarına "Motor kapandı" der (sayfalar yeniden bağlanmayı bırakır), süren kurulumu keser, `{ tamam, ileti }` yanıtını yazıp motoru kapatır. Ana sayfadaki **Motoru kapat** ve başka bir klasörün başlatıcısı kullanır. |
 | `GET /oyun/<id>/` | Çalışan oyunun sayfası, köprüye bağlı (`/olay/<id>/<calistirma>`), masada "← Oyunlar" bağlantısı ve başlatma bekçisi: aynı oyun yeniden başlatılınca sayfa kendini yeniler; başka oyun açılır ya da oyun durdurulursa "Bu oyun artık çalışmıyor" örtüsü gösterir. Çalışmayan oyun için ana sayfaya yönlendirir. |
 | `GET /oyun/<id>/muzik/<dosya>` | O oyunun isteğe bağlı hazır parçaları (`liste.js` yoksa boş betik). |
 | `GET /onizleme/<id>/` | Aynı oyun köprüsüz ve sessiz; ana sayfadaki kabinin önizlemesi (`#yayin` ile). |
 | WebSocket `/olay/<id>/<calistirma>` | Yalnız çalışan başlatmanın olayları. Kaynak yalnız köprünün kendi sayfası; başka yol, başka kaynak, kaynaksız istemci ve eski başlatmanın kimliği geri çevrilir. |
 
 POST istekleri yalnız köprünün kendi sayfasından kabul edilir (`Host`, `Origin`, varsa `Sec-Fetch-Site`, JSON gövde,
-en çok 4 KB).
+en çok 4 KB). `POST /kapat` ayrıca `X-Fabrika: kapat` başlığını ister: tarayıcı başka bir sitenin bu başlıklı isteği için
+önce izin sorar, köprü izin vermez. `Origin` varsa köprünün kendi adresi olmalıdır; hiç yoksa istek tarayıcıdan değil
+(tarayıcı her POST'a `Origin` yazar), bu bilgisayardaki bir programdan, ör. başlatıcıdan gelmiştir ve kabul edilir.
+
+`motor` klasörün, sürümün (`SURUM.txt`) ve köprü kodunun kısa özetidir (klasörün yolu verilmez); `BASLAT.bat`'ın
+başlatıcısı (`--gizli`) kapıdaki motorun aynı klasörün aynı sürümü olup olmadığını buna bakarak anlar; değilse ona
+`POST /kapat` der, kapı boşalınca kendi motorunu açar. `arkaPlan: true` motorun penceresiz çalıştığını söyler; o motor
+hiçbir oyun sayfası soketle bağlı değilken 10 dakika boyunca istek almazsa kendiliğinden kapanır
+(`KOPRU_BOS_KAPANIS_MS` yalnız testler için süreyi kısaltır). Çıktısı köprünün klasöründeki `motor-gunlugu.txt`
+dosyasına yazılır (1 MB'ı geçince bir sonraki açılışta baştan başlar).

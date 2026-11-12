@@ -64,7 +64,7 @@ kontrol('paket: BASLAT.bat, köprü, ana sayfa ve Node.js yardım sayfası paket
 // BASLAT.bat (yalnız Windows): yolunda boşluk, Türkçe harf, parantez, & ve % olan klasörde; sahte node.cmd ile ve node
 // hiç yokken. Hiçbir şey açılmaz: sahte node yalnız çağrıyı yazar, node yokken FABRIKA_TEST_ACMA sayfayı açtırmaz.
 const bat = fs.readFileSync(path.join(KOK, 'BASLAT.bat'), 'latin1');
-kontrol('BASLAT.bat yalnız ASCII ve CRLF; soru sormaz, kütüphane kurmaz, motoru ana sayfa kipinde açar', !/[^\x00-\x7f]/.test(bat) && !/[^\r]\n/.test(bat) && !/set \/p/i.test(bat) && !/npm/i.test(bat.replace(/^rem .*$/gim, '')) && /node kopru\.js --ana-sayfa --ac/.test(bat));
+kontrol('BASLAT.bat yalnız ASCII ve CRLF; soru sormaz, kütüphane kurmaz, motoru ana sayfa kipinde penceresiz (--gizli) açar', !/[^\x00-\x7f]/.test(bat) && !/[^\r]\n/.test(bat) && !/set \/p/i.test(bat) && !/npm/i.test(bat.replace(/^rem .*$/gim, '')) && /node kopru\.js --ana-sayfa --ac --gizli\r\n/.test(bat));
 if (process.platform === 'win32') {
   const batKok = fs.mkdtempSync(path.join(os.tmpdir(), 'canli-bat-'));
   const sys = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32'), stub = path.join(batKok, 'sahte-node');
@@ -81,7 +81,7 @@ if (process.platform === 'win32') {
   fs.writeFileSync(path.join(depo, 'kopru.js'), '// test: gerçek depoda köprü burada durur\n');
   fs.copyFileSync(nodeYok, path.join(depo, 'cekirdek', 'node-yok.html'));
   const v = batCalis(depo, stub + ';' + sys, {}), cagri = fs.existsSync(path.join(stub, 'cagri.txt')) ? fs.readFileSync(path.join(stub, 'cagri.txt'), 'utf8') : '';
-  kontrol('BASLAT.bat zor adlı klasörde (boşluk, ş, parantez, &, %) node bulunca soru sormadan "node kopru.js --ana-sayfa --ac" çalıştırır, klasörü doğru bulur', v.status === 0 && /ARGS kopru\.js --ana-sayfa --ac/.test(cagri) && cagri.includes(depo), { kod: v.status, cagri, cikti: (v.stdout + v.stderr).slice(0, 200) });
+  kontrol('BASLAT.bat zor adlı klasörde (boşluk, ş, parantez, &, %) node bulunca soru sormadan "node kopru.js --ana-sayfa --ac --gizli" çalıştırır, klasörü doğru bulur', v.status === 0 && /ARGS kopru\.js --ana-sayfa --ac --gizli\s*$/m.test(cagri) && cagri.includes(depo), { kod: v.status, cagri, cikti: (v.stdout + v.stderr).slice(0, 200) });
   const y2 = batCalis(depo, sys, { FABRIKA_TEST_ACMA: '1' });
   kontrol('BASLAT.bat node yokken düz bir ileti yazar, depodaki yardım sayfasını açacağını söyler, hatayla biter (pencere pause ile bekler)', y2.status === 1 && /Node\.js bulunamadi/.test(y2.stdout) && y2.stdout.includes('ACILACAK: "' + path.join(depo, 'cekirdek', 'node-yok.html') + '"') && /Press any key|Devam etmek/.test(y2.stdout), y2.stdout.slice(0, 400));
   // paket düzeni: yardım sayfası BASLAT.bat'ın yanında
@@ -219,7 +219,7 @@ if (process.platform === 'win32') {
     const sys = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32');
     const bat = (kl, yol, ek) => { const env = { ...process.env, ...ek }; for (const a of Object.keys(env)) if (a.toUpperCase() === 'PATH') delete env[a]; env.Path = yol; return spawnSync('cmd.exe', ['/d', '/s', '/c', '""' + path.join(kl, 'BASLAT.bat') + '""'], { windowsVerbatimArguments: true, cwd: os.tmpdir(), env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 20000 }); };
     const pb = bat(bk, yolNode + ';' + sys, {}), hangi = fs.existsSync(path.join(bk, 'hangi.txt')) ? fs.readFileSync(path.join(bk, 'hangi.txt'), 'utf8').split('\n') : [];
-    kontrol('BASLAT.bat yanında node\\node.exe varsa onu kullanır (yoldaki node çağrılmaz), "kopru.js --ana-sayfa --ac" ile', pb.status === 0 && (hangi[0] || '').toLowerCase() === path.join(bk, 'node', 'node.exe').toLowerCase() && hangi[1] === '--ana-sayfa --ac' && !fs.existsSync(path.join(yolNode, 'cagri.txt')), { kod: pb.status, hangi, cikti: (pb.stdout || '').slice(0, 200) });
+    kontrol('BASLAT.bat yanında node\\node.exe varsa onu kullanır (yoldaki node çağrılmaz), "kopru.js --ana-sayfa --ac --gizli" ile', pb.status === 0 && (hangi[0] || '').toLowerCase() === path.join(bk, 'node', 'node.exe').toLowerCase() && hangi[1] === '--ana-sayfa --ac --gizli' && !fs.existsSync(path.join(yolNode, 'cagri.txt')), { kod: pb.status, hangi, cikti: (pb.stdout || '').slice(0, 200) });
     const yalniz = path.join(hk, 'zip-icinden'); fs.mkdirSync(yalniz); fs.copyFileSync(path.join(KOK, 'BASLAT.bat'), path.join(yalniz, 'BASLAT.bat'));
     const zb = bat(yalniz, yolNode + ';' + sys, {});
     kontrol('BASLAT.bat ZIP\'ten çıkarılmadan açılınca (yanında kopru.js yok) tek düz satırla önce klasöre çıkarmayı söyler, hatayla biter, node çalıştırmaz', zb.status === 1 && /Once ZIP'i bir klasore cikar \(sag tik, Tumunu ayikla\), sonra BASLAT\.bat'a cift tikla\./.test(zb.stdout) && !fs.existsSync(path.join(yolNode, 'cagri.txt')), zb.stdout.slice(0, 300));

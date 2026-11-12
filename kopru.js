@@ -15,8 +15,15 @@
  *   node kopru.js kullanici_adin --port 9000
  *   node kopru.js kullanici_adin --ac           oyunu tarayıcıda kendisi açar
  *   node kopru.js --ana-sayfa --ac              ana sayfa: oyunlar listelenir, oyun ve kip sayfadan seçilir
- *                                               (BASLAT.bat böyle çalıştırır)
+ *   node kopru.js --ana-sayfa --ac --gizli      aynısı, penceresiz (BASLAT.bat böyle çalıştırır): bu süreç yalnız
+ *                                               başlatıcıdır; motoru arka planda açar, motor yanıt verince çıkar
  *
+ * Penceresiz motor (--gizli): başlatıcı, motoru aynı bağımsız değişkenlerle ve iç işaret --arka-plan ile ayrı (detached),
+ * penceresiz bir süreç olarak açar; motorun çıktısı motor-gunlugu.txt dosyasına gider. Motorun penceresi olmadığı için
+ * kapatmanın iki yolu vardır: ana sayfadaki "Motoru kapat" (POST /kapat) ve boşta kapanma (hiçbir sayfa soketle bağlı
+ * değilken ve 10 dakika boyunca motora hiçbir istek gelmezse motor kendiliğinden kapanır; unutulan gizli bir süreç
+ * klasörü sonsuza dek tutmasın). Kapıda aynı klasörün aynı sürümü zaten çalışıyorsa yenisi açılmaz; başka bir klasörün
+ * ya da sürümün motoru çalışıyorsa ona kapanmasını söyler, kapı boşalınca kendi motorunu açar.
  * Hangi oyun: --oyun <ad> verilirse oyunlar/<ad>/oyun.html. Verilmezse önce bu dosyanın yanındaki oyun.html
  * (yayıncı paketi böyle gelir), o da yoksa depoda tek oyun varsa o açılır. Birden çok oyun varsa hangisinin
  * açılacağını sorar (komut satırında elle çalıştırılınca ya da --sor ile).
@@ -24,7 +31,7 @@
  * Ana sayfa kipi (--ana-sayfa): köprü oyunsuz ve kullanıcı adsız açılır, / adresinde ana sayfayı
  * (cekirdek/ana-sayfa.html; pakette köprünün yanında) sunar. Sayfadaki düğmeler POST /api/baslat ile hangi oyunun
  * hangi kipte (deneme ya da canlı) çalışacağını söyler; köprü çalışanı durdurup yenisini başlatır. POST /api/durdur
- * çalışanı durdurur; köprü boşta bekler (ana sayfada bu pencereye "motor" denir). Oyunlar:
+ * çalışanı durdurur; köprü boşta bekler (ana sayfada bu sürece "motor" denir). POST /kapat motoru kapatır. Oyunlar:
  * köprünün yanında oyun.html varsa yalnız o (paket), yoksa derlenmiş her oyunlar/<ad>/ ("vitrin": false olanlar hariç).
  */
 'use strict';
@@ -33,6 +40,10 @@ const http = require('http'), crypto = require('crypto'), fs = require('fs'), pa
 const args = process.argv.slice(2);
 const ANA = args.includes('--ana-sayfa');
 const DENEME = args.includes('--deneme');
+// --gizli: bu süreç yalnız başlatıcıdır (BASLAT.bat). --arka-plan: başlatıcının açtığı penceresiz motor (iç işaret;
+// elle verilmez). Arka plandaki motor boşta kalınca kendiliğinden kapanır.
+const GIZLI = args.includes('--gizli') && !args.includes('--arka-plan');
+const ARKA = args.includes('--arka-plan');
 const pi = args.indexOf('--port');
 const PORT = pi >= 0 ? parseInt(args[pi + 1], 10) || 8787 : 8787;
 const oi = args.indexOf('--oyun');
@@ -77,6 +88,23 @@ const METIN = {
   mac: { baslatici: 'BASLAT.command', pencere: 'Terminal penceresi', pencereyi: 'Terminal penceresini', yeniden: 'BASLAT.command dosyasına yeniden çift tıkla (açılmazsa Terminal\'de klasöre girip sh BASLAT.command yaz)' },
   linux: { baslatici: 'BASLAT.sh', pencere: 'terminal penceresi', pencereyi: 'terminal penceresini', yeniden: 'BASLAT.sh dosyasını yeniden çalıştır' }
 }[PLATFORM];
+
+// Motorun kimliği: klasör + sürüm (SURUM.txt, hazır pakette) + köprünün kendi kodu, kısa bir özet olarak. Başlatıcı kapıda
+// çalışan motorun aynı klasörün aynı sürümü olup olmadığını buna bakarak anlar. Klasörün yolu dışarı verilmez, yalnız özeti.
+const MOTOR_KIMLIK = (() => {
+  const h = crypto.createHash('sha256');
+  let kl = __dirname;
+  try { kl = fs.realpathSync.native(__dirname); } catch (e) { }
+  h.update(process.platform === 'win32' ? kl.toLowerCase() : kl);
+  for (const d of [path.join(__dirname, 'SURUM.txt'), __filename]) { h.update('\0'); try { h.update(fs.readFileSync(d)); } catch (e) { } }
+  return h.digest('hex').slice(0, 16);
+})();
+// Arka plandaki motorun günlüğü (konsol çıktısı) ve boşta kapanma süresi. Süreyi yalnız testler kısaltır.
+const GUNLUK = path.join(__dirname, 'motor-gunlugu.txt');
+const BOS_KAPANIS_MS = +process.env.KOPRU_BOS_KAPANIS_MS > 0 ? +process.env.KOPRU_BOS_KAPANIS_MS : 10 * 60e3;
+// Motor kapanınca sayfalara giden cümle (ana sayfa da aynısını yazar).
+const KAPANDI = 'Motor kapandı. Yeniden açmak için ' + (PLATFORM === 'linux' ? 'BASLAT.sh dosyasını çalıştır.' : 'BASLAT\'a çift tıkla.');
+const sureYazi = ms => ms >= 60e3 ? Math.round(ms / 60e3) + ' dakika' : Math.max(1, Math.round(ms / 1000)) + ' saniye';
 
 /* ------------------------------------------------------------------ oyun sayfası + WebSocket sunucusu */
 const istemciler = new Set();
@@ -125,10 +153,16 @@ const KIMLIK = crypto.randomBytes(12).toString('hex'), OLAY_YOL = '/olay/' + KIM
 // yalnız aynı kökenden çerçevelenebilir (ana sayfanın önizlemeleri aynı kökendir).
 const CERCEVE_YASAK = { 'x-frame-options': 'SAMEORIGIN', 'content-security-policy': "frame-ancestors 'self'" };
 const hostIyi = req => IZINLI_HOST.includes(String(req.headers.host || '').toLowerCase());
+// Boşta kapanma için son temas: motorun kendi adresine gelen her istek (başka bir sitenin sayfasından gelenler sayılmaz:
+// tarayıcı onlara Sec-Fetch-Site: cross-site yazar) ve bağlanan / ayrılan her soket.
+let sonTemas = Date.now();
+const temas = () => { sonTemas = Date.now(); };
 
 const sunucu = http.createServer((req, res) => {
   const yol = (req.url || '/').split('?')[0];
   if (!hostIyi(req)) { res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' }); res.end('Bu adres yalnız bu bilgisayardan, köprünün kendi adresiyle açılır.'); return; }
+  const site = req.headers['sec-fetch-site'];
+  if (!site || site === 'same-origin' || site === 'none') temas();
   if (ANA) { anaSayfaIstegi(req, res, yol); return; }
   if (yol === '/' || yol === '/index.html') {
     fs.readFile(OYUN, 'utf8', (hata, html) => {
@@ -190,7 +224,9 @@ sunucu.on('upgrade', (req, soket) => {
   }
   const kabul = crypto.createHash('sha1').update(anahtar + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
   soket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ' + kabul + '\r\n\r\n');
-  soket.setNoDelay(true); istemciler.add(soket);
+  soket.setNoDelay(true); istemciler.add(soket); temas();
+  // Yoklama paketi: sayfa sessizce yok olursa (uyku, çökme) soket listede sonsuza dek kalıp boşta kapanmayı engellemesin.
+  try { soket.setKeepAlive(true, 60e3); } catch (e) { }
   yaz('Oyun sayfası bağlandı (' + istemciler.size + ' sayfa).');
   soket.write(cerceve(JSON.stringify({ tip: 'kopru', ileti: sonDurum, baglanti: sonBaglanti })));
   let tampon = Buffer.alloc(0);
@@ -209,7 +245,7 @@ sunucu.on('upgrade', (req, soket) => {
       if (islem === 0x9) { try { soket.write(Buffer.concat([Buffer.from([0x8a, yuk.length & 0x7f]), yuk.subarray(0, 125)])); } catch (e) {} }
     }
   });
-  const birak = () => { if (istemciler.delete(soket)) yaz('Oyun sayfası ayrıldı (' + istemciler.size + ' sayfa).'); };
+  const birak = () => { temas(); if (istemciler.delete(soket)) yaz('Oyun sayfası ayrıldı (' + istemciler.size + ' sayfa).'); };
   soket.on('close', birak); soket.on('error', birak);
 });
 sunucu.on('error', e => {
@@ -219,6 +255,8 @@ sunucu.on('error', e => {
   process.exit(1);
 });
 function calistir() {
+  if (args.includes('--gizli') && !ANA) { console.log('\n  --gizli yalnız --ana-sayfa ile birlikte kullanılır.\n'); process.exit(1); }
+  if (GIZLI) { gizliBaslat(); return; }
   if (ANA) { dinle(); return; }
   if (!DENEME && !KULLANICI) {
     console.log('\nKullanım:\n  node kopru.js tiktok_kullanici_adin --oyun <ad>\n  node kopru.js --deneme --oyun <ad>     (TikTok olmadan dener)\n');
@@ -268,7 +306,11 @@ function dinle() {
   sunucu.listen(PORT, '127.0.0.1', () => {
     if (ANA) {
       console.log('\n  TikTok Oyun Fabrikası açık:  http://localhost:' + PORT + '/');
-      console.log('  Bu ' + METIN.pencere + ' oyunların motorudur. Açık kalsın; kapatınca oyunlar durur.\n');
+      if (ARKA) {
+        yaz('Motor açıldı (süreç ' + process.pid + '), penceresiz çalışıyor.');
+        console.log('  Kapatmak için ana sayfada "Motoru kapat"a bas. Tarayıcıda hiçbir oyun fabrikası sayfası açık değilken ' + sureYazi(BOS_KAPANIS_MS) + ' sonra kendiliğinden kapanır.\n');
+        bostaKapanmayiKur();
+      } else console.log('  Bu ' + METIN.pencere + ' oyunların motorudur. Açık kalsın; kapatınca oyunlar durur. Ana sayfadaki "Motoru kapat" da kapatır.\n');
       if (args.includes('--ac')) tarayicidaAc('http://localhost:' + PORT + '/');
       kutuphaneHazirla(); // sayfa açılırken kütüphane yoksa indirmeye başlar; sayfa durumu gösterir
       return;
@@ -293,7 +335,149 @@ function dinle() {
 function tarayicidaAc(adres) { // varsayılan tarayıcıda açar
   const { exec } = require('child_process');
   const komut = process.platform === 'win32' ? 'start "" "' + adres + '"' : process.platform === 'darwin' ? 'open "' + adres + '"' : 'xdg-open "' + adres + '"';
-  try { exec(komut, () => {}); } catch (e) {}
+  // windowsHide: penceresiz motorun konsolu yoktur; bayraksız açılan komut istemi yeni bir siyah pencere gösterirdi.
+  try { exec(komut, { windowsHide: true }, () => {}); } catch (e) {}
+}
+
+/* ------------------------------------------------------------------ penceresiz başlatma (--gizli) ve kapanma */
+// Kapıya kısa bir JSON isteği: geri çağrı (hata, json, durumKodu). En çok `sure` ms; yanıt bitmezse vazgeçer.
+function kapiIstek(yol, sec, sonra) {
+  let bitti = false;
+  const son = (h, j, kod) => { if (bitti) return; bitti = true; clearTimeout(t); sonra(h, j, kod); };
+  const govde = sec.govde === undefined ? null : JSON.stringify(sec.govde);
+  const basliklar = Object.assign({ host: '127.0.0.1:' + PORT }, govde === null ? {} : { 'content-type': 'application/json', 'content-length': Buffer.byteLength(govde) }, sec.basliklar || {});
+  const r = http.request({ host: '127.0.0.1', port: PORT, path: yol, method: sec.yontem || 'GET', headers: basliklar }, y => {
+    let g = ''; y.setEncoding('utf8');
+    y.on('data', p => { g += p; if (g.length > 65536) r.destroy(); });
+    y.on('end', () => { let j = null; try { j = JSON.parse(g); } catch (e) { } son(null, j, y.statusCode); });
+    y.on('error', e => son(e, null, 0));
+  });
+  r.on('error', e => son(e, null, 0));
+  const t = setTimeout(() => { try { r.destroy(); } catch (e) { } son(new Error('zaman aşımı'), null, 0); }, sec.sure || 3000);
+  r.end(govde === null ? undefined : govde);
+}
+// Kapıda ne var: 'bos' (kimse dinlemiyor), 'ana' (bir ana sayfa motoru; j = /api/oyunlar), 'eski' (tek oyunla, eski
+// yoldan açılmış köprü) ya da 'yabanci' (başka bir program).
+function kapiyaBak(sonra) {
+  kapiIstek('/api/oyunlar', {}, (h, j) => {
+    if (h && h.code === 'ECONNREFUSED') return sonra({ tur: 'bos' });
+    if (j && j.anaSayfa === true) return sonra({ tur: 'ana', j });
+    if (h) return sonra({ tur: 'yabanci' });
+    kapiIstek('/durum', {}, (h2, d) => sonra(d && d.sayac && typeof d.durum === 'string' ? { tur: 'eski' } : { tur: 'yabanci' }));
+  });
+}
+const KAPI_DOLU = () => '\n  ' + PORT + ' numaralı kapı başka bir program tarafından kullanılıyor (kapı dolu).\n  O programı kapatıp yeniden dene.\n';
+// BASLAT.bat'ın çalıştırdığı kısa ömürlü başlatıcı. Motor yanıt verince sessizce çıkar (0): pencere kendiliğinden kapanır.
+// Motor açılamazsa düz bir cümle ve günlüğün son satırlarını yazıp 1 ile çıkar (BASLAT.bat pencereyi açık tutar).
+function gizliBaslat() {
+  const adres = 'http://localhost:' + PORT + '/';
+  kapiyaBak(k => {
+    if (k.tur === 'bos') return motoruAc();
+    if (k.tur === 'ana' && k.j.motor === MOTOR_KIMLIK) {
+      console.log('\n  Oyun fabrikası zaten açık: ' + adres + '\n');
+      if (args.includes('--ac')) tarayicidaAc(adres);
+      setTimeout(() => process.exit(0), args.includes('--ac') ? 600 : 0);
+      return;
+    }
+    if (k.tur === 'ana') { // başka bir klasörün ya da başka bir sürümün motoru: kapanmasını iste, kapı boşalınca aç
+      console.log('\n  Başka bir oyun klasöründen ya da başka bir sürümden açılmış motor çalışıyor; o kapatılıyor.');
+      kapiIstek('/kapat', { yontem: 'POST', govde: {}, basliklar: { 'x-fabrika': 'kapat' } }, (h, j, kod) => {
+        if (kod !== 200) {
+          console.log('\n  Oyun fabrikasının eski bir motoru açık ve kendiliğinden kapanmıyor.\n  O ' + METIN.pencereyi + ' kapat, sonra ' + METIN.yeniden + '.\n');
+          process.exit(1);
+        }
+        kapiBosalinca(bos => {
+          if (bos) return motoruAc();
+          console.log('\n  Eski motor kapanmadı. Bilgisayarı yeniden başlatıp ' + METIN.yeniden + '.\n');
+          process.exit(1);
+        });
+      });
+      return;
+    }
+    if (k.tur === 'eski') {
+      console.log('\n  Oyun motoru başka bir pencerede zaten açık (tek oyunla, eski yoldan başlatılmış).\n  O ' + METIN.pencereyi + ' kapat, sonra ' + METIN.yeniden + '.\n');
+      process.exit(1);
+    }
+    console.log(KAPI_DOLU());
+    process.exit(1);
+  });
+}
+// Kapıyı tutan süreç kapanana dek bekler (en çok 10 sn): sonra(true) kapı boş.
+function kapiBosalinca(sonra) {
+  const t0 = Date.now();
+  (function bak() {
+    const s = require('net').connect(PORT, '127.0.0.1');
+    s.on('connect', () => { s.destroy(); if (Date.now() - t0 > 10000) sonra(false); else setTimeout(bak, 200); });
+    s.on('error', e => { if (e.code === 'ECONNREFUSED') sonra(true); else if (Date.now() - t0 > 10000) sonra(false); else setTimeout(bak, 200); });
+  })();
+}
+// Günlüğün son açılışından son satırlar (başlatıcının hata iletisi için).
+function gunlukSonu(n) {
+  try {
+    const t = fs.readFileSync(GUNLUK, 'utf8'), bas = t.lastIndexOf('\n==== ');
+    return (bas >= 0 ? t.slice(bas + 1) : t).split(/\r?\n/).filter(s => s.trim()).slice(-n);
+  } catch (e) { return []; }
+}
+// Gerçek motoru penceresiz ve başlatıcıdan bağımsız açar, kapıda yanıt verene dek bekler (en çok 20 sn).
+function motoruAc() {
+  let fd = null;
+  try {
+    let bayrak = 'a';
+    try { if (fs.statSync(GUNLUK).size > 1024 * 1024) bayrak = 'w'; } catch (e) { } // günlük büyüdüyse baştan başlar
+    fd = fs.openSync(GUNLUK, bayrak);
+    fs.writeSync(fd, '\n==== ' + new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC · motor başlatılıyor ====\n');
+  } catch (e) { fd = null; } // klasöre yazılamıyorsa günlüksüz açılır; motor yine çalışır
+  const cocukArg = [__filename, ...args.filter(a => a !== '--gizli'), '--arka-plan'];
+  let c;
+  try {
+    c = require('child_process').spawn(process.execPath, cocukArg, { detached: true, windowsHide: true, cwd: __dirname, stdio: ['ignore', fd === null ? 'ignore' : fd, fd === null ? 'ignore' : fd] });
+  } catch (e) { c = null; }
+  if (fd !== null) { try { fs.closeSync(fd); } catch (e) { } }
+  let olum = c ? 0 : Date.now();
+  if (c) { c.on('error', () => { if (!olum) olum = Date.now(); }); c.on('exit', () => { if (!olum) olum = Date.now(); }); c.unref(); }
+  const t0 = Date.now();
+  const basarisiz = neden => {
+    console.log('\n  Oyun motoru açılamadı: ' + neden);
+    const satirlar = gunlukSonu(15);
+    if (satirlar.length) console.log('\n  Motorun son yazdıkları (' + path.basename(GUNLUK) + '):\n' + satirlar.map(s => '    ' + s).join('\n'));
+    console.log('\n  Bu pencerenin ekran görüntüsünü gönderirsen sorun bulunur.\n');
+    process.exit(1);
+  };
+  (function bak() {
+    kapiIstek('/api/oyunlar', { sure: 2000 }, (h, j) => {
+      if (j && j.anaSayfa === true && j.motor === MOTOR_KIMLIK) process.exit(0); // motor hazır; pencere kapanabilir
+      if (olum && Date.now() - olum > 1500) return basarisiz('motor açılırken durdu.');
+      if (Date.now() - t0 > 20000) {
+        // Yanıt vermeyen motor gizli kalıp klasörü tutmasın: bu başlatıcının açtığı süreç kapatılır.
+        if (c && !olum) { try { process.kill(c.pid); } catch (e) { } }
+        return basarisiz('motor 20 saniyede yanıt vermedi.');
+      }
+      setTimeout(bak, 250);
+    });
+  })();
+}
+// Motoru düzgün kapatır: çalışan oyun durur (sahte olay saati, TikTok bağlantısı), açık oyun sayfalarına "motor
+// kapandı" denir (yeniden bağlanmayı bırakırlar), süren kurulum ağacıyla öldürülür, kapı bırakılır, süreç çıkar.
+let kapaniyor = false;
+function motoruKapat(neden) {
+  if (kapaniyor) return;
+  kapaniyor = true;
+  oyunDurdur(KAPANDI);
+  soketleriKapat(() => true, KAPANDI);
+  kurulumuKes();
+  if (neden === 'bos') yaz('Motor ' + sureYazi(BOS_KAPANIS_MS) + ' boyunca hiçbir sayfayla görüşmedi; kendiliğinden kapanıyor.');
+  else yaz('Motor ana sayfadan kapatıldı.');
+  try { sunucu.close(); } catch (e) { }
+  setTimeout(() => process.exit(0), 600); // soketlere kapanış iletisi gitsin
+}
+// Yalnız arka plandaki motorda: hiçbir oyun sayfası soketle bağlı değilken ve süre boyunca motora istek gelmezse kapanır.
+// Bağlı bir soket hep temas sayılır (yayında saatlerce arka planda kalan sekmenin zamanlayıcıları kısılır, soket kalır).
+// Kütüphane inerken de kapanmaz (kurulumun kendi süre sınırı vardır).
+function bostaKapanmayiKur() {
+  const t = setInterval(() => {
+    if (istemciler.size || kutuphane.cocuk) { temas(); return; }
+    if (Date.now() - sonTemas >= BOS_KAPANIS_MS) { clearInterval(t); motoruKapat('bos'); }
+  }, Math.max(200, Math.min(30000, Math.floor(BOS_KAPANIS_MS / 5))));
 }
 
 /* ------------------------------------------------------------------ ana sayfa kipi */
@@ -551,7 +735,8 @@ function kurulumuKes() {
 }
 function anaDurum() {
   return {
-    anaSayfa: true, paket: paketMi(), platform: PLATFORM,
+    // motor: klasör + sürüm özeti (başlatıcı karşılaştırır); arkaPlan: motor penceresiz mi (sayfanın yazısı buna göre)
+    anaSayfa: true, paket: paketMi(), platform: PLATFORM, motor: MOTOR_KIMLIK, arkaPlan: ARKA,
     oyunlar: vitrindekiler().map(o => ({ id: o.id, ad: o.ad, aciklama: o.aciklama })),
     aktif: calisan ? { oyun: calisan.oyun, ad: calisan.ad, kip: calisan.kip, kullanici: calisan.kullanici, calistirma: calisan.calistirma, baglanti: sonBaglanti } : null,
     durum: sonDurum,
@@ -588,6 +773,7 @@ function anaSayfaIstegi(req, res, yol) {
   }
   if (yol === '/api/baslat') { baslatIstegi(req, res); return; }
   if (yol === '/api/durdur') { durdurIstegi(req, res); return; }
+  if (yol === '/kapat') { kapatIstegi(req, res); return; }
   if (yol === '/api/kutuphane') { postAl(req, res, () => { if (kutuphane.durum === 'hata') kutuphaneHazirla(); jsonYaz(res, 200, { tamam: true, ...anaDurum() }); }); return; }
   if (yol === '/durum') { jsonYaz(res, 200, { durum: sonDurum, bagliSayfa: istemciler.size, sayac, aktif: anaDurum().aktif }); return; }
   const m = /^\/(oyun|onizleme)\/([^/]+)(\/.*)?$/.exec(yol);
@@ -653,9 +839,9 @@ const ONIZLEME_EK = '<script>window.OYUN_MUZIK_KAPALI=true;window.AudioContext=u
   'return r(function k(t){if(t-t0<24)return r(k);f(t);});};})();</script>\n<style>#ses-cagri,#cik-yayin{display:none!important}</style>';
 // Ana sayfanın POST istekleri (başlat, durdur) için ortak kapı: yalnız köprünün kendi sayfasından, JSON gövdeyle,
 // en çok 4 KB. Geçerse gövdeyi nesne olarak işleve verir; geçmezse yanıtı kendisi yazar.
-function postAl(req, res, isle) {
-  if (req.method !== 'POST') { res.writeHead(405, { allow: 'POST' }); res.end(); return; }
-  if (!yerelIstek(req, true)) { jsonYaz(res, 403, { tamam: false, hata: 'Bu istek ana sayfadan gelmedi; geri çevrildi.' }); req.resume(); return; }
+function postAl(req, res, isle, kapi = r => yerelIstek(r, true)) {
+  if (req.method !== 'POST') { res.writeHead(405, { allow: 'POST' }); res.end(); req.resume(); return; }
+  if (!kapi(req)) { jsonYaz(res, 403, { tamam: false, hata: 'Bu istek ana sayfadan gelmedi; geri çevrildi.' }); req.resume(); return; }
   if (!/^application\/json\b/i.test(String(req.headers['content-type'] || ''))) { jsonYaz(res, 415, { tamam: false, hata: 'İstek JSON değil.' }); req.resume(); return; }
   let govde = '', fazla = false;
   req.setEncoding('utf8');
@@ -672,14 +858,31 @@ function postAl(req, res, isle) {
 function durdurIstegi(req, res) {
   postAl(req, res, () => { oyunDurdur(); jsonYaz(res, 200, { tamam: true, ...anaDurum() }); });
 }
-function oyunDurdur() {
+// "Motoru kapat" (ana sayfa) ve başka klasörün başlatıcısı: yanıt yazılır, sonra motor düzgün kapanır.
+// Kapı öbür POST'lardan sıkıdır: Host bizim olmalı, ayrıca özel bir başlık (X-Fabrika: kapat) gerekir. Tarayıcı başka bir
+// sitenin bu başlıklı isteği için önce izin sorar (CORS ön isteği); motor izin vermez, istek hiç gelmez. Origin varsa bizim
+// olmalı, Sec-Fetch-Site varsa same-origin. Origin yoksa istek tarayıcıdan gelmemiştir (tarayıcı her POST'a Origin yazar):
+// bu bilgisayardaki bir program, ör. başka klasörün başlatıcısı; böyle bir program motoru zaten kapatabilir.
+function kapatKapisi(req) {
+  if (!hostIyi(req) || String(req.headers['x-fabrika'] || '').toLowerCase() !== 'kapat') return false;
+  const kaynak = req.headers.origin, site = req.headers['sec-fetch-site'];
+  if (kaynak !== undefined && !IZINLI_HOST.some(h => String(kaynak).toLowerCase() === 'http://' + h)) return false;
+  return !site || site === 'same-origin';
+}
+function kapatIstegi(req, res) {
+  postAl(req, res, () => {
+    res.on('finish', () => motoruKapat('kapat'));
+    jsonYaz(res, 200, { tamam: true, ileti: KAPANDI });
+  }, kapatKapisi);
+}
+function oyunDurdur(ileti) { // ileti: motor kapanırken sayfalara söylenen (yoksa ana sayfadaki Durdur)
   if (!calisan) return;
   const eski = calisan;
   calisan = null;
   try { if (eski.durdur) eski.durdur(); } catch (e) { }
-  soketleriKapat(s => s.calistirma === eski.calistirma, 'Oyun ana sayfadan durduruldu. Yeniden başlatmak için ana sayfaya dön.');
+  soketleriKapat(s => s.calistirma === eski.calistirma, ileti || 'Oyun ana sayfadan durduruldu. Yeniden başlatmak için ana sayfaya dön.');
   sonDurum = 'Oyun durduruldu.'; sonBaglanti = 'durdu';
-  console.log('\n  Durduruldu: ' + eski.ad + '. Motor açık, ana sayfadan yeni oyun seçilebilir.');
+  console.log('\n  Durduruldu: ' + eski.ad + '.' + (ileti ? '' : ' Motor açık, ana sayfadan yeni oyun seçilebilir.'));
 }
 function baslatIstegi(req, res) {
   postAl(req, res, g => {

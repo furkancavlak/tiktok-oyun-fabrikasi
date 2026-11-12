@@ -9,3 +9,5 @@ muzik/
 Thumbs.db
 # Motorun kurulum kilidi (kopru.js, kütüphane inerken)
 .kurulum-kilidi.json
+# Penceresiz motorun günlüğü (kopru.js --gizli, BASLAT.bat)
+motor-gunlugu.txt

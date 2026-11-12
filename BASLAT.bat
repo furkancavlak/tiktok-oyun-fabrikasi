@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-title TikTok Oyun Fabrikasi - motor
+title TikTok Oyun Fabrikasi
 cd /d "%~dp0"
 
 rem ZIP icinden cift tiklandiysa (cikarilmadan) yaninda hicbir sey yoktur: once klasore cikarmasini soyle.
@@ -13,13 +13,16 @@ rem Node.js yoksa: duz bir ileti, tarayicida yardim sayfasi, pencere acik kalir.
 where node >nul 2>nul
 if errorlevel 1 goto nodeyok
 
-rem Motor: ana sayfayi tarayicida acar. Gereken kutuphaneyi ilk seferde kendisi indirir; durumu sayfada gorunur.
-node kopru.js --ana-sayfa --ac
+rem Motor arka planda, penceresiz acilir (--gizli) ve ana sayfayi tarayicida acar. Gereken kutuphaneyi ilk seferde
+rem kendisi indirir; durumu sayfada gorunur. Motor hazir olunca bu pencere kendiliginden kapanir. Motor acilamazsa
+rem nedeni ve motorun son satirlari bu pencerede kalir (:hata). Motor ana sayfadaki "Motoru kapat" ile kapanir;
+rem tarayicida hicbir sayfasi acik degilken 10 dakika sonra kendiliginden de kapanir.
+node kopru.js --ana-sayfa --ac --gizli
 if errorlevel 1 goto hata
 exit /b 0
 
 :paketnode
-"%~dp0node\node.exe" kopru.js --ana-sayfa --ac
+"%~dp0node\node.exe" kopru.js --ana-sayfa --ac --gizli
 if errorlevel 1 goto hata
 exit /b 0
 

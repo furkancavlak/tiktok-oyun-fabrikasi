@@ -26,8 +26,9 @@ node araclar/derle.js <ad>                    # oyunlar/<ad>/js + cekirdek → o
 node araclar/kare-cek.js <ad>                 # sahne kareleri → test/cikti/<ad>/kare-hepsi.png
 node araclar/test.js <ad>                     # çekirdek testleri + oyunun kendi testi
 node araclar/test.js                          # bütün oyunlar + köprü testleri
-node kopru.js --ana-sayfa --ac                # ana sayfa (oyun salonu): Dene / Yayın / Durdur (BASLAT.bat bunu açar)
-                                              # macOS: BASLAT.command, Linux: BASLAT.sh aynısını yapar
+node kopru.js --ana-sayfa --ac                # ana sayfa (oyun salonu): Dene / Yayın / Durdur / Motoru kapat
+                                              # BASLAT.bat bunu --gizli ile penceresiz açar (günlük: motor-gunlugu.txt)
+                                              # macOS: BASLAT.command, Linux: BASLAT.sh aynısını görünür Terminal penceresinde yapar
 node kopru.js --deneme --oyun <ad> --ac       # köprü + oyun, TikTok'suz, sahte olaylarla
 node kopru.js <tiktok_adi> --oyun <ad> --ac   # gerçek yayın (yalnız okur)
 node araclar/paket.js <ad>                    # yayıncıya verilecek klasör → dist/<ad>/

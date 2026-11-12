@@ -14,7 +14,9 @@
   dizisi, ampullü tabela, sağ üstte yayıncı bileti (kullanıcı adı), her oyun bir kabin (renkli tabela, ekranda canlı
   önizleme, iki yuvarlak düğme). Oyunları /api/oyunlar'dan okur; Dene / Yayın POST /api/baslat, Durdur POST /api/durdur.
   Önizleme /onizleme/<ad>/#yayin: motora bağlanmayan, sessiz, kendi sahte kalabalığıyla oynayan oyun sayfası.
-  Sayfada siyah pencereye "motor" denir. Dışarıdan gelen hiçbir metin HTML olarak yazılmaz: hepsi textContent / value.
+  Sayfada köprü programına "motor" denir. Windows'ta BASLAT.bat motoru penceresiz açar (motor /api/oyunlar içinde
+  arkaPlan: true der); Mac ve Linux'ta motor Terminal penceresidir. Alt satırdaki "Motoru kapat" POST /kapat ile motoru
+  kapatır. Dışarıdan gelen hiçbir metin HTML olarak yazılmaz: hepsi textContent / value.
 -->
 <style>
 :root{
@@ -218,13 +220,27 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
 .ray.tek .kabin{width:calc(var(--kabin-w) * 1.22)}
 
 /* ---- alt satır ---- */
-.alt{margin-top:auto;display:flex;align-items:center;gap:6px 16px;flex-wrap:wrap;font-size:13px;color:var(--soluk);padding:10px 6px 0}
+/* alt satır salonun üstünde durur: kabinler sığmayınca salonun ışık payı (alttan 60px) alt satırın düğmelerini örtmesin */
+.alt{position:relative;z-index:2;margin-top:auto;display:flex;align-items:center;gap:6px 16px;flex-wrap:wrap;font-size:13px;color:var(--soluk);padding:10px 6px 0}
 .sinyal{flex:none;width:11px;height:11px;border-radius:50%;background:var(--yesil);box-shadow:0 0 0 3px rgba(53,224,143,.22),0 0 12px var(--yesil)}
 .alt.koptu .sinyal{background:var(--kirmizi);box-shadow:0 0 0 3px rgba(239,74,53,.25),0 0 12px var(--kirmizi)}
 .alt #lamba{color:var(--krem);font-weight:700}
 .alt .yazi-dugme{margin-left:auto}
 .alt .yazi-dugme.parla{padding:6px 14px;border-radius:99px;border:3px solid var(--kenar);background:var(--sari);color:#2a1a05;text-decoration:none;
   box-shadow:0 4px 0 var(--kenar),0 0 22px rgba(255,201,60,.5);animation:nefes 2.4s ease-in-out infinite}
+/* motoru kapat: alt satırda, "Motor çalışıyor"un yanında küçük ve sönük; basınca satırın içinde onay sorar */
+.alt .motor-kapat{background:none;border:0;padding:2px 2px;color:var(--soluk);font-size:12.5px;font-weight:500;text-decoration:underline;text-underline-offset:3px}
+.alt .motor-kapat:hover{color:var(--krem)}
+.kapat-onay{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 6px 4px 12px;border-radius:99px;background:rgba(13,8,24,.6);
+  border:2px solid rgba(239,74,53,.6);color:var(--krem)}
+.kapat-onay button{border:2px solid var(--kenar);border-radius:99px;padding:3px 12px;font-weight:800;font-size:12.5px}
+.kapat-onay .evet{background:#3a1f2e;color:var(--krem);box-shadow:inset 0 0 0 2px var(--kirmizi)}
+.kapat-onay .hayir{background:var(--sari);color:#2a1a05}
+.kapat-onay button[disabled]{opacity:.65;cursor:progress}
+/* motor kapandıktan sonra açılış sahnesi sakin son hâlinde: ampuller söner, yalnız tabela ve tek cümle */
+.acilis.kapandi .acilis-ampul i{background:#3b2b4f;box-shadow:none}
+.acilis.kapandi .tabela::before{animation:none;opacity:.35}
+.acilis.kapandi .acilis-alt{color:var(--krem);font-size:17px}
 .bos-raf{padding:28px;border:3px dashed rgba(255,243,214,.3);border-radius:16px;color:var(--soluk);max-width:520px}
 
 /* ---- yardım panosu ---- */
@@ -404,7 +420,9 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
   <footer class="alt" id="alt">
     <span class="sinyal" aria-hidden="true"></span>
     <span id="lamba">Motor çalışıyor</span>
-    <span id="yerel">Siyah pencere oyunların motorudur; açık kalsın. Yalnızca bu bilgisayar erişebilir.</span>
+    <button type="button" class="motor-kapat" id="motor-kapat">Motoru kapat</button>
+    <span class="kapat-onay" id="kapat-onay" role="group" aria-label="Motoru kapatmayı onayla" hidden><span id="kapat-soru">Motor kapansın mı? Açık oyun da durur.</span><button type="button" class="evet" id="kapat-evet">Evet, kapat</button><button type="button" class="hayir" id="kapat-hayir">Vazgeç</button></span>
+    <span id="yerel">Motor bu bilgisayarda çalışır. Yalnızca bu bilgisayar erişebilir.</span>
     <span class="kutu-not" id="kutu-not" role="status" hidden><span class="lmb" aria-hidden="true"></span><span id="kutu-not-yazi"></span><button type="button" id="kutu-yeniden" hidden>Yeniden dene</button></span>
     <button type="button" class="yazi-dugme" id="yardim-ac">Yayına nasıl alırım?</button>
   </footer>
@@ -658,7 +676,7 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
       }
       location.href = s.j.adres || ('/oyun/' + encodeURIComponent(k.id) + '/');
     }).catch(function () {
-      geriAl('Motora ulaşılamadı. ' + P().pencere + ' kapandıysa ' + P().yeniden);
+      geriAl('Motora ulaşılamadı. ' + P().kapandiysa + P().yeniden);
       durumYaz(null);
     });
   }
@@ -696,12 +714,59 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
       }
     }).catch(function () { d.disabled = false; d.textContent = 'Durdur'; motorYok(); });
   });
+  // ---- motoru kapat: önce satırın içinde onay, sonra POST /kapat (özel başlıkla). Kapanınca sayfa sakin bir son hâle
+  // geçer ve motora sormayı bırakır (motor yokken her iki saniyede bir hata görmesin, açılış sahnesi geri gelmesin).
+  var kapandi = false;
+  function kapatOnayKapat(odak) {
+    $('kapat-onay').hidden = true;
+    $('kapat-evet').disabled = $('kapat-hayir').disabled = false;
+    $('kapat-evet').textContent = 'Evet, kapat';
+    $('kapat-soru').textContent = 'Motor kapansın mı? Açık oyun da durur.';
+    $('motor-kapat').hidden = !motorVar;
+    if (odak && motorVar) $('motor-kapat').focus({ preventScroll: true });
+  }
+  $('motor-kapat').addEventListener('click', function () {
+    $('motor-kapat').hidden = true;
+    $('kapat-onay').hidden = false;
+    $('kapat-hayir').focus({ preventScroll: true }); // yanlışlıkla Enter'a basılırsa motor kapanmasın
+  });
+  $('kapat-hayir').addEventListener('click', function () { kapatOnayKapat(true); });
+  $('kapat-onay').addEventListener('keydown', function (e) { if (e.key === 'Escape') { e.preventDefault(); kapatOnayKapat(true); } });
+  $('kapat-evet').addEventListener('click', function () {
+    $('kapat-evet').disabled = $('kapat-hayir').disabled = true;
+    $('kapat-evet').textContent = 'Kapatılıyor…';
+    fetch('/kapat', { method: 'POST', headers: { 'content-type': 'application/json', 'x-fabrika': 'kapat' }, cache: 'no-store', body: '{}' })
+      .then(function (r) {
+        if (r.ok) { motorKapandi(); return; }
+        $('kapat-evet').disabled = $('kapat-hayir').disabled = false;
+        $('kapat-evet').textContent = 'Evet, kapat';
+        $('kapat-soru').textContent = 'Motor kapatılamadı. Sayfayı yenileyip yeniden dene.';
+      })
+      .catch(function () { motorKapandi(); }); // motora ulaşılamıyorsa zaten kapalıdır
+  });
+  function motorKapandi() {
+    kapandi = true;
+    clearInterval(saat);
+    motorVar = false;
+    acilisAcik = true;
+    kartlar.forEach(onizlemeKapat); // önizlemeler motordan gelir; kapanınca boşa yüklenmesin
+    var a = $('acilis');
+    a.classList.add('kapandi');
+    a.hidden = false; a.classList.remove('kalk');
+    $('sayfa').setAttribute('inert', '');
+    $('acilis-liste').hidden = true;
+    $('beklemeden').hidden = $('yeniden').hidden = $('yalniz-dene').hidden = true;
+    $('acilis-alt').textContent = P().son;
+    a.focus({ preventScroll: true });
+  }
   function durumYaz(d) {
     if (d && d.kutuphane) kutuYaz(d.kutuphane);
     // motor geri geldiyse kabinlerde kalmış "Motora ulaşılamadı" iletisi silinir
     if (d) kartlar.forEach(function (k) { if (/Motora ulaşılamadı/.test(k.ileti.textContent)) k.ileti.textContent = ''; });
     $('alt').classList.toggle('koptu', !d);
     $('lamba').textContent = d ? 'Motor çalışıyor' : 'Motora ulaşılamıyor';
+    if (!d) kapatOnayKapat(false);
+    $('motor-kapat').hidden = !d || !$('kapat-onay').hidden;
     yerelYaz(d);
     var a = d && d.aktif;
     kartlar.forEach(function (k) {
@@ -761,10 +826,13 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
   // ---- TikTok kütüphanesi: hazır değilken kırmızı düğmeler sönük, altta sessiz bir not; inince kendiliğinden yanar
   // Başlatıcının ve motor penceresinin adı platforma göre. Motor /api/oyunlar içinde platformu söyler; motora ulaşılamazken
   // tarayıcının ipucu kullanılır (bilinmezse Windows). Testler window.FABRIKA_PLATFORM ile ipucunu ezer.
+  // Windows'ta BASLAT.bat motoru penceresiz açar: motor yokken "pencere" denmez, motorun kendisi kapalı denir. Motor
+  // penceresiz değilse (komut satırından elle açıldı) motor bunu arkaPlan: false ile söyler, o zaman pencereden söz edilir.
+  // Mac ve Linux'ta motor her zaman Terminal penceresidir.
   var PLATFORM_METIN = {
-    windows: { dosya: 'BASLAT.bat', pencere: 'Siyah pencere', yeniden: 'BASLAT.bat dosyasına yeniden çift tıkla.', ac: 'BASLAT.bat dosyasına çift tıkla.' },
-    mac: { dosya: 'BASLAT.command', pencere: 'Terminal penceresi', yeniden: 'BASLAT.command dosyasına yeniden çift tıkla; açılmazsa Terminal\'de klasöre girip sh BASLAT.command yaz.', ac: 'BASLAT.command dosyasına çift tıkla; açılmazsa Terminal\'de klasöre girip sh BASLAT.command yaz.' },
-    linux: { dosya: 'BASLAT.sh', pencere: 'Terminal penceresi', yeniden: 'BASLAT.sh dosyasını yeniden çalıştır.', ac: 'BASLAT.sh dosyasını çalıştır.' }
+    windows: { dosya: 'BASLAT.bat', pencere: 'Siyah pencere', kapali: 'Motor kapalı görünüyor.', kapandiysa: 'Motor kapandıysa ', yeniden: 'BASLAT.bat dosyasına yeniden çift tıkla.', ac: 'BASLAT.bat dosyasına çift tıkla.', son: 'Motor kapandı. Yeniden açmak için BASLAT\'a çift tıkla.' },
+    mac: { dosya: 'BASLAT.command', pencere: 'Terminal penceresi', kapali: 'Terminal penceresi kapalı görünüyor.', kapandiysa: 'Terminal penceresi kapandıysa ', yeniden: 'BASLAT.command dosyasına yeniden çift tıkla; açılmazsa Terminal\'de klasöre girip sh BASLAT.command yaz.', ac: 'BASLAT.command dosyasına çift tıkla; açılmazsa Terminal\'de klasöre girip sh BASLAT.command yaz.', son: 'Motor kapandı. Yeniden açmak için BASLAT\'a çift tıkla.' },
+    linux: { dosya: 'BASLAT.sh', pencere: 'Terminal penceresi', kapali: 'Terminal penceresi kapalı görünüyor.', kapandiysa: 'Terminal penceresi kapandıysa ', yeniden: 'BASLAT.sh dosyasını yeniden çalıştır.', ac: 'BASLAT.sh dosyasını çalıştır.', son: 'Motor kapandı. Yeniden açmak için BASLAT.sh dosyasını çalıştır.' }
   };
   var platform = (function () {
     var p = String(window.FABRIKA_PLATFORM || (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '');
@@ -772,8 +840,10 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
   })();
   function P() { return PLATFORM_METIN[platform] || PLATFORM_METIN.windows; }
   function yerelYaz(d) {
-    $('yerel').textContent = d ? P().pencere + ' oyunların motorudur; açık kalsın. Yalnızca bu bilgisayar erişebilir.'
-      : P().pencere + ' kapanmış olabilir. ' + P().yeniden;
+    $('yerel').textContent = !d ? P().kapali + ' ' + P().yeniden
+      : d.arkaPlan ? 'Motor arka planda çalışıyor, penceresi yok. Yalnızca bu bilgisayar erişebilir.'
+      : d.platform ? P().pencere + ' oyunların motorudur; açık kalsın. Yalnızca bu bilgisayar erişebilir.'
+      : 'Motor bu bilgisayarda çalışır. Yalnızca bu bilgisayar erişebilir.';
   }
   var kutu = { durum: 'bilinmiyor', sure: 0, t: 0, neden: '' }, kutuSonDurum = '', tamamZaman = null;
   function kutuHazir() { return kutu.durum === 'hazir'; }
@@ -827,10 +897,11 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
     li.querySelector('.s').textContent = s || '';
   }
   function acilisYaz() {
+    if (kapandi) return; // motor ana sayfadan kapatıldı: son hâl değişmez
     if (!motorVar) {
       satir('a-motor', 'hata', 'Motor çalışmıyor. ' + P().ac, 'Motor açılınca bu sayfa kendiliğinden devam eder.');
       satir('a-kutu', 'bekliyor', 'TikTok kütüphanesi'); satir('a-oyun', 'bekliyor', 'Oyunlar');
-      $('acilis-alt').textContent = P().pencere + ' kapalı görünüyor.';
+      $('acilis-alt').textContent = P().kapali;
       $('beklemeden').hidden = $('yeniden').hidden = $('yalniz-dene').hidden = true;
       acilisOdak();
       return;
@@ -930,15 +1001,23 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
     else { son = d; durumYaz(d); }
     if (acilisAcik) acilisYaz();
   }
-  function yokla() { oku().then(motorGeldi).catch(motorYok); }
+  var sonYokla = 0;
+  function yokla() {
+    if (kapandi) return;
+    sonYokla = Date.now();
+    oku().then(function (d) { if (!kapandi) motorGeldi(d); }).catch(function () { if (!kapandi) motorYok(); });
+  }
   yerelYaz(true);
   yokla();
   // Saniyede bir: açılışta saniye sayacı ve kütüphane notu yerel olarak ilerler; iki saniyede bir motora sorulur.
+  // Sekme arka plandayken de en az dakikada bir sorulur: penceresiz motor, hiçbir sayfa sesini duyurmayınca bir süre
+  // sonra kendiliğinden kapanır; açık duran ana sayfa motoru yaşatır (tarayıcı arka plan sekmesini dakikada bire kısar).
   var tik = 0;
-  setInterval(function () {
+  var saat = setInterval(function () {
     tik++;
     if (acilisAcik) acilisYaz(); else kutuNotYaz();
-    if (document.hidden || mesgul) return;
+    if (document.hidden) { if (!mesgul && Date.now() - sonYokla > 50000) yokla(); return; }
+    if (mesgul) return;
     if (acilisAcik || tik % 2 === 0) yokla();
   }, 1000);
   // Geri tuşuyla dönülünce (sayfa önbellekten gelir) düğmeler eski "Açılıyor…" hâlinde kalmasın.

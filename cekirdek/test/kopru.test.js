@@ -901,7 +901,7 @@ else{console.error('npm ERR! network (taklit)');process.exit(1);}`);
       await zp.goto(require('url').pathToFileURL(path.join(KOK, 'cekirdek', 'node-yok.html')).href); await bekle(300);
       const belirsiz = await zp.evaluate(() => document.getElementById('yeniden').textContent); await zc.close();
       kontrol('F: motor yokken açılış sahnesinde görünen düğme yok, odak sahnenin kendisinde', ['win', 'mac', 'linux'].every(a => yazi[a].odak === 'acilis'), Object.fromEntries(Object.entries(yazi).map(([a, v]) => [a, v.odak])));
-      kontrol('Mac / Linux: motor yokken ana sayfa ve Node.js yardım sayfası tarayıcının ipucuna göre başlatıcıyı söyler (Windows metni aynı kalır); emin değilse üç ad birden', /Motor çalışmıyor\. BASLAT\.bat dosyasına çift tıkla\./.test(yazi.win.motor) && yazi.win.alt === 'Siyah pencere kapalı görünüyor.' && /BASLAT\.command dosyasına çift tıkla/.test(yazi.mac.motor) && yazi.mac.alt === 'Terminal penceresi kapalı görünüyor.' && /BASLAT\.sh dosyasını çalıştır/.test(yazi.linux.motor) && /BASLAT\.bat dosyasına yeniden çift tıkla/.test(yazi.win.yardim) && /BASLAT\.command dosyasına yeniden çift tıkla/.test(yazi.mac.yardim) && /BASLAT\.sh dosyasını yeniden çalıştır/.test(yazi.linux.yardim) && /BASLAT\.bat.*BASLAT\.command.*BASLAT\.sh/.test(belirsiz), { yazi, belirsiz });
+      kontrol('Mac / Linux: motor yokken ana sayfa ve Node.js yardım sayfası tarayıcının ipucuna göre başlatıcıyı söyler (Windows\'ta motor penceresiz: "Motor kapalı görünüyor"); emin değilse üç ad birden', /Motor çalışmıyor\. BASLAT\.bat dosyasına çift tıkla\./.test(yazi.win.motor) && yazi.win.alt === 'Motor kapalı görünüyor.' && /BASLAT\.command dosyasına çift tıkla/.test(yazi.mac.motor) && yazi.mac.alt === 'Terminal penceresi kapalı görünüyor.' && /BASLAT\.sh dosyasını çalıştır/.test(yazi.linux.motor) && /BASLAT\.bat dosyasına yeniden çift tıkla/.test(yazi.win.yardim) && /BASLAT\.command dosyasına yeniden çift tıkla/.test(yazi.mac.yardim) && /BASLAT\.sh dosyasını yeniden çalıştır/.test(yazi.linux.yardim) && /BASLAT\.bat.*BASLAT\.command.*BASLAT\.sh/.test(belirsiz), { yazi, belirsiz });
     }
     // Boş Host başlığı da yabancı Host gibi geri çevrilir (tarayıcı gönderemez ama başka bir program gönderebilir)
     {
@@ -1180,6 +1180,127 @@ else{console.error('npm ERR! network (taklit)');process.exit(1);}`);
     }
     // ==== DENETİM 4 — sonu ====
     // ==== DENETİM 3 (N1–N5, hazır paket) — sonu ====
+    // ==== PENCERESİZ MOTOR (--gizli, POST /kapat, boşta kapanma) — başı ====
+    // BASLAT.bat motoru --gizli ile açar: kısa ömürlü başlatıcı, motoru ayrı ve penceresiz bir süreç olarak açar, motor yanıt
+    // verince çıkar. Motorun süreç numarası motor-gunlugu.txt'den okunur; testin açtığı her motor kendi numarasıyla kapatılır.
+    {
+      const kp = P + 10, A = 'http://127.0.0.1:' + kp, acilanlar = new Set();
+      const gizli = (kl, ek = [], env) => new Promise(res => {
+        const t0 = Date.now(), c = spawn(process.execPath, ['kopru.js', '--ana-sayfa', '--gizli', '--port', String(kp), '--kurulum-betigi', TAKLIT, ...ek], { cwd: kl, env: env || process.env, windowsHide: true });
+        let cikti = ''; c.stdout.on('data', d => cikti += d); c.stderr.on('data', d => cikti += d);
+        const t = setTimeout(() => { try { c.kill(); } catch (e) { } }, 45000);
+        c.on('exit', kod => { clearTimeout(t); setTimeout(() => res({ kod, cikti, ms: Date.now() - t0 }), 50); });
+      });
+      const gunluk = kl => oku(kl, 'motor-gunlugu.txt');
+      const motorPid = kl => { const m = [...gunluk(kl).matchAll(/Motor açıldı \(süreç (\d+)\)/g)]; const p = m.length ? +m[m.length - 1][1] : 0; if (p) acilanlar.add(p); return p; };
+      const kapiBos = () => new Promise(res => { const s = require('net').connect(kp, '127.0.0.1'); s.on('connect', () => { s.destroy(); res(false); }); s.on('error', e => res(e.code === 'ECONNREFUSED')); });
+      const oldu = (pid, ms) => bekleKosul(() => !yasiyor(pid), ms);
+      const kapat = (baslik = {}, yontem = 'POST') => new Promise(res => {
+        const veri = '{}', r = http.request({ host: '127.0.0.1', port: kp, path: '/kapat', method: yontem, headers: { host: '127.0.0.1:' + kp, 'content-type': 'application/json', 'content-length': yontem === 'POST' ? 2 : 0, ...baslik } }, y => { let g = ''; y.on('data', c => g += c); y.on('end', () => { let j = null; try { j = JSON.parse(g); } catch (e) { } res({ kod: y.statusCode, j, bas: y.headers }); }); });
+        r.on('error', e => res({ kod: 0, hata: e.code })); r.end(yontem === 'POST' ? veri : undefined);
+      });
+      const durum = async () => { try { return JSON.parse((await al(A + '/api/oyunlar')).govde); } catch (e) { return null; } };
+
+      // (1) Açılış: başlatıcı 0 ile çıkar, motor arka planda yanıt verir, günlük yazılır, motorun penceresi yok
+      const kl = anaKur('gizli-ana'); fs.writeFileSync(path.join(kl, 'kurulum-mod.txt'), 'tamam 0');
+      const g1 = await gizli(kl), pid1 = motorPid(kl), d1 = await durum();
+      kontrol('Penceresiz motor: --gizli başlatıcı motor yanıt verince 0 ile çıkar (BASLAT.bat penceresi kendiliğinden kapanır); motor ayrı süreçte yaşar, /api/oyunlar "arkaPlan" ve kısa bir motor kimliği söyler (klasör yolu yok)', g1.kod === 0 && g1.ms < 20000 && pid1 > 0 && yasiyor(pid1) && !!d1 && d1.arkaPlan === true && /^[0-9a-f]{16}$/.test(d1.motor) && !JSON.stringify(d1).toLowerCase().includes(path.basename(kl).toLowerCase()), { kod: g1.kod, ms: g1.ms, pid1, arkaPlan: d1 && d1.arkaPlan, motor: d1 && d1.motor, cikti: g1.cikti.trim().slice(0, 300) });
+      kontrol('Penceresiz motor: çıktısı motor-gunlugu.txt dosyasına gider (açılış satırı ve süreç numarası); dosya .gitignore\'da', /==== .* motor başlatılıyor ====/.test(gunluk(kl)) && /Oyun Fabrikası açık/.test(gunluk(kl)) && /Motoru kapat/.test(gunluk(kl)) && /^motor-gunlugu\.txt$/m.test(fs.readFileSync(path.join(KOK, '.gitignore'), 'utf8')), gunluk(kl).slice(-400));
+      if (process.platform === 'win32' && pid1) {
+        const ps = cp.spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', '$p=Get-Process -Id ' + pid1 + ' -ErrorAction SilentlyContinue; $c=@(Get-CimInstance Win32_Process -Filter "ParentProcessId=' + pid1 + ' and Name=\'conhost.exe\'").Count; "$($p.MainWindowHandle)|$c|$($p.ProcessName)"'], { encoding: 'utf8', windowsHide: true, timeout: 30000 });
+        kontrol('Penceresiz motor (Windows): motor sürecinin penceresi yok (MainWindowHandle 0) ve konsolu yok (altında conhost.exe yok)', ps.stdout.trim() === '0|0|node', ps.stdout.trim() || ps.stderr);
+      }
+      // (2) Aynı klasörden ikinci açılış: yeni motor açılmaz, çalışan kullanılır
+      const g2 = await gizli(kl);
+      kontrol('Penceresiz motor: aynı klasörden ikinci açılış ikinci motor açmaz ("zaten açık", 0 ile çıkar), çalışan motor aynı süreç', g2.kod === 0 && /zaten açık/.test(g2.cikti) && motorPid(kl) === pid1 && yasiyor(pid1) && (gunluk(kl).match(/motor başlatılıyor/g) || []).length === 1, { kod: g2.kod, cikti: g2.cikti.trim(), pid: motorPid(kl) });
+      // (3) POST /kapat: özel başlıksız, başka siteden, yanlış yöntemle geri çevrilir; ön isteğe izin verilmez
+      const kendi = { origin: 'http://127.0.0.1:' + kp };
+      const kr = {
+        get: await kapat({}, 'GET'), basliksiz: await kapat(kendi), basliksizKaynaksiz: await kapat({}), yabanci: await kapat({ 'x-fabrika': 'kapat', origin: 'http://kotu.example' }),
+        baskaSite: await kapat({ 'x-fabrika': 'kapat', ...kendi, 'sec-fetch-site': 'cross-site' }), host: await kapat({ 'x-fabrika': 'kapat', host: 'kotu.example:' + kp }),
+        yanlisDeger: await kapat({ 'x-fabrika': 'evet', ...kendi }), duzMetin: await kapat({ 'x-fabrika': 'kapat', ...kendi, 'content-type': 'text/plain' }),
+        onIstek: await kapat({ origin: 'http://kotu.example', 'access-control-request-method': 'POST', 'access-control-request-headers': 'x-fabrika' }, 'OPTIONS')
+      };
+      const krKod = Object.fromEntries(Object.entries(kr).map(([a, v]) => [a, v.kod]));
+      kontrol('POST /kapat: X-Fabrika başlığı olmadan, başka siteden (Origin, Sec-Fetch-Site, Host), JSON olmadan ya da GET ile geri çevrilir; başka sitenin ön isteğine (OPTIONS) izin verilmez; motor ayakta kalır', kr.get.kod === 405 && ['basliksiz', 'basliksizKaynaksiz', 'yabanci', 'baskaSite', 'host', 'yanlisDeger'].every(a => kr[a].kod === 403) && kr.duzMetin.kod === 415 && kr.onIstek.kod >= 400 && !Object.keys(kr.onIstek.bas || {}).some(h => /^access-control-allow/.test(h)) && yasiyor(pid1) && !!(await durum()), krKod);
+      // (4) Başka bir klasörün başlatıcısı: çalışan motora kapanmasını söyler, kapı boşalınca kendi motorunu açar
+      const kl2 = anaKur('gizli-baska'); fs.writeFileSync(path.join(kl2, 'kurulum-mod.txt'), 'tamam 0');
+      const g3 = await gizli(kl2), pid2 = motorPid(kl2), d2 = await durum();
+      kontrol('Penceresiz motor: başka klasörün başlatıcısı çalışan motoru kapatır (POST /kapat), kapı boşalınca kendi motorunu açar; eskisi kalmaz', g3.kod === 0 && await oldu(pid1, 8000) && pid2 > 0 && pid2 !== pid1 && yasiyor(pid2) && !!d2 && d2.motor !== d1.motor && /ana sayfadan kapatıldı/.test(gunluk(kl)), { kod: g3.kod, cikti: g3.cikti.trim().slice(0, 300), pid1Yasiyor: yasiyor(pid1), pid2, motor: [d1.motor, d2 && d2.motor] });
+      // (5) Başlıklı POST /kapat (başlatıcı gibi, Origin'siz): 200, motor çıkar, kapı boşalır
+      const ky = await kapat({ 'x-fabrika': 'kapat' });
+      const kapandi = await oldu(pid2, 8000), bos = kapandi && await kapiBos();
+      kontrol('POST /kapat (X-Fabrika: kapat): 200 ve "Motor kapandı" yanıtı; motor süreci çıkar, kapı boşalır, günlüğe yazılır', ky.kod === 200 && ky.j && ky.j.tamam === true && /^Motor kapandı\./.test(ky.j.ileti) && kapandi && bos && /ana sayfadan kapatıldı/.test(gunluk(kl2)), { kod: ky.kod, j: ky.j, kapandi, bos });
+      // (6) Boşta kapanma: hiçbir sayfa yokken kısa test süresinden sonra kendiliğinden kapanır
+      const bosEnv = { ...process.env, KOPRU_BOS_KAPANIS_MS: '2500' };
+      const kl3 = anaKur('gizli-bos'); fs.writeFileSync(path.join(kl3, 'kurulum-mod.txt'), 'tamam 0');
+      const g4 = await gizli(kl3, [], bosEnv), pid3 = motorPid(kl3), t4 = Date.now();
+      const kendiliginden = g4.kod === 0 && pid3 > 0 && await oldu(pid3, 12000);
+      kontrol('Boşta kapanma: hiçbir sayfa bağlı değilken ve istek gelmezken (test süresi 2,5 sn) motor kendiliğinden, düzgün kapanır; günlüğe bir satır yazar, kapı boşalır', kendiliginden && Date.now() - t4 >= 1500 && /kendiliğinden kapanıyor/.test(gunluk(kl3)) && await kapiBos(), { kod: g4.kod, pid3, ms: Date.now() - t4, gunluk: gunluk(kl3).slice(-300) });
+      // (7) Bağlı bir oyun sayfası soketi varken boşta kapanma olmaz (yayında saatlerce arka planda kalan sekme); soket gidince kapanır
+      const kl4 = anaKur('gizli-soket'); fs.writeFileSync(path.join(kl4, 'kurulum-mod.txt'), 'tamam 0');
+      const g5 = await gizli(kl4, [], bosEnv), pid4 = motorPid(kl4);
+      const bs = await gonder(kp, '/api/baslat', { oyun: 'a-oyun', kip: 'deneme' });
+      const kim = bs.j && bs.j.aktif ? bs.j.aktif.calistirma : '000000000000';
+      const so = await new Promise(res => {
+        const s = require('net').connect(kp, '127.0.0.1', () => s.write('GET /olay/a-oyun/' + kim + ' HTTP/1.1\r\nHost: 127.0.0.1:' + kp + '\r\nOrigin: http://127.0.0.1:' + kp + '\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n'));
+        let ilk = ''; s.on('data', d => { if (!ilk) { ilk = d.toString('latin1').split('\r\n')[0]; res({ s, ilk }); } }); s.on('error', () => res({ s, ilk: 'hata' })); s.on('close', () => { s.kapandi = true; });
+      });
+      await bekle(8000); // test süresinin üç katı; bu arada motora hiç istek gitmez
+      const soketliYasiyor = yasiyor(pid4) && !so.s.kapandi;
+      so.s.destroy(); const t7 = Date.now();
+      const soketsizKapandi = await oldu(pid4, 12000);
+      kontrol('Boşta kapanma: oyun sayfasının soketi bağlıyken (istek gelmese de, test süresinin üç katı) motor kapanmaz; soket ayrılınca süre dolunca kapanır', g5.kod === 0 && /^HTTP\/1\.1 101/.test(so.ilk) && soketliYasiyor && soketsizKapandi && Date.now() - t7 >= 1500, { kod: g5.kod, ilk: so.ilk, soketliYasiyor, soketsizKapandi, ms: Date.now() - t7 });
+      // (8) Motor açılırken düşerse: başlatıcı düz bir cümle ve günlüğün son satırlarını yazar, 1 ile çıkar (BASLAT.bat pencereyi tutar)
+      const kl5 = anaKur('gizli-duser');
+      fs.writeFileSync(path.join(kl5, 'kopru.js'), fs.readFileSync(path.join(KOK, 'kopru.js'), 'utf8').replace(/^(#![^\n]*\n)?/, b => b + "if (process.argv.includes('--arka-plan')) { console.log('deneme: motor açılırken düştü'); process.exit(3); }\n"));
+      const g6 = await gizli(kl5);
+      kontrol('Penceresiz motor açılırken düşerse başlatıcı "Oyun motoru açılamadı" der, günlüğün son satırlarını gösterir ve 1 ile çıkar', g6.kod === 1 && /Oyun motoru açılamadı/.test(g6.cikti) && /deneme: motor açılırken düştü/.test(g6.cikti) && g6.ms < 20000, { kod: g6.kod, ms: g6.ms, cikti: g6.cikti.trim().slice(0, 400) });
+      // (9) Ana sayfadaki "Motoru kapat": satırın içinde onay; Vazgeç geri döner; Evet motoru kapatır, sayfa sakin son hâle geçer ve sormayı bırakır
+      const kl6 = anaKur('gizli-sayfa'); fs.writeFileSync(path.join(kl6, 'kurulum-mod.txt'), 'tamam 0');
+      const g7 = await gizli(kl6), pid6 = motorPid(kl6);
+      const sc = await b.newContext({ viewport: { width: 1366, height: 768 } }), sp = await sayfaAc(sc, A + '/');
+      await sp.waitForFunction(() => document.getElementById('acilis').classList.contains('kalk'), null, { timeout: 12000 }).catch(() => { });
+      await bekle(300);
+      const s1 = await sp.evaluate(() => ({ yerel: document.getElementById('yerel').textContent, dugme: !document.getElementById('motor-kapat').hidden, onay: !document.getElementById('kapat-onay').hidden }));
+      await sp.click('#motor-kapat'); await bekle(150);
+      const s2 = await sp.evaluate(() => ({ onay: !document.getElementById('kapat-onay').hidden, dugme: !document.getElementById('motor-kapat').hidden, odak: document.activeElement && document.activeElement.id, soru: document.getElementById('kapat-soru').textContent }));
+      await sp.click('#kapat-hayir'); await bekle(150);
+      const s3 = await sp.evaluate(() => ({ onay: !document.getElementById('kapat-onay').hidden, dugme: !document.getElementById('motor-kapat').hidden, odak: document.activeElement && document.activeElement.id }));
+      // Telefon genişliğinde kabinler sığmaz, salon yana kayar; salonun ışık payı alt satırın düğmesini örtmemeli
+      const dp = await sayfaAc(sc, A + '/'); await dp.setViewportSize({ width: 390, height: 844 });
+      await dp.waitForFunction(() => document.getElementById('acilis').hidden, null, { timeout: 12000 }).catch(() => { }); // açılış sahnesi tamamen kalktı
+      await bekle(300);
+      const darUst = await dp.evaluate(() => { const e = document.getElementById('motor-kapat'); e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(), u = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return u === e || (u && (u.id || u.className)); });
+      await dp.close();
+      await bekle(2500);
+      const vazgecYasiyor = yasiyor(pid6);
+      kontrol('Ana sayfa (penceresiz motor): alt satır "arka planda çalışıyor" der, siyah pencereden söz etmez; "Motoru kapat" satırın içinde onay sorar, odak Vazgeç\'te; Vazgeç geri döner, motor açık kalır; telefon genişliğinde düğmenin üstünde başka öğe yok', g7.kod === 0 && /^Motor arka planda çalışıyor/.test(s1.yerel) && !/[Ss]iyah pencere/.test(s1.yerel) && s1.dugme && !s1.onay && s2.onay && !s2.dugme && s2.odak === 'kapat-hayir' && /Motor kapansın mı\?/.test(s2.soru) && !s3.onay && s3.dugme && s3.odak === 'motor-kapat' && vazgecYasiyor && darUst === true, { s1, s2, s3, vazgecYasiyor, darUst });
+      await sp.click('#motor-kapat'); await bekle(100); await sp.click('#kapat-evet');
+      await sp.waitForFunction(() => document.getElementById('acilis').classList.contains('kapandi'), null, { timeout: 8000 }).catch(() => { });
+      const sayfaKapatti = await oldu(pid6, 8000);
+      const istekler = []; sp.on('request', r => istekler.push(r.url()));
+      await bekle(4500);
+      const s4 = await sp.evaluate(() => ({ alt: document.getElementById('acilis-alt').textContent, acik: !document.getElementById('acilis').hidden && !document.getElementById('acilis').classList.contains('kalk'), liste: !document.getElementById('acilis-liste').hidden, dugmeler: [...document.querySelectorAll('#acilis button')].filter(x => !x.hidden).length }));
+      kontrol('Ana sayfa: "Evet, kapat" motoru kapatır; sayfa sakin son hâle geçer ("Motor kapandı. Yeniden açmak için BASLAT\'a çift tıkla."), düğme ve liste yok, motora sormayı bırakır', sayfaKapatti && s4.acik && s4.alt === 'Motor kapandı. Yeniden açmak için BASLAT\'a çift tıkla.' && !s4.liste && s4.dugmeler === 0 && istekler.length === 0, { sayfaKapatti, ...s4, istekler: istekler.slice(0, 4) });
+      await sc.close();
+      // (10) BASLAT.bat'ın kendisi (Windows): penceresiz motoru açınca kendi işi biter (komut istemi beklemez); motor açık kalır.
+      // Kopyada tarayıcıyı açan --ac yerine test kapısı ve kurulum taklidi verilir; başka her satır aynıdır.
+      if (process.platform === 'win32') {
+        const kl7 = anaKur('gizli-bat'); fs.writeFileSync(path.join(kl7, 'kurulum-mod.txt'), 'tamam 0');
+        const batKaynak = fs.readFileSync(path.join(KOK, 'BASLAT.bat'), 'latin1');
+        fs.copyFileSync(TAKLIT, path.join(kl7, 'kurulum-taklit.js')); // göreli ad: geçici klasörün yolu bat dosyasına yazılmaz
+        fs.writeFileSync(path.join(kl7, 'BASLAT.bat'), batKaynak.split('--ana-sayfa --ac --gizli').join('--ana-sayfa --gizli --port ' + kp + ' --kurulum-betigi kurulum-taklit.js'), 'latin1');
+        const t8 = Date.now(), bv = cp.spawnSync('cmd.exe', ['/d', '/s', '/c', '""' + path.join(kl7, 'BASLAT.bat') + '""'], { windowsVerbatimArguments: true, cwd: os.tmpdir(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 40000, windowsHide: true });
+        const pid7 = motorPid(kl7), d7 = await durum();
+        kontrol('BASLAT.bat (Windows): iki dalda da --gizli; komut istemi motor hazır olunca kendiliğinden biter (0), motor arka planda açık kalır', (batKaynak.match(/kopru\.js --ana-sayfa --ac --gizli\r\n/g) || []).length === 2 && bv.status === 0 && Date.now() - t8 < 30000 && pid7 > 0 && yasiyor(pid7) && !!d7 && d7.arkaPlan === true, { kod: bv.status, ms: Date.now() - t8, pid7, cikti: (bv.stdout + bv.stderr).slice(0, 300) });
+        await kapat({ 'x-fabrika': 'kapat' }); await oldu(pid7, 8000);
+      }
+      // Testin açtığı motorlardan yaşayan kaldıysa (bir kontrol kaldıysa) kendi numarasıyla kapatılır.
+      for (const p of acilanlar) if (yasiyor(p)) { try { process.kill(p); } catch (e) { } }
+      await bekle(300);
+    }
+    // ==== PENCERESİZ MOTOR — sonu ====
   }
   // ==== DENETİM 2 (A–H) VE MAC / LINUX — sonu ====
   kontrol('Köprü testlerinde sayfada hata çıkmadı', hatalar.length === 0, hatalar.slice(0, 4).join(' | '));
