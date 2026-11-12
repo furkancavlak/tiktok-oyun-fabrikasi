@@ -278,7 +278,8 @@ input[type=range]{accent-color:var(--vurgu);width:100%;min-width:80px;margin:0}
 .hediyeler{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:4px}
 .hediyeler .dugme{flex-direction:column;align-items:flex-start;gap:0;padding:5px 5px 5px 7px;min-width:0;border-radius:9px}
 .hediyeler .h-esik{max-width:100%;font-size:12px;font-weight:700;letter-spacing:-.01em;color:var(--vurgu);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.hediyeler .h-ad{font-size:12px;color:var(--soluk);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* kademenin adı kesilmez, gerekirse ikinci satıra iner ("Davulcu coşar"); eşik ("1.000 jeton") tek satırda kalır */
+.hediyeler .h-ad{font-size:12px;line-height:1.25;color:var(--soluk);max-width:100%;overflow-wrap:break-word;hyphens:auto}
 .oto-satir{justify-content:space-between;gap:6px 10px}
 
 /* Kip ilk karede: köprü <html data-kip> yazar (kopru.js); betik çalışmadan da canlı yayında deneme izleyicisi kartı
@@ -395,6 +396,33 @@ body:not(.yayin) .cik-yayin{display:none}
   .bildirim div,.pankart{animation-duration:.01s}
   .pankart{animation:none}
 }
+
+/* ==== YouTube'dan şarkı (cekirdek/js/12-youtube.js) — başı ====
+   Kutu #yt-kutu içine (masada Müzik kartının sonuna) kurulur; öğeleri modül yazar. Oynatıcı YouTube'un kuralı gereği en
+   az 200 × 200 px görünür: genişlik kartın iç genişliği, yükseklik 16:9 ama 200 px'ten az değil. Dar sütunda (1366×768'de
+   ~230 px) link alanı tam satır, düğmeler altında; oynatıcı link satırının altındadır, sütun kaydırılınca link hep yukarıda. */
+/* position: görünmez etiket (.gorunmez, mutlak konumlu) kaydırılan sütunun içinde kalsın, sayfayı uzatmasın */
+.yt-kutu{position:relative;display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid var(--acik-b)}
+.yt-kutu .yt-satir{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center}
+.yt-kutu .yt-satir > .alan{flex:1 1 100%}
+.yt-kutu .yt-satir > .dugme{flex:1 1 0;justify-content:center}
+.yt-ses-satir input[type=range]{flex:1 1 80px;width:auto}
+.yt-kutu input[type=text]{background:var(--murekkep);border:1px solid var(--cizgi);border-radius:9px;padding:8px 11px;min-width:0;width:100%;
+  transition:border-color .15s}
+.yt-kutu input[type=text]:hover{border-color:var(--soluk)}
+.yt-kutu input::placeholder{color:var(--soluk);opacity:.7}
+.yt-kutu .dugme:disabled{opacity:.45;cursor:default;transform:none}
+.yt-kutu .dugme:disabled:hover{border-color:var(--cizgi)}
+.yt-ses-satir label{font-size:12px;color:var(--soluk);white-space:nowrap}
+.yt-oynatici{position:relative;width:100%;min-width:200px;min-height:200px;aspect-ratio:16/9;border-radius:10px;overflow:hidden;
+  background:var(--murekkep);border:1px solid var(--cizgi)}
+.yt-oynatici > *{position:absolute;inset:0;width:100%;height:100%;border:0}
+.yt-ileti{margin:0;font-size:12.5px;line-height:1.45;color:var(--acik)}
+.yt-ileti:empty{display:none}
+.yt-ileti[data-tur=hata]{padding:9px 12px;border-radius:10px;background:var(--sicak-a);border:1px solid var(--sicak-b)}
+.yt-ileti[data-tur=calis]{color:var(--serin);font-weight:500}
+.yt-uyari{font-size:11.5px}
+/* ==== YouTube'dan şarkı — sonu ==== */
 </style>
 </head>
 <body>
@@ -1304,6 +1332,10 @@ class Muzik {
     this.hazirSira = 0;
     this.hz = null;
     this.calar = null;
+    // disSustur: başka bir kaynak (YouTube, 12-youtube.js) çalarken oyunun müziği kısık; disAd o kaynağın sahnede
+    // yazılacak adı (temizlenmiş, kısaltılmış düz metin), yoksa null
+    this.disSessiz = false;
+    this.disAd = null;
   }
   simdi() { return this.acik ? this.ctx.currentTime : performance.now() / 1000; }
   beatAt(t) {
@@ -1439,7 +1471,16 @@ class Muzik {
     sik.release.value = 0.16;
     const son = ctx.createGain();
     son.gain.value = this.duzey; /* düzey sıkıştırıcıdan sonra ayarlanır */
-    ana.connect(sik);
+    // İki yol, ikisi de sıkıştırıcıdan ve ana düzeyden (son: ses aç / kapat, düzey kaydırıcısı) geçer:
+    // muzikYol: çalan müziğin hepsi (ana'ya bağlanan davul, ezgi, eşlik, yankı); disSustur yalnız bunu kısar.
+    // efektYol: tek seferlik efekt sesleri (hediye zili); YouTube çalarken de duyulur. Yeni efekt buraya bağlanır.
+    const muzikYol = ctx.createGain();
+    muzikYol.gain.value = this.disSessiz ? 0 : 1;
+    const efektYol = ctx.createGain();
+    efektYol.gain.value = 0.7; // ana ile aynı düzey: zil eskisi kadar yüksek
+    ana.connect(muzikYol);
+    muzikYol.connect(sik);
+    efektYol.connect(sik);
     sik.connect(son);
     son.connect(ctx.destination);
     // açık hava yankısı: sönümlenen gürültüden üretilmiş kısa bir tepki
@@ -1461,7 +1502,7 @@ class Muzik {
     const gb = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate), gd = gb.getChannelData(0);
     for (let i = 0; i < gd.length; i++)
       gd[i] = r() * 2 - 1;
-    this.ses = { ana, son, davul, yanki: yg.gain, yankiDugum: yanki, gurultu: gb };
+    this.ses = { ana, son, muzikYol, efektYol, davul, yanki: yg.gain, yankiDugum: yanki, gurultu: gb };
     this.takim.kur(this, ctx);
   }
   dum(t, v) {
@@ -1522,7 +1563,7 @@ class Muzik {
       g.gain.setValueAtTime(v, t);
       g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5 + 0.3 * guc);
       o.connect(g);
-      g.connect(this.ses.ana);
+      g.connect(this.ses.efektYol);
       o.start(t);
       o.stop(t + 1);
     }
@@ -1581,6 +1622,19 @@ class Muzik {
     if (this.acik)
       this.ses.son.gain.setTargetAtTime(v, this.ctx.currentTime, 0.05);
   }
+  // Oyunun müziğini dışarıdan kısar / geri açar (12-youtube.js: YouTube'dan şarkı çalarken). Yalnız müzik yolu
+  // (muzikYol) ve hazır parçanın ses öğesi susar; müzik sessiz akmaya devam eder. Efekt yolu (hediye zili) duyulmayı
+  // sürdürür. Vuruş saati (B), hava, tempo, ses açık / kapalı durumu ve ana düzey hiç değişmez.
+  // ad: dış kaynağın sahnede yazılacak adı (yabancıdan gelir): temizlenir, kısaltılır, boşsa "YouTube'dan şarkı";
+  // muzik.disAd'a düşer, sahnedeki çalan satırı (35-kare.js) onu düz metin olarak yazar. disSustur(false): disAd null.
+  disSustur(evet, ad) {
+    this.disSessiz = !!evet;
+    this.disAd = evet ? kisalt(temiz(ad), 36) || 'YouTube\'dan şarkı' : null;
+    if (this.calar)
+      this.calar.muted = this.disSessiz;
+    if (this.ses)
+      this.ses.muzikYol.gain.setTargetAtTime(this.disSessiz ? 0 : 1, this.ctx.currentTime, 0.05);
+  }
 
   /* ---- hazır parçalar ----
    * Oyunun kendi muzik/ klasöründeki (oyunlar/<ad>/muzik/) kayıtlar bir ses öğesiyle çalınır; vuruş saati o kaydın
@@ -1623,6 +1677,7 @@ class Muzik {
       this.hz.bos = { b: this.enVurus, s: performance.now() / 1000, hiz: this.parcalar[this.hz.no].bpm / 60 * a.playbackRate };
     a.src = this.muzikKok + p.dosya;
     a.volume = clamp(this.duzey / 0.7, 0, 1);
+    a.muted = this.disSessiz;
     a.playbackRate = clamp(this.carpan, 1, 1.25);
     try {
       await a.play();
@@ -1704,6 +1759,401 @@ class Muzik {
   calanBpm() { return this.hazirCal ? this.parcalar[this.hz.no].bpm * this.calar.playbackRate : this.hava.bpm * this.carpan; }
 }
 const muzik = new Muzik();
+
+/* ── cekirdek/js/12-youtube.js ── */
+/* YOUTUBE MÜZİĞİ — yayıncı Müzik bölümüne bir YouTube linki yapıştırır, "Çal"a basar; şarkı oyunun kendi müziği
+ * yerine YouTube'dan çalar.
+ * - Yalnız resmî YouTube IFrame Player API'si; oynatıcı youtube-nocookie.com'dan açılır. API betiği ilk "Çal"a
+ *   basılınca yüklenir: basılmadıkça sayfa YouTube'a hiçbir istek göndermez (AGENTS.md değişmez 6'nın tek istisnası).
+ *   İndirme, ses ayıklama, aracı hizmet yok.
+ * - YouTube çalarken oyunun müziği muzik.disSustur(true, şarkının adı) ile kısılır (yalnız müzik yolu; hediye zili
+ *   gibi efektler duyulmaya devam eder); sahnedeki çalan satırında şarkının adı yazar (muzik.disAd). Durunca, hata
+ *   olunca ya da "Oyunun müziğine dön"e basılınca müzik kaldığı hâliyle geri gelir. Vuruş saati (B) hiç değişmez: dans
+ *   oyunun kendi temposunda sürer, şarkıyı izlemez (bilerek: yayıncı tempo eşlemeyi istemedi).
+ * - Kutunun bütün öğeleri burada, createElement / textContent ile #yt-kutu içine kurulur. #yt-kutu yoksa hiçbir şey
+ *   yapılmaz. Yapıştırılan metin hiçbir zaman HTML'e ya da bir adrese girmez: linkCoz yalnız sıkı kalıplara uyan
+ *   11 karakterlik video kimliğini (ve varsa liste kimliğini) çıkarır, oynatıcıya yalnız bunlar verilir.
+ * - Oynatıcı çerçevesi (iframe) yerinden hiç oynatılmaz (taşınan iframe yeniden yüklenir ve şarkı kesilir). Yalnız
+ *   sahne görünümünde (#yayin) panel display:none olur; çerçeve sayfada kalır, tarayıcı içindeki şarkıyı çalmayı sürdürür.
+ * - Son çalışan link (yalnız doğrulanmış kimliklerden kurulan biçimi) ve YouTube ses düzeyi oyun başına saklanır
+ *   (localStorage "<oyun id>-youtube"). Sayfa açılınca hiçbir şey kendiliğinden çalmaz.
+ * Dışarıya: CanliOyun.youtube = { kur(kutu), linkCoz(metin), cal(link), durdur(), don(), durum() }.
+ */
+const YT_MUZIK = (() => {
+  const API = 'https://www.youtube.com/iframe_api', OYNATICI = 'https://www.youtube-nocookie.com';
+  const SAKLA_AD = String(OYUN.id || 'canli-oyun') + '-youtube';
+  const KIMLIK = /^[A-Za-z0-9_-]{11}$/, LISTE = /^[A-Za-z0-9_-]{10,64}$/;
+  const YAZI = {
+    degil: 'Bu bir YouTube linki değil.',
+    disk: 'YouTube müziği yalnız BASLAT ile açılan oyunda çalışır.',
+    aciliyor: 'YouTube açılıyor…',
+    caliyor: 'YouTube\'dan çalıyor. Oyunun müziği sessiz; dans oyunun kendi temposunda sürer.',
+    basla: 'Şarkı kendiliğinden başlamadı. Oynatıcının ortasındaki oynat düğmesine bas.',
+    durdu: 'Durdu. Oyunun müziği geri geldi.',
+    bitti: 'Şarkı bitti. Oyunun müziği geri geldi.',
+    don: 'Oyunun müziği çalıyor.',
+    api: 'YouTube açılamadı: internet yok ya da YouTube bu bilgisayarda engelli. Oyunun müziği çalmaya devam ediyor.',
+    yok: 'Bu video bulunamadı: silinmiş, gizli ya da link eksik olabilir. Başka bir link dene.',
+    gomme: 'Bu video burada çalınamıyor, sahibi başka sitelerde oynatmayı kapatmış. Başka bir link dene.',
+    html5: 'Bu video tarayıcıda oynatılamadı. Başka bir link dene.',
+    tanima: 'YouTube bu sayfayı tanıyamadı. Oyunu BASLAT ile açıp yeniden dene.',
+    uyari: 'Telifli şarkı çalarsan TikTok yayının sesini kısabilir ya da yayını kapatabilir, sorumluluk sende.'
+  };
+  const hataYazi = k => k === 101 || k === 150 ? YAZI.gomme : k === 2 || k === 100 ? YAZI.yok : k === 5 ? YAZI.html5 : k === 153 ? YAZI.tanima :
+    'YouTube bu videoyu oynatamadı (hata ' + k + '). Başka bir link dene.';
+
+  // Yapıştırılan metinden { video, liste } ya da null. Kabul: youtube.com/watch?v=, youtu.be/, youtube.com/shorts/,
+  // youtube.com/live/, music.youtube.com/watch?v= (www. ve m. de), başında https:// olsun olmasın, ek parametrelerle.
+  // Ana bilgisayar adı birebir karşılaştırılır (youtube.com.baska.site, kullanıcı adlı, kapılı adresler geçmez).
+  function linkCoz(metin) {
+    let s = typeof metin === 'string' ? metin.trim() : '';
+    if (!s || s.length > 400 || /[\s<>"'`\\]/.test(s))
+      return null;
+    if (!/^[a-z][a-z0-9+.-]*:/i.test(s))
+      s = 'https://' + s;
+    let u;
+    try {
+      u = new URL(s);
+    }
+    catch (e) {
+      return null;
+    }
+    if ((u.protocol !== 'https:' && u.protocol !== 'http:') || u.username || u.password || u.port)
+      return null;
+    const h = u.hostname, yol = u.pathname;
+    let video = null, m;
+    if (h === 'youtu.be')
+      video = (m = /^\/([A-Za-z0-9_-]{11})\/?$/.exec(yol)) && m[1];
+    else if (h === 'youtube.com' || h === 'www.youtube.com' || h === 'm.youtube.com' || h === 'music.youtube.com') {
+      if (yol === '/watch' || yol === '/watch/')
+        video = u.searchParams.get('v');
+      else if (h !== 'music.youtube.com' && (m = /^\/(?:shorts|live)\/([A-Za-z0-9_-]{11})\/?$/.exec(yol)))
+        video = m[1];
+    }
+    if (!video || !KIMLIK.test(video))
+      return null;
+    const liste = u.searchParams.get('list');
+    return { video, liste: liste && LISTE.test(liste) ? liste : null };
+  }
+  // Saklanan ve kutuya geri yazılan biçim: yalnız doğrulanmış kimliklerden kurulur (yapıştırılan metin saklanmaz).
+  const linkYaz = l => 'https://www.youtube.com/watch?v=' + l.video + (l.liste ? '&list=' + l.liste : '');
+
+  function oku() {
+    try {
+      const v = JSON.parse(localStorage.getItem(SAKLA_AD) || '{}'), l = linkCoz(v && v.link);
+      return { link: l ? linkYaz(l) : '', ses: Number.isFinite(+v.ses) ? clamp(Math.round(+v.ses), 0, 100) : 80 };
+    }
+    catch (e) {
+      return { link: '', ses: 80 };
+    }
+  }
+  function yaz(ek) {
+    try {
+      localStorage.setItem(SAKLA_AD, JSON.stringify(Object.assign(oku(), ek)));
+    }
+    catch (e) { }
+  }
+
+  let kutu = null, el = null, apiSoz = null, oyuncu = null, nesil = 0, caliyor = false, donus = 0, basla = 0;
+
+  // API betiğini bir kez yükler. Başarısız olursa (internet yok, engelli, 15 sn'de hazır olmadı) bir sonraki "Çal"
+  // yeniden dener.
+  function apiYukle() {
+    if (apiSoz)
+      return apiSoz;
+    apiSoz = new Promise((coz, red) => {
+      let bitti = false;
+      const s = document.createElement('script'), onceki = window.onYouTubeIframeAPIReady;
+      const bitir = ok => {
+        if (bitti)
+          return;
+        bitti = true;
+        clearTimeout(sure);
+        if (ok && window.YT && typeof window.YT.Player === 'function')
+          coz(window.YT);
+        else {
+          apiSoz = null;
+          s.remove();
+          red(new Error('YouTube API yüklenemedi'));
+        }
+      };
+      const sure = setTimeout(() => bitir(false), 15000);
+      window.onYouTubeIframeAPIReady = () => {
+        if (typeof onceki === 'function')
+          try {
+            onceki();
+          }
+          catch (e) { }
+        bitir(true);
+      };
+      s.src = API;
+      s.async = true;
+      s.onerror = () => bitir(false);
+      document.head.append(s);
+    });
+    return apiSoz;
+  }
+
+  function ileti(metin, tur) {
+    if (!el)
+      return;
+    el.ileti.textContent = metin;
+    el.ileti.dataset.tur = tur || '';
+  }
+  function dugmeler() {
+    if (!el)
+      return;
+    el.durdur.disabled = !oyuncu;
+    el.don.disabled = !oyuncu && !caliyor;
+  }
+  // Oyunun müziği geri gelir (oyunun kendi durumu hiç değişmemişti, yalnız sesi kısıktı).
+  function sesGeri() {
+    clearTimeout(donus);
+    clearTimeout(basla);
+    if (caliyor || muzik.disSessiz) {
+      caliyor = false;
+      muzik.disSustur(false);
+    }
+    dugmeler();
+  }
+  // Oynatıcıyı kaldırır; eski oynatıcıdan gelecek olaylar (nesil) yok sayılır.
+  function kapat() {
+    nesil++;
+    if (oyuncu)
+      try {
+        oyuncu.destroy();
+      }
+      catch (e) { }
+    oyuncu = null;
+    if (el) {
+      el.yer.textContent = '';
+      el.yer.hidden = true;
+    }
+  }
+  // Çalan şarkının adı oynatıcının kendi verisinden (ek istek yok). Temizleme ve kısaltma muzik.disSustur'da.
+  const baslik = o => {
+    try {
+      const v = o && typeof o.getVideoData === 'function' ? o.getVideoData() : null;
+      return v && typeof v.title === 'string' ? v.title : '';
+    }
+    catch (e) {
+      return '';
+    }
+  };
+  function durumDegisti(n, s, link, o) {
+    if (n !== nesil)
+      return;
+    if (s === 1) {
+      clearTimeout(donus);
+      clearTimeout(basla);
+      caliyor = true;
+      muzik.disSustur(true, baslik(o || oyuncu)); // her çalışta: listede sıradaki şarkının adı da yazılır
+      ileti(YAZI.caliyor, 'calis');
+      yaz({ link: linkYaz(link) });
+      dugmeler();
+    }
+    // 3: yükleniyor, ses durumu değişmez. Duraklama, bitiş, sıradaki listede videoya geçiş: kısa bir beklemeden sonra
+    // (listede bir sonraki şarkı hemen başlarsa oyunun müziği araya girip çıkmasın) oyunun müziği geri gelir.
+    else if (s !== 3 && caliyor) {
+      clearTimeout(donus);
+      donus = setTimeout(() => {
+        if (n === nesil && caliyor) {
+          sesGeri();
+          ileti(s === 0 ? YAZI.bitti : YAZI.durdu, '');
+        }
+      }, 1200);
+    }
+  }
+
+  async function cal(metin) {
+    if (!el)
+      return false;
+    const link = linkCoz(metin === undefined ? el.link.value : metin);
+    if (!link) {
+      ileti(YAZI.degil, 'hata');
+      return false;
+    }
+    if (location.protocol !== 'https:' && location.protocol !== 'http:') {
+      ileti(YAZI.disk, 'hata');
+      return false;
+    }
+    kapat();
+    sesGeri();
+    const n = nesil;
+    ileti(YAZI.aciliyor, '');
+    let YTg;
+    try {
+      YTg = await apiYukle();
+    }
+    catch (e) {
+      if (n === nesil) {
+        ileti(YAZI.api, 'hata');
+        sesGeri();
+      }
+      return false;
+    }
+    if (n !== nesil || !el)
+      return false;
+    const yer = document.createElement('div');
+    el.yer.textContent = '';
+    el.yer.append(yer);
+    el.yer.hidden = false;
+    // Oynatıcıya yalnız doğrulanmış kimlikler ve sayfanın kendi kökeni gider.
+    const pv = { playsinline: 1, rel: 0, origin: location.origin };
+    if (link.liste) {
+      pv.listType = 'playlist';
+      pv.list = link.liste;
+    }
+    try {
+      oyuncu = new YTg.Player(yer, {
+        host: OYNATICI, width: '100%', height: '100%', videoId: link.video, playerVars: pv,
+        events: {
+          onReady: e => {
+            if (n !== nesil)
+              return;
+            try {
+              e.target.setVolume(+el.ses.value);
+              e.target.playVideo();
+            }
+            catch (x) { }
+            clearTimeout(basla);
+            basla = setTimeout(() => { if (n === nesil && !caliyor)
+              ileti(YAZI.basla, ''); }, 8000);
+          },
+          onStateChange: e => durumDegisti(n, e && e.data, link, e && e.target),
+          onError: e => {
+            if (n !== nesil)
+              return;
+            ileti(hataYazi(Number(e && e.data) | 0), 'hata');
+            kapat();
+            sesGeri();
+          }
+        }
+      });
+    }
+    catch (e) {
+      kapat();
+      sesGeri();
+      ileti(YAZI.api, 'hata');
+      return false;
+    }
+    dugmeler();
+    return true;
+  }
+  function durdur() {
+    if (oyuncu)
+      try {
+        oyuncu.stopVideo();
+      }
+      catch (e) { }
+    const vardi = caliyor || !!oyuncu;
+    sesGeri();
+    if (vardi)
+      ileti(YAZI.durdu, '');
+  }
+  function don() {
+    kapat();
+    sesGeri();
+    ileti(YAZI.don, '');
+  }
+
+  const yap = (tur, sinif, metin) => {
+    const e = document.createElement(tur);
+    if (sinif)
+      e.className = sinif;
+    if (metin)
+      e.textContent = metin;
+    return e;
+  };
+  // Kutuyu kurar. kutu verilmezse #yt-kutu aranır; yoksa false döner, hiçbir şey yapmaz. Aynı kutuya iki kez kurmaz.
+  // Yeni masa #yt-kutu'yu sonradan eklerse CanliOyun.youtube.kur() çağırır (çalan şarkı varsa durur: çerçeve taşınamaz).
+  function kur(yeni) {
+    const k = yeni || document.getElementById('yt-kutu');
+    if (!k || !(k instanceof HTMLElement))
+      return false;
+    if (k === kutu && el && k.contains(el.link))
+      return true;
+    if (kutu) {
+      kapat();
+      sesGeri();
+      kutu.textContent = '';
+    }
+    kutu = k;
+    k.textContent = '';
+    k.classList.add('yt-kutu');
+    const s = oku();
+    const baslik = yap('span', 'etiket', 'YouTube\'dan şarkı');
+    const satir = yap('div', 'yt-satir'), alan = yap('div', 'alan'), lb = yap('label', 'gorunmez', 'YouTube linki');
+    const link = yap('input');
+    link.type = 'text';
+    link.id = 'yt-link';
+    link.autocomplete = 'off';
+    link.spellcheck = false;
+    link.maxLength = 400;
+    link.placeholder = 'youtube.com/watch?v=… ya da youtu.be/…';
+    link.value = s.link;
+    lb.htmlFor = 'yt-link';
+    alan.append(lb, link);
+    const calD = yap('button', 'dugme ana kucuk', 'Çal'), durD = yap('button', 'dugme kucuk', 'Durdur');
+    calD.type = durD.type = 'button';
+    calD.id = 'yt-cal';
+    durD.id = 'yt-durdur';
+    satir.append(alan, calD, durD);
+    const sesS = yap('div', 'yt-satir yt-ses-satir'), sesL = yap('label', '', 'YouTube sesi'), ses = yap('input');
+    ses.type = 'range';
+    ses.id = 'yt-ses';
+    ses.min = '0';
+    ses.max = '100';
+    ses.value = String(s.ses);
+    sesL.htmlFor = 'yt-ses';
+    sesS.append(sesL, ses);
+    const yer = yap('div', 'yt-oynatici');
+    yer.id = 'yt-oynatici-yer';
+    yer.hidden = true;
+    const il = yap('p', 'yt-ileti');
+    il.id = 'yt-ileti';
+    il.setAttribute('role', 'status');
+    il.setAttribute('aria-live', 'polite');
+    const donD = yap('button', 'dugme kucuk', 'Oyunun müziğine dön');
+    donD.type = 'button';
+    donD.id = 'yt-don';
+    const uy = yap('p', 'aciklama yt-uyari', YAZI.uyari);
+    uy.id = 'yt-uyari';
+    const donS = yap('div', 'yt-satir');
+    donS.append(donD);
+    k.append(baslik, satir, sesS, yer, il, donS, uy);
+    el = { link, cal: calD, durdur: durD, ses, yer, ileti: il, don: donD };
+    calD.onclick = () => { cal(); };
+    durD.onclick = durdur;
+    donD.onclick = don;
+    link.onkeydown = e => { if (e.key === 'Enter') {
+      e.preventDefault();
+      cal();
+    } };
+    ses.oninput = () => {
+      const v = clamp(Math.round(+ses.value) || 0, 0, 100);
+      if (oyuncu)
+        try {
+          oyuncu.setVolume(v);
+        }
+        catch (e) { }
+      yaz({ ses: v });
+    };
+    dugmeler();
+    return true;
+  }
+  const durum = () => ({ kutu: !!(kutu && kutu.isConnected), caliyor, oynatici: !!oyuncu, ileti: el ? el.ileti.textContent : '' });
+
+  const arayuz = { kur, linkCoz, cal, durdur, don, durum };
+  // Sayfanın bütün parçaları çalıştıktan sonra: window.CanliOyun (60-panel.js) o zaman vardır.
+  queueMicrotask(() => {
+    if (window.CanliOyun)
+      window.CanliOyun.youtube = arayuz;
+    if (!kur())
+      addEventListener('load', () => kur(), { once: true });
+  });
+  return arayuz;
+})();
 
 /* ── cekirdek/js/20-oyuncular.js ── */
 /* OYUNCULAR VE OLAYLAR — kim sahnede, kim lider, hangi olay neyi tetikler. Oyundan bağımsızdır.
@@ -3172,7 +3622,8 @@ function kareIc(simdiMs) {
   if (kareSay % 6 === 0) {
     gunlukYaz();
     $('cosku-dolu').style.width = Math.round(D.cosku * 100) + '%';
-    $('cosku-bilgi').textContent = muzik.calanAd() + '\n' + Math.round(muzik.calanBpm()) + ' vuruş/dk · ' + D.sira.length + ' ' + OYUN.yazi.birim;
+    // Dışarıdan (YouTube) çalan şarkının adı varsa o yazılır; dans o şarkıyı izlemediği için vuruş/dk yazılmaz.
+    $('cosku-bilgi').textContent = (muzik.disAd !== null ? muzik.disAd + '\n' : muzik.calanAd() + '\n' + Math.round(muzik.calanBpm()) + ' vuruş/dk · ') + D.sira.length + ' ' + OYUN.yazi.birim;
     const calan = muzik.hazirCal ? muzik.hz.no : -1;
     if (calan !== kare.parca) {
       kare.parca = calan;
@@ -3675,8 +4126,9 @@ function masaYaz() {
   yaz('d-lider-jt', D.lider ? sayi(D.lider.jeton) : '');
   $('d-lider').title = D.lider ? D.lider.ad : '';
   // Gelişmiş: kare süresi, vuruş
-  yaz('d-bpm', Math.round(muzik.calanBpm()));
-  yaz('d-hava', muzik.calanAd());
+  // YouTube çalarken (muzik.disAd) şarkının adı yazılır, vuruş/dk yazılmaz: dans o şarkıyı izlemez.
+  yaz('d-bpm', muzik.disAd !== null ? '-' : Math.round(muzik.calanBpm()));
+  yaz('d-hava', muzik.disAd !== null ? muzik.disAd : muzik.calanAd());
   const ms = D.kareMs || 0;
   yaz('d-kare', ms ? ms.toFixed(1) : '-');
   $('d-kare-hucre').dataset.durum = ms > 33 ? 'kotu' : ms > 22 ? 'agir' : 'iyi';

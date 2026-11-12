@@ -235,8 +235,9 @@ function masaYaz() {
   yaz('d-lider-jt', D.lider ? sayi(D.lider.jeton) : '');
   $('d-lider').title = D.lider ? D.lider.ad : '';
   // Gelişmiş: kare süresi, vuruş
-  yaz('d-bpm', Math.round(muzik.calanBpm()));
-  yaz('d-hava', muzik.calanAd());
+  // YouTube çalarken (muzik.disAd) şarkının adı yazılır, vuruş/dk yazılmaz: dans o şarkıyı izlemez.
+  yaz('d-bpm', muzik.disAd !== null ? '-' : Math.round(muzik.calanBpm()));
+  yaz('d-hava', muzik.disAd !== null ? muzik.disAd : muzik.calanAd());
   const ms = D.kareMs || 0;
   yaz('d-kare', ms ? ms.toFixed(1) : '-');
   $('d-kare-hucre').dataset.durum = ms > 33 ? 'kotu' : ms > 22 ? 'agir' : 'iyi';

@@ -210,6 +210,44 @@ Dikkat edilecekler:
 - Vuruş ölçümü kulakla doğrulanmaz. Hareket yarı ya da çift hızda görünürse `liste.js` yeniden üretilmeden
   düzelmez; betikteki 75–150 aralığını o parça için değiştir.
 
+## YouTube'dan şarkı (yayıncı için)
+
+Oyunun kendi müziği yerine kendi seçtiğin bir şarkıyı YouTube'dan çalabilirsin. Her oyunda aynı çalışır.
+
+1. Oyunu BASLAT ile aç (diskten çift tıklanarak açılan oyunda YouTube çalmaz: "YouTube müziği yalnız BASLAT ile
+   açılan oyunda çalışır." yazar).
+2. Yayın masasının **Müzik** bölümündeki "YouTube'dan şarkı" kutusuna linki yapıştır, **Çal**'a bas.
+   Kabul edilen linkler: `youtube.com/watch?v=…`, `youtu.be/…`, `youtube.com/shorts/…`, `youtube.com/live/…`,
+   `music.youtube.com/watch?v=…`; sonunda başka bilgiler ya da bir çalma listesi (`list=…`) olabilir.
+3. Oynatıcı kutunun içinde görünür. Şarkı çalarken oyunun kendi müziği susar, sahnede havanın adı ve vuruş/dk
+   yerine şarkının adı yazar. Hediye zili gibi efekt sesleri şarkının üstünde duyulmaya devam eder. **Durdur**'a
+   basınca, şarkı bitince ya da **Oyunun müziğine dön**'e basınca oyunun müziği kaldığı yerden geri gelir.
+   "YouTube sesi" kaydırıcısı yalnız şarkının sesini ayarlar; oyunun ses düğmesi ve düzeyi oyunun bütün sesini
+   (müzik ve efektler) ayarlar.
+4. "Yalnızca sahneyi göster" görünümünde şarkı çalmaya devam eder.
+
+Bilmen gerekenler:
+
+- **Telif sende.** Telifli şarkı çalarsan TikTok yayının sesini kısabilir ya da yayını kapatabilir, sorumluluk sende.
+  Kutunun altında da bu cümle yazar.
+- **Dans şarkıyı izlemez.** Hareket oyunun kendi temposunda sürer (ses kapalıyken olduğu gibi); şarkının temposuna
+  uymaya çalışılmaz. Ritmi tutturmak istiyorsan `muzik/` klasörüyle kendi parçalarını kullan ("Hazır parçalar").
+- **Bazı videolar çalmaz.** Sahibi başka sitelerde oynatmayı kapatmışsa "Bu video burada çalınamıyor…", video
+  silinmiş ya da gizliyse "Bu video bulunamadı…" yazar; oyunun müziği geri gelir, başka bir link dene. Plak
+  şirketlerinin resmî kliplerinin çoğu başka sitelerde çalmaya kapalıdır. İnternet yoksa "YouTube açılamadı…" yazar.
+- YouTube bazen videonun önünde reklam gösterebilir; bu oyunun elinde değildir.
+- Son çalışan link ve YouTube ses düzeyi o oyun için hatırlanır (tarayıcının kendi deposunda). Sayfa açılınca hiçbir
+  şey kendiliğinden çalmaz.
+- **İki yol.** Ses motorunda ana düzeyin (`muzik.ses.son`) altında iki yol vardır: `muzik.ses.muzikYol` (çalan müziğin
+  hepsi: davul, ezgi, eşlik, yankı, davul şovu; takımların bağlandığı `ses.ana` buraya akar) ve `muzik.ses.efektYol`
+  (tek seferlik efektler: hediye zili). YouTube çalarken yalnız müzik yolu ve hazır parçanın ses öğesi susar. Bir
+  oyuna ya da çekirdeğe yeni bir efekt sesi (korna, alkış…) eklenirse `muzik.ses.efektYol`'a bağlanır; müziğin bir
+  parçasıysa (çalan havanın içindeki dolgu gibi) takımın yollarına.
+- Nasıl çalışır: yalnız YouTube'un resmî oynatıcısı (IFrame Player API, `youtube-nocookie.com`). Şarkı indirilmez,
+  sesi ayrılmaz, aracı bir hizmet kullanılmaz. Oynatıcı ancak "Çal"a basınca yüklenir; basılmadıkça oyun YouTube'a
+  hiçbir istek göndermez (`AGENTS.md` değişmez 6). Kod: `cekirdek/js/12-youtube.js`; oyunun müziğini kısan
+  `muzik.disSustur(evet, ad)`.
+
 ## Adlar
 
 | Ad | Ne |
@@ -218,3 +256,7 @@ Dikkat edilecekler:
 | `TAKIMLAR`, `TAKIM`, `HAVALAR` | çekirdekteki takımlar, oyunun seçtiği takım, oyunun havaları (`CanliOyun._test` içinde de) |
 | `window.OYUN_MUZIK` | `oyunlar/<ad>/muzik/liste.js` içinde `muzik-hazirla.py` tarafından yazılan parça listesi |
 | `window.OYUN_MUZIK_KAPALI` | Doğruysa `muzik/` klasörü yok sayılır; testler üretilen müziği sınamak için bunu kullanır |
+| `muzik.disSustur(evet, ad)`, `muzik.disSessiz` | Oyunun müziğini dışarıdan kısar / geri açar (YouTube çalarken): yalnız `muzikYol` ve hazır parçanın ses öğesi. Efektler, saat, hava, tempo, ses açık / kapalı, ana düzey aynı kalır |
+| `muzik.disAd` | Dışarıdan çalan şarkının sahnede yazılacak adı: temizlenmiş, en çok 36 karakter, düz metin (boşsa "YouTube'dan şarkı"); dış kaynak yokken `null`. Sahnedeki çalan satırı (`35-kare.js`) bunu okur |
+| `muzik.ses.muzikYol`, `muzik.ses.efektYol` | Ana düzeyin altındaki iki yol: müzik (takımların `ses.ana`'sı buraya akar) ve tek seferlik efektler (hediye zili) |
+| `CanliOyun.youtube` | YouTube kutusu (`12-youtube.js`): `kur(kutu)`, `linkCoz(metin)`, `cal(link)`, `durdur()`, `don()`, `durum()` |

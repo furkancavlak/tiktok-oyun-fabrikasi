@@ -107,7 +107,8 @@ function kareIc(simdiMs) {
   if (kareSay % 6 === 0) {
     gunlukYaz();
     $('cosku-dolu').style.width = Math.round(D.cosku * 100) + '%';
-    $('cosku-bilgi').textContent = muzik.calanAd() + '\n' + Math.round(muzik.calanBpm()) + ' vuruş/dk · ' + D.sira.length + ' ' + OYUN.yazi.birim;
+    // Dışarıdan (YouTube) çalan şarkının adı varsa o yazılır; dans o şarkıyı izlemediği için vuruş/dk yazılmaz.
+    $('cosku-bilgi').textContent = (muzik.disAd !== null ? muzik.disAd + '\n' : muzik.calanAd() + '\n' + Math.round(muzik.calanBpm()) + ' vuruş/dk · ') + D.sira.length + ' ' + OYUN.yazi.birim;
     const calan = muzik.hazirCal ? muzik.hz.no : -1;
     if (calan !== kare.parca) {
       kare.parca = calan;

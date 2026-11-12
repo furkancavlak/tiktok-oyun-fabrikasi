@@ -28,6 +28,7 @@ girer. Oyun `D`'yi başka yoldan değiştirmez.
 | --- | --- |
 | `00-yardimci.js` | Sayı yardımcıları (`clamp`, `lerp`, `yumusak`, `basamak`), addan tekrarlanabilir rastgelelik (`ozet`, `rastgeleUret`), `aciFark`, `azHareket`, `$`. |
 | `10-muzik.js` | `TAKIMLAR` (çalgı takımları: `davul-zurna`, `dugun`, `mac`; ses yapı taşları `mzTon`, `mzGurultu`, `mzEzgiKur`, `mzBas`, `mzAkor`), oyunun seçtiği `TAKIM` ve `HAVALAR` (`OYUN.muzik`'ten; bildirim yoksa davul zurna), `Muzik` sınıfı ve tek örneği `muzik`: zamanlayıcı, ses zinciri, vuruş saati, hazır parça kipi. |
+| `12-youtube.js` | `YT_MUZIK`: Müzik bölümündeki YouTube kutusu (`#yt-kutu`). Link çözümleme, resmî IFrame API'yi ilk "Çal"da yükleme, oynatıcı, iletiler; çalarken `muzik.disSustur(true)`. Vuruş saatine dokunmaz. `CanliOyun.youtube`. |
 | `20-oyuncular.js` | `OYUN` eksiklerini doldurur; `KADEME`, `MAKS`, `D`, `karakterYap`, `gorunumUret`, `katil`, `cikar`, `siraGuncelle`, `olay`. |
 | `25-yazilar.js` | Sıra kutusu, bildirim satırı, pankart, masadaki akışın satırları ve süzgeci (`gunluk`, `gunlukSuzSec`; en yenisi üstte, ikon, hediye satırı). Hepsi `textContent`. |
 | `30-sahne.js` | Tuval, `RENK` / `PANEL_RENK`, kamera (`kam`, `kamKur`, `pr`), `ik`, çizim listesi (`kap`, `top`, `ozel`, `listeCiz`), `kadrajHesap`, `kameraSigdir`, `golge`, `ETIKET`, `etiketCiz`, `kenarKarart`. |
