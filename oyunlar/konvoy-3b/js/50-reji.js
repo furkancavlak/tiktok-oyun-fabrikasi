@@ -978,7 +978,7 @@ function kameraSec(ad) {
 const CEKIM_AD = { drone: 'Drone', yan: 'Yan', on: 'Ön', kus: 'Kuş', tur: 'Tur', yakin: 'Yakın', kenar: 'Kenar', vinc: 'Vinç' };
 const MASA = { kamera: null, son: undefined };
 // Kart sıkı tutulur: 1366×768 masada deneme kipinde "Yayın güvenliği" kartının başlığı ve balon anahtarı kaydırmadan
-// görünmeli (çekirdek testi). Bir satır başlığı ve düğmeler aynı satırda akar; kamera iki, arabalar bir satır.
+// görünmeli (çekirdek testi; hediye düğmeleri iki satıra kırılınca da). Başlık ve düğmeler tek akışta: üç satır.
 function k3Grup(id, yazi) {
   const g = document.createElement('div'), y = document.createElement('span');
   g.className = 'k3-grup';
@@ -1012,24 +1012,24 @@ function masaOyunKur() {
   const st = document.createElement('style');
   st.textContent = '#bu-oyunda .k3-grup{display:flex;flex-wrap:wrap;align-items:center;gap:3px;flex-basis:100%}' +
     '#bu-oyunda .k3-baslik{font-size:12px;color:var(--soluk);margin-right:2px}' +
-    '#bu-oyunda .k3-grup .dugme{padding:2px 5px;font-size:12px;line-height:1.25;border-radius:7px}' +
-    '#bu-oyunda kbd{font:700 10px/1 inherit;padding:1px 3px;border-radius:3px;border:1px solid currentColor;opacity:.7}';
+    '#bu-oyunda .k3-grup .dugme{padding:2px 5px;font-size:11.5px;line-height:1.2;border-radius:7px}' +
+    '#bu-oyunda .k3-araba{margin-left:6px;border-style:dashed}' +
+    '#bu-oyunda .k3-grup kbd{all:unset;font-weight:800;font-size:10.5px;opacity:.6;margin-right:3px}';
   const kam = k3Grup('kamera-sec', 'Kamera');
   kam.append(k3Dugme('Otomatik', '0', 'Reji çekimleri kendisi seçer (klavyede 0)', () => kameraSec(null)));
   CEKIM_SIRA.forEach((ad, i) => kam.append(k3Dugme(CEKIM_AD[ad], String(i + 1), CEKIM_AD[ad] + ' çekimini sabitler (klavyede ' + (i + 1) + ')', () => kameraSec(ad))));
   MASA.kamera = kam;
-  const arac = k3Grup('araba-sec', 'Arabalar');
-  for (const [deger, yazi] of [['hazir', 'Hazır modeller'], ['kod', 'Kodla çizilmiş']]) {
-    const secili = (deger === 'hazir') === ARABA_HAZIR, b = k3Dugme(yazi, '', 'Arabaların görünümü: sayfa yeniden açılır, sahne boşalır', () => {
-      const u = new URL(location.href);
-      u.searchParams.set('araba', deger);
-      location.href = u.href;
-    });
-    b.classList.toggle('secili', secili);
-    b.setAttribute('aria-pressed', String(secili));
-    arac.append(b);
-  }
-  yer.append(st, kam, arac);
+  // Arabaların görünümü tek düğmedir (şimdiki görünümü yazar, basınca öbürüne geçer; sayfa yeniden açılır): kameranın
+  // son satırına sığar, kart bir satır kısa kalır.
+  const arac = k3Dugme('Arabalar: ' + (ARABA_HAZIR ? 'hazır' : 'kodla'), '', (ARABA_HAZIR ? 'Kodla çizilmiş' : 'Hazır model') + ' arabalara geç: sayfa yeniden açılır, sahne boşalır', () => {
+    const u = new URL(location.href);
+    u.searchParams.set('araba', ARABA_HAZIR ? 'kod' : 'hazir');
+    location.href = u.href;
+  });
+  arac.id = 'araba-sec';
+  arac.classList.add('k3-araba');
+  kam.append(arac);
+  yer.append(st, kam);
   masaKameraYaz();
 }
 // Seçili kamera düğmesi (tuşla, düğmeyle ya da testten D.reji.zorla ile değişse de): yalnız değişince yazar.
@@ -1037,7 +1037,7 @@ function masaKameraYaz() {
   if (!MASA.kamera || MASA.son === D.reji.zorla)
     return;
   MASA.son = D.reji.zorla;
-  [...MASA.kamera.querySelectorAll('button')].forEach((b, i) => {
+  [...MASA.kamera.querySelectorAll('button:not(.k3-araba)')].forEach((b, i) => {
     const on = i === 0 ? !D.reji.zorla : D.reji.zorla === CEKIM_SIRA[i - 1];
     b.classList.toggle('secili', on);
     b.setAttribute('aria-pressed', String(on));
