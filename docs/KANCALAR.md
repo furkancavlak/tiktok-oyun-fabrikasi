@@ -112,7 +112,7 @@ Takımların tarifi, nota ve davul yazımı, yeni takım ekleme ve ölçümler `
 çalar ve `derle.js` her seferinde uyarır; şablon `takim: 'SEC'` ile gelir, seçilmeden test geçmez. Oyunun kendi
 kayıtları (isteğe bağlı) yalnız `oyunlar/<ad>/muzik/` klasöründen çalar.
 
-`yazi` içinde ayrıca isteğe bağlı `bosalt` (paneldeki boşaltma düğmesi) vardır. Eksik `yazi` alanları genel
+`yazi` içinde ayrıca isteğe bağlı `bosalt` (masadaki boşaltma düğmesi; basınca önce onay sorar) vardır. Eksik `yazi` alanları genel
 karşılıklarıyla doldurulur. Kademeler çekirdekte büyükten küçüğe sıralanır ve en küçüğünün `min`'i 1'e çekilir.
 Sahte izleyici hediyeyi kademelerden seçer: en büyüğü %0,7, ikincisi %3,8, üçüncüsü %10,5, dördüncüsü %25,
 kalanı en küçüğü. `kamera.enYakin` verilmezse `F / 190`; `ustPay` (1.5) en arkadakinin ayağından adının üstüne,
@@ -224,7 +224,8 @@ Oyunun yazdığı bayraklar:
 
 **Olaylar ve yazılar:** `olay(o)`, `katil(id, ad, zorla)`, `cikar(k)`, `siraGuncelle()`, `bildir(ad, orta,
 vurgu)`, `pankart(satir1, satir2)`, `gunluk(tur, ad, metin, hediye, id)` (son ikisi isteğe bağlı: `hediye` satırı
-altın renkte yazar, `id` verilirse satırda yayıncının Gizle / Çıkar düğmeleri olur), `konfeti(adet, guc)`, `kalpAt(adet)`.
+vurgulu yazar, `id` verilirse satırdaki ada basınca yayıncının "Adını gizle" / "Sahneden çıkar" işlemleri açılır;
+"Yayın masası"), `konfeti(adet, guc)`, `kalpAt(adet)`.
 
 **Sahne:** `c` (2B çizim bağlamı, 720×1280 sanal ölçekte), `GW`, `GH`, `ALAN_UST`, `ALAN_ALT`, `kam`,
 `pr([x, y, z])` → `{ x, y, s, d, ok }`, `kap(pa, ra, pb, rb, renk, derinlik)` (iki ucu farklı yarıçaplı kapsül),
@@ -368,6 +369,73 @@ cekirdek }`:
 - `olcum()`: son karenin ölçümü (720×1280 ölçeğinde): `kutular` (sıralama kutusu, gösterge, bildirimler, pankart:
   `[x, y, w, h]`), `kisiler` (`ad`, `lider`, `bas: { x, y, r }`, `etiket: [x, y, w, h]`).
 - `cekirdek`: kamera, etiket, insan takımı ve çizim işlevleri (testler sahne dışı deneme için çağırır).
+
+## Yayın masası
+
+Sahnenin sağındaki masa yalnız yayıncıya görünür (`#yayin` görünümünde yoktur). İskeleti her oyunda aynıdır
+(`cekirdek/sayfa.html`, `cekirdek/stil.css`, `cekirdek/js/60-panel.js`); oyun masaya yalnız şunları verir:
+
+| Masada | Oyunun verdiği |
+| --- | --- |
+| Üst çubukta oyunun adı | `OYUN.ad` |
+| Özet satırı: "Sahnede 9 / 36 kişi" | `OYUN.kapasite`, `OYUN.yazi.birim` |
+| Deneme izleyicisinin hediye düğmeleri, canlı yayında "Bu oyunda hediyeler" | `OYUN.kademe` (`min`, `ad`, `etki`) |
+| "Yorum yaz" ve "Takip et"in alt yazısı | `OYUN.yazi.giris` ("halaya girer") |
+| Müzik kartındaki havalar | `OYUN.muzik` |
+| Boşaltma düğmesi | `OYUN.yazi.bosalt` |
+| Akışta hediyenin tetiklediği | kademenin `ad`ı |
+
+**Kip.** Masa sayfanın nasıl açıldığına bakar, olay gelip gelmemesine değil: köprünün açtığı sayfa canlı kiptedir
+(`#panel[data-kip="canli"]`), köprü "deneme" derse ya da sayfa diskten açıldıysa deneme kipindedir. Canlı kipte
+"Deneme izleyicisi" kartı (`#deneme-kart`: sahte yorum, beğeni, takip, hediye, otomatik kalabalık) masada yoktur;
+yerinde "Bu oyunda hediyeler" (`#kademe-kart`) yazar. Elementler sayfada durur (testler ve araçlar `#oto`,
+`#hiz-2`, `#hediyeler`'e doğrudan basar), görünmez ve klavyeyle de ulaşılmaz.
+
+**Durum göstergesi** (`#d-bag-hucre[data-durum]`, yazısı `#d-bag`, alt satırı `#d-bag-alt`): bağlantıyı söyleyen
+tek yer. `deneme` Deneme · `baglaniyor` Bağlanıyor · `bekliyor` Yayın bekleniyor (hesap yayında değil) · `canli`
+Canlı (köprü TikTok'a bağlandığını bildirdiyse; alt satırda hesabın adı) · `koptu` Bağlantı koptu (sayfa motoru
+kaybetti, yeniden deniyor) · `durdu` Durdu · `hata` Bağlanamadı · `bagli` Bağlı (durum bildirmeyen eski köprü:
+"Canlı" denmez). Yayın bekleniyor, bağlanıyor, durdu ve bağlanamadıda motorun kendi cümlesi göstergenin altında
+(`#durum-cumle`) olduğu gibi yazar.
+
+**Bu oyunda.** Oyunun kendi denetimi (ör. "Gösteriyi başlat") yalnız `#bu-oyunda` içine girer; iskeletin başka
+yerine eklenmez. Kart içi boşken gizlidir, ilk düğme gelince kendiliğinden görünür. Düğmeyi `oyunBaslat` içinde
+kur; çekirdeğin sınıflarını kullan (`dugme`, `dugme kucuk`, aç / kapa için `anahtar` + `aria-pressed`). Yazı
+`textContent` ile girer. Bu kart iki kipte de görünür: sahte izleyici olayı yollayan bir düğme koyma.
+
+```js
+function oyunBaslat() {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'dugme kucuk';
+  b.textContent = 'Gösteriyi başlat';
+  b.onclick = () => { D.gosteri = zaman; };
+  $('bu-oyunda').append(b);
+}
+```
+
+**İkonlar.** Masanın ikon takımı sayfanın içindedir (`sayfa.html`, `#ikonlar`: `<symbol id="i-ad">`); dosya
+indirilmez. Kullanım `ikon(ad)` (60-panel.js; `aria-hidden` süs ikon döner, yanına yazı koy). Takımın kuralı:
+24 × 24, yuvarlak uçlu 2 px çizgi yazının renginde, her ikonda tek bir vurgu (hardal) ayrıntı; vurgu ayrıntısı
+satır içi `style="fill:var(--ik-v);stroke:none"` (dolgu) ya da `style="stroke:var(--ik-v)"` (çizgi) ile boyanır.
+Adlar: `canli`, `deneme`, `bekliyor`, `baglaniyor`, `koptu`, `durdu`, `hata`, `kisiler`, `jeton`, `tac`, `akis`,
+`hayalet`, `hediye`, `kalkan`, `davul`, `ses`, `ayar`, `yorum`, `kalp`, `takip`, `paylas`, `goz`, `cikar`, `sahne`,
+`oyunlar`, `supurge`.
+
+**Akış.** `gunluk(tur, ad, metin, hediye, id)` satırı kurar; masa onu biçimler: başına türün ikonu, hediye
+satırında hediyenin adı · jeton · tetiklediği kademe, `id` varsa ad bir düğmedir (basınca "Adını gizle" ve
+"Sahneden çıkar" altında açılır). Oyun kendi türüyle (`gunluk('solo', ad, 'ortaya çıktı')`) yazarsa satır genel
+akış ikonuyla, türün adı önde yazılır. Süzgeç (Hepsi / Hediyeler / Yorumlar) her türün son 40 satırını tutar.
+
+**Masanın sabit adları** (testler ve araçlar okur; oyun okuyabilir, değiştirmez): `#panel`, `#d-bag`,
+`#d-bag-alt`, `#d-bag-hucre`, `#durum-cumle`, `#d-kisi`, `#d-kapasite`, `#d-birim`, `#d-jeton`, `#d-lider`,
+`#kisi-liste`, `#kisi-ara`, `#gunluk`, `#akis-suz`, `#deneme-kart`, `#sahte-ad`, `#s-yorum`, `#s-begeni`,
+`#s-takip`, `#hediyeler`, `#oto`, `#hiz-0…2`, `#kademe-kart`, `#bu-oyunda`, `#balon-dugme`, `#yasak`,
+`#mod-liste`, `#mod-ozet`, `#mod-temizle`, `#ses-dugme`, `#ses-duzey`, `#hava-sec` (`#hava-<id>`), `#sirayla`,
+`#hazir-kutu`, `#parca-sec`, `#yt-kutu`, `#gelismis` (içinde `#bag-adres`, `#bag-dugme`, `#bag-rozet`,
+`#bag-ileti`, `#d-kare`, `#d-bpm`, `#d-hava`), `#bosalt-sor`, `#bosalt` (onaydaki "Evet, boşalt"; işi yapan
+budur), `#bosalt-vazgec`, `#yayin-gor`. Ana sayfadan açılınca motor "Oyunlar" bağlantısını `.masa-ad`'ın başına
+ekler (kopru.js); masa onu "Oyunlara dön" düğmesi olarak yazar.
 
 ## Testler
 

@@ -77,11 +77,12 @@ Yakalama sırasında tarayıcı penceresi küçültülmemeli. Küçültülmüş 
   de çalışır. Önce oyun penceresine bir kez tıkla.
 - **Gizlenecek kelimeler:** virgülle ayırarak yaz. Bu kelimeleri içeren yorum balon olmaz, adında geçen izleyici
   `misafir` yazılır. Alandan çıkınca sahnede o an eşleşen ad ve balonlar da gizlenir.
-- **Sahnedekiler** listesinde ya da **Olay akışında** bir adın üstüne gel:
-  - **Gizle:** o izleyicinin adı hemen ve kalıcı olarak `misafir` olur.
-  - **Çıkar:** izleyici sahneden gider; geri alana kadar yorumu, hediyesi ve beğenisi oyuna işlenmez.
-  - Fare olay akışının üstündeyken akış durur, satırlar kaymaz. Kaç yeni olay beklediği başlıkta yazar.
-- Çıkardıkların ve adını gizlediklerin **Yayın** sekmesinde listelenir; oradan tek tek ya da hepsini geri alabilirsin.
+- **Sahnedekiler** listesinde ya da **Akış**ta bir ada tıkla; altında iki düğme açılır:
+  - **Adını gizle:** o izleyicinin adı hemen ve kalıcı olarak `misafir` olur.
+  - **Sahneden çıkar:** izleyici sahneden gider; geri alana kadar yorumu, hediyesi ve beğenisi oyuna işlenmez.
+  - Fare akışın üstündeyken akış durur, satırlar kaymaz. Kaç yeni olay beklediği başlıkta yazar.
+  - Akışın üstündeki **Hediyeler** düğmesi yalnız hediyeleri, **Yorumlar** yalnız yorumları bırakır.
+- Çıkardıkların ve adını gizlediklerin **Yayın güvenliği** kutusunda listelenir; oradan tek tek ya da hepsini geri alabilirsin.
   Liste bu bilgisayarda saklanır, sonraki yayında da geçerlidir.
 
 Ayarları yayına çıkmadan önce yap: yalnızca sahne görünümünde panel gizlidir, orada yalnız `B` tuşu çalışır.
@@ -113,12 +114,12 @@ buna izin verip vermediği denenmedi.
 | Bağlantı kutusu "Yayın yok" | TikTok'ta yayın henüz açık değil. Yayını başlat; motor kendisi dener ya da ana sayfada **Yayın**'a yeniden bas. |
 | Ses yok | Tarayıcılar tıklamadan ses açmaz. Sayfada başlat düğmesine bas. Pencere yakalama bilgisayar sesini ayrıca almıyorsa LIVE Studio'da ses kaynağını kontrol et. |
 | LIVE Studio'da oyun görünmüyor | Tarayıcı kaynağı yerine pencere yakalama kullan. Pencerenin küçültülmediğinden emin ol. |
-| Oyun açık ama yorumlar gelmiyor | Masanın üstündeki Bağlantı kutusuna bak; ayrıntı Yayın sekmesinde yazar. Yayın açıksa ve yorum yazılıyorsa kütüphaneyi güncelle (403 satırı). |
+| Oyun açık ama yorumlar gelmiyor | Masanın üstündeki durum yazısına bak ("Canlı", "Yayın bekleniyor", "Bağlanamadı"); ayrıntı hemen altında yazar. Yayın açıksa ve yorum yazılıyorsa kütüphaneyi güncelle (403 satırı). |
 
 ## Bağlanamıyorsa
 
 **Yayın**'a basınca TikTok'a bağlanılamazsa motor nedeni düz bir cümleyle yazar: ana sayfadaki "Şu an açık" şeridinde
-ve oyunun **Yayın** sekmesinde aynı cümle görünür. Motor her durumda kendisi yeniden dener; yayın yok ve oda bulunamadı durumlarında en geç 30 saniyede bir. Beklemek istemezsen ana sayfada **Yayın**'a yeniden bas: hemen dener. Kütüphanenin İngilizce
+ve oyunun masasında, durum yazısının altında aynı cümle görünür. Motor her durumda kendisi yeniden dener; yayın yok ve oda bulunamadı durumlarında en geç 30 saniyede bir. Beklemek istemezsen ana sayfada **Yayın**'a yeniden bas: hemen dener. Kütüphanenin İngilizce
 asıl iletisi motorun günlüğüne, paket klasöründeki `motor-gunlugu.txt` dosyasına ("TikTok bağlantı hatası (…)" satırı) yazılır
 (Mac ve Linux'ta Terminal penceresinde kalır); sorun sürerse o dosyayı ya da pencerenin ekran görüntüsünü gönder.
 

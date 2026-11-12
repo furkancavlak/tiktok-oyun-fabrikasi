@@ -105,19 +105,19 @@ Köprü ayrıca durum iletisi yollar; oyun bunu panelde gösterir, olay saymaz:
 { "tip": "kopru", "ileti": "@ayse yayınına bağlandı. Yorum ve hediyeler oyuna akıyor.", "baglanti": "bagli" }
 ```
 
-`baglanti` alanı masadaki **Bağlantı** hücresini ve Yayın sekmesindeki rozeti belirler:
+`baglanti` alanı masanın üstündeki durum göstergesini (ve Gelişmiş'teki köprü rozetini) belirler:
 
-| `baglanti` | Hücre | Ne demek |
+| `baglanti` | Gösterge | Ne demek |
 | --- | --- | --- |
-| `bagli` | **Canlı** (yanında alınan olay sayısı) | TikTok yayınına bağlanıldı, yorum ve hediyeler akıyor. |
-| `bekliyor` | **Yayın yok** (alt satır: yayın henüz açık değil; rozet: Yayın bekleniyor) | TikTok'ta yayın henüz açık değil; köprü kendisi yeniden dener. |
+| `bagli` | **Canlı** (yanında yayının hesabı) | TikTok yayınına bağlanıldı, yorum ve hediyeler akıyor. |
+| `bekliyor` | **Yayın bekleniyor** (yayın henüz açık değil; altında köprünün cümlesi) | TikTok'ta yayın henüz açık değil; köprü kendisi yeniden dener. |
 | `baglaniyor` | **Bağlanıyor** | TikTok'a bağlanılıyor. |
 | `deneme` | **Deneme** | Köprü sahte izleyici yolluyor; TikTok'a bağlanılmadı. |
 | `durdu` | **Durdu** | Oyun ana sayfadan durduruldu. |
-| `hata` | **Bağlanamadı** | Kütüphane yok ya da bağlantı kurulamadı; ayrıntı Yayın sekmesinde. |
+| `hata` | **Bağlanamadı** | Kütüphane yok ya da bağlantı kurulamadı; köprünün cümlesi göstergenin altında yazar. |
 
-`baglanti` alanı olmayan iletiler (eski köprüler) yeni sayfada eskisi gibi çalışır: köprüye bağlı olmak **Canlı**
-sayılır. Yeni köprüyle eski sayfa da çalışır; eski sayfa alanı yok sayar.
+`baglanti` alanı olmayan iletiler (eski köprüler) yeni sayfada da işlenir; gösterge köprüye bağlıyken **Bağlı**
+der, **Canlı** demez (köprü TikTok'a bağlandığını söylemedi). Yeni köprüyle eski sayfa da çalışır; eski sayfa alanı yok sayar.
 
 ## `window.CanliOyun`
 
@@ -125,7 +125,7 @@ sayılır. Yeni köprüyle eski sayfa da çalışır; eski sayfa alanı yok saya
 | --- | --- |
 | `olay(o)` | Bir olayı işler. |
 | `baglan(adres)` / `kes()` | Köprüye bağlanır / bağlantıyı keser. |
-| `kopruBitti(ileti)` | Bu sayfanın başlatması bitti: yeniden bağlanmayı bırakır, rozet ve Bağlantı hücresi **Durdu** der. Köprünün bekçisi örtüyü gösterirken çağırır; köprünün `durdu` iletisi de aynı işi yapar. Bekçi sayfayı yeni başlatmaya yenilerse sayfa yine bağlanır. |
+| `kopruBitti(ileti)` | Bu sayfanın başlatması bitti: yeniden bağlanmayı bırakır, rozet ve durum göstergesi **Durdu** der. Köprünün bekçisi örtüyü gösterirken çağırır; köprünün `durdu` iletisi de aynı işi yapar. Bekçi sayfayı yeni başlatmaya yenilerse sayfa yine bağlanır. |
 | `cevir(ileti)` | Dış iletiyi oyun olayına çevirir (işlemez); tanımazsa `null`. |
 | `durum()` | Çekirdeğin alanları (kişi sayısı, lider, coşku, vuruş, sıra, bağlantı durumu vb.) ve oyunun `oyunDurum(d)` kancasıyla eklediği alanlar. Tam liste için `cekirdek/js` altındaki `durum` işlevine bak. |
 | `_test` | Testler için iç durum (`D`, `muzik`, `Muzik`, `HAVALAR`, `ayar`, `zamanEkle`). Kararlı arayüz değildir. |

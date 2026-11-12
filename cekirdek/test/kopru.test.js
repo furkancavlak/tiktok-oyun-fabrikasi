@@ -72,10 +72,10 @@ function baslat(klasor, args) { if (args.includes('--ana-sayfa') && !args.includ
   const ctx = await b.newContext({ viewport: { width: 1280, height: 800 } });
   const dr0 = await al('http://127.0.0.1:' + P + '/durum').then(r => ({ kod: r.kod }), e => ({ hata: e.code }));
   let p = await sayfaAc(ctx, 'http://127.0.0.1:' + P + '/'); await bekle(7000);
-  let d = await p.evaluate(() => ({ ...CanliOyun.durum(), rozet: document.getElementById('bag-rozet').textContent, ileti: document.getElementById('bag-ileti').textContent, oto: document.getElementById('oto').textContent, not: document.getElementById('panel-not').textContent, adres: document.getElementById('bag-adres').value, serit: document.getElementById('d-bag').textContent, sekme: document.getElementById('bolum-yayin').hidden === false, uyari: document.getElementById('deneme-uyari').hidden === false }));
+  let d = await p.evaluate(() => ({ ...CanliOyun.durum(), rozet: document.getElementById('bag-rozet').textContent, ileti: document.getElementById('bag-ileti').textContent, oto: document.getElementById('oto').textContent, adres: document.getElementById('bag-adres').value, serit: document.getElementById('d-bag').textContent, kip: document.getElementById('panel').dataset.kip, deneme: !document.getElementById('deneme-kart').hidden && !!document.getElementById('s-yorum').offsetParent, kademeGizli: document.getElementById('kademe-kart').hidden, gelismisKapali: !document.getElementById('gelismis').open }));
   kontrol('Köprü testi seçilen kapıda çalışır (' + P + ', KOPRU_TEST_PORT ya da --port)', dr0.kod === 200, dr0);
   kontrol('Köprüden açılan sayfa kendiliğinden bağlanır (deneme kipinde rozet "Deneme")', d.bagli && d.rozet === 'Deneme' && new RegExp('^ws://127[.]0[.]0[.]1:' + P + '/olay/[0-9a-f]{24}$').test(d.adres), { rozet: d.rozet, adres: d.adres, ileti: d.ileti });
-  kontrol('Köprü deneme kipinde masa: Bağlantı hücresi "Deneme" der ("Canlı" değil), Yayın sekmesi açık, Deneme sekmesinde uyarı var', d.serit === 'Deneme' && d.sekme && d.uyari, { serit: d.serit, sekme: d.sekme, uyari: d.uyari });
+  kontrol('Köprü deneme kipinde masa: durum göstergesi "Deneme" der ("Canlı" değil), masa deneme kipinde (deneme izleyicisi kartı var), Gelişmiş kapalı', d.serit === 'Deneme' && d.kip === 'deneme' && d.deneme && d.kademeGizli && d.gelismisKapali, { serit: d.serit, kip: d.kip, deneme: d.deneme, kademeGizli: d.kademeGizli, gelismisKapali: d.gelismisKapali });
   kontrol('Köprüden gelen olaylar oyuna işlenir', d.alinan > 8 && d.kisi >= 3, { alinan: d.alinan, kisi: d.kisi });
   kontrol('Gerçek yayın kipinde sahte izleyici kapalı ve sahte ad yok', /kapalı/.test(d.oto) && d.sira.every(x => x[0].startsWith('D. ')), { oto: d.oto, adlar: d.sira.map(x => x[0]) });
   kontrol('Süren seri sayılmadı: jetonlar 15\'in katı', d.sira.every(x => x[1] % 15 === 0) && d.sira.some(x => x[1] >= 15), d.sira.map(x => x[1]));
@@ -114,7 +114,7 @@ function baslat(klasor, args) { if (args.includes('--ana-sayfa') && !args.includ
   // ---- 3. köprü kapanıp açılınca
   k.kill('SIGKILL'); await bekle(2500);
   await bekle(300); d = await p.evaluate(() => ({ bagli: CanliOyun.durum().bagli, rozet: document.getElementById('bag-rozet').textContent, ileti: document.getElementById('bag-ileti').textContent, kisi: CanliOyun.durum().kisi, serit: document.getElementById('d-bag').textContent }));
-  kontrol('Köprü kapanınca oyun durmaz, durumu bildirir (şeritte de)', !d.bagli && /koptu/.test(d.ileti) && d.kisi >= 3 && /Koptu|Bağlanıyor/.test(d.serit), d);
+  kontrol('Köprü kapanınca oyun durmaz, durum göstergesi "Bağlantı koptu" (ya da yeniden denerken "Bağlanıyor") der', !d.bagli && /koptu/.test(d.ileti) && d.kisi >= 3 && /^(Bağlantı koptu|Bağlanıyor)$/.test(d.serit), d);
   const onceAlinan = await p.evaluate(() => CanliOyun.durum().alinan);
   k = baslat(KOK, ['--deneme', '--oyun', OYUN_AD, '--port', String(P)]); await bekle(7000);
   d = await p.evaluate(() => ({ bagli: CanliOyun.durum().bagli, alinan: CanliOyun.durum().alinan, rozet: document.getElementById('bag-rozet').textContent }));
@@ -288,10 +288,10 @@ function baslat(klasor, args) { if (args.includes('--ana-sayfa') && !args.includ
     kontrol('Ana sayfa: değiştir kayıtlı adı silmez (düğmeler yanık kalır); Esc ve Vazgeç geri döner; kaydetmeden çıkınca eski ad durur; Kaydet yeniden kaydeder', deg.form && deg.deger === 'Test_Kullanici' && deg.kayitli && deg.saklanan === 'Test_Kullanici' && deg.vazgec && deg.odak === 'kullanici' && esc.gor && esc.ad === '@Test_Kullanici' && yenile === '@Test_Kullanici' && vaz && degSonra === '@Test_Kullanici', { ...deg, esc, yenile, vaz, sonra: degSonra });
     // Dene: API'ye sorar, oyunun sayfasına geçer; olaylar gelir; geri dönüş bağlantısı var
     await ap.click('.kart[data-oyun="a-oyun"] .dene'); await ap.waitForURL(/\/oyun\/a-oyun\/$/, { timeout: 8000 }).catch(() => { }); await bekle(4500);
-    let od = await ap.evaluate(() => { const g = document.querySelector('.ana-don'); return { url: location.pathname, ...CanliOyun.durum(), geri: g && g.textContent, geriHref: g && g.getAttribute('href'), adres: document.getElementById('bag-adres').value, kimlikler: [...CanliOyun._test.D.oy.keys()].filter(x => !/^sahte:/.test(x)), hucre: document.getElementById('d-bag').textContent }; });
+    let od = await ap.evaluate(() => { const g = document.querySelector('.ana-don'); return { url: location.pathname, ...CanliOyun.durum(), geri: g && g.textContent, geriIkon: !!(g && g.closest('.masa-bas') && g.querySelector('use[href="#i-oyunlar"]')), geriHref: g && g.getAttribute('href'), adres: document.getElementById('bag-adres').value, kimlikler: [...CanliOyun._test.D.oy.keys()].filter(x => !/^sahte:/.test(x)), hucre: document.getElementById('d-bag').textContent }; });
     kontrol('Ana sayfadan Dene: oyunun sayfası açılır, başlatmanın kimliğiyle bağlanır, sahte olaylar ("deneme:" kimlikli) işlenir, hücre "Deneme" der', od.url === '/oyun/a-oyun/' && od.bagli && od.alinan > 5 && od.sira.length > 0 && od.sira.every(x => x[0].startsWith('D. ')) && new RegExp('^ws://127[.]0[.]0[.]1:' + kp + '/olay/a-oyun/[0-9a-f]{12}$').test(od.adres) && od.kimlikler.length > 0 && od.kimlikler.every(x => /^deneme:/.test(x)) && od.hucre === 'Deneme', { url: od.url, bagli: od.bagli, alinan: od.alinan, adres: od.adres, kimlikler: od.kimlikler, hucre: od.hucre });
     const geriYayin = await ap.evaluate(() => { location.hash = '#yayin'; return new Promise(r => setTimeout(() => r(getComputedStyle(document.querySelector('.ana-don')).display), 300)); }).catch(e => e.message);
-    kontrol('Ana sayfadan açılan oyunda "← Oyunlar" bağlantısı var, yalnız sahne görünümünde gizli', od.geri === '← Oyunlar' && od.geriHref === '/' && geriYayin === 'none', { geri: od.geri, yayinda: geriYayin });
+    kontrol('Ana sayfadan açılan oyunda masanın üst çubuğunda "Oyunlara dön" bağlantısı var (ikonlu), yalnız sahne görünümünde gizli', od.geri === 'Oyunlara dön' && od.geriIkon && od.geriHref === '/' && geriYayin === 'none', { geri: od.geri, ikon: od.geriIkon, yayinda: geriYayin });
     await ap.evaluate(() => { location.hash = ''; });
     // Güvenlik: olay akışını ve yayıncının adını başka bir site okuyamaz (ana sayfa kipi)
     const R = JSON.parse((await al(A + '/api/oyunlar')).govde).aktif.calistirma, dogru = '/olay/a-oyun/' + R, kendi = { Origin: 'http://127.0.0.1:' + kp };
@@ -520,14 +520,17 @@ function baslat(klasor, args) { if (args.includes('--ana-sayfa') && !args.includ
     const bek = await durum();
     const ctx10 = await b.newContext({ viewport: { width: 1280, height: 800 } });
     const op = await sayfaAc(ctx10, A + '/oyun/a-oyun/'); await bekle(1500);
-    const hucreBek = await op.evaluate(() => ({ hucre: document.getElementById('d-bag').textContent, alt: document.getElementById('d-bag-alt').textContent, rozet: document.getElementById('bag-rozet').textContent }));
-    kontrol('Yayın açık değilken Bağlantı hücresi "Canlı" demez: "Yayın yok / yayın henüz açık değil", rozet "Yayın bekleniyor"', bek.aktif.baglanti === 'bekliyor' && /canlı yayında değil\. 15 saniye sonra/.test(bek.durum) && hucreBek.hucre === 'Yayın yok' && /henüz açık değil/.test(hucreBek.alt) && hucreBek.rozet === 'Yayın bekleniyor', { durum: bek.durum, ...hucreBek });
+    const hucreBek = await op.evaluate(() => ({ hucre: document.getElementById('d-bag').textContent, alt: document.getElementById('d-bag-alt').textContent, rozet: document.getElementById('bag-rozet').textContent, cumle: document.getElementById('durum-cumle').hidden ? '' : document.getElementById('durum-cumle').textContent, kip: document.getElementById('panel').dataset.kip,
+      sahteGorunur: [...document.querySelectorAll('#deneme-kart, #deneme-kart button, #deneme-kart input, #oto, #hiz-sec button, #hediyeler button, #s-yorum, #s-begeni, #s-takip, #sahte-ad')].filter(e => e.checkVisibility()).map(e => e.id || e.className),
+      kademe: document.getElementById('kademe-kart').checkVisibility() ? document.querySelectorAll('#kademe-liste li').length : 0, oto: CanliOyun._test && document.getElementById('oto').getAttribute('aria-pressed') }));
+    kontrol('Yayın açık değilken durum göstergesi "Canlı" demez: "Yayın bekleniyor / yayın henüz açık değil", altında motorun kendi cümlesi; rozet "Yayın bekleniyor"', bek.aktif.baglanti === 'bekliyor' && /canlı yayında değil\. 15 saniye sonra/.test(bek.durum) && hucreBek.hucre === 'Yayın bekleniyor' && /henüz açık değil/.test(hucreBek.alt) && hucreBek.cumle === bek.durum && hucreBek.rozet === 'Yayın bekleniyor', { durum: bek.durum, ...hucreBek });
+    kontrol('Canlı yayın kipinde masada deneme izleyicisi yok: sahte yorum, hediye, beğeni, takip ve otomatik kalabalık düğmeleri görünmez; yerinde bu oyunun hediyeleri yazar; otomatik kalabalık kapalı', hucreBek.kip === 'canli' && !hucreBek.sahteGorunur.length && hucreBek.kademe >= 1 && hucreBek.oto === 'false', { kip: hucreBek.kip, gorunen: hucreBek.sahteGorunur, kademe: hucreBek.kademe, oto: hucreBek.oto });
     fs.writeFileSync(path.join(kl, 'canli-mod.txt'), 'acik');
     const t0 = Date.now(); await api({ oyun: 'a-oyun', kip: 'canli', kullanici: 'Test_Kullanici' });
     let bagli = null; for (let i = 0; i < 20; i++) { bagli = await durum(); if (bagli.aktif.baglanti === 'bagli') break; await bekle(150); }
     const sure = Date.now() - t0; await bekle(1200);
-    const hucreBagli = await op.evaluate(() => ({ hucre: document.getElementById('d-bag').textContent, sira: CanliOyun.durum().sira.map(x => x[0]) }));
-    kontrol('Bekleme sürerken Yayın\'a yeniden basmak hemen yeniden dener (15-120 sn beklemez); bağlanınca hücre "Canlı" der, sayfa aynı başlatmada kalır', bagli.aktif.baglanti === 'bagli' && sure < 2500 && bagli.aktif.calistirma === bek.aktif.calistirma && hucreBagli.hucre === 'Canlı' && hucreBagli.sira.some(x => /^Gerçek/.test(x)), { sure, ...hucreBagli });
+    const hucreBagli = await op.evaluate(() => ({ hucre: document.getElementById('d-bag').textContent, alt: document.getElementById('d-bag-alt').textContent, durum: document.getElementById('d-bag-hucre').dataset.durum, sira: CanliOyun.durum().sira.map(x => x[0]) }));
+    kontrol('Bekleme sürerken Yayın\'a yeniden basmak hemen yeniden dener (15-120 sn beklemez); bağlanınca gösterge "Canlı" der (altında hesabın adı), sayfa aynı başlatmada kalır', bagli.aktif.baglanti === 'bagli' && sure < 2500 && bagli.aktif.calistirma === bek.aktif.calistirma && hucreBagli.hucre === 'Canlı' && hucreBagli.alt === '@Test_Kullanici' && hucreBagli.durum === 'canli' && hucreBagli.sira.some(x => /^Gerçek/.test(x)), { sure, ...hucreBagli });
     await gonder(kp, '/api/durdur', {}); await bekle(2600);
     const durdu = await op.evaluate(() => (document.getElementById('calistirma-ortu') || {}).textContent || '');
     kontrol('Durdur sonrası açık kalan oyun sayfası "Bu oyun artık çalışmıyor / durduruldu" örtüsü gösterir', /artık çalışmıyor/.test(durdu) && /durduruldu/.test(durdu), durdu);
@@ -602,7 +605,7 @@ function baslat(klasor, args) { if (args.includes('--ana-sayfa') && !args.includ
       let k1 = baslat(u1, ['--deneme', '--port', String(kp)]); await bekle(800); await acik(kp);
       const uc1 = await b.newContext({ viewport: { width: 1280, height: 800 } }); const up1 = await sayfaAc(uc1, A + '/'); await bekle(3000);
       const uy1 = await up1.evaluate(() => ({ bagli: CanliOyun.durum().bagli, alinan: CanliOyun.durum().alinan, hucre: document.getElementById('d-bag').textContent }));
-      kontrol('Uyum: durum alanı yollamayan eski köprüyle yeni sayfa çalışır (hücre eskisi gibi "Canlı", olaylar akar)', uy1.bagli && uy1.alinan > 3 && uy1.hucre === 'Canlı', uy1);
+      kontrol('Uyum: durum alanı yollamayan eski köprüyle yeni sayfa çalışır (olaylar akar); gösterge "Canlı" değil "Bağlı" der: köprü TikTok\'a bağlandığını söylemedi', uy1.bagli && uy1.alinan > 3 && uy1.hucre === 'Bağlı', uy1);
       await uc1.close(); k1.kill('SIGKILL'); await bekle(400);
       const u2 = path.join(GECICI, 'uyum-eski-sayfa'); fs.mkdirSync(u2); fs.copyFileSync(path.join(KOK, 'kopru.js'), path.join(u2, 'kopru.js')); fs.writeFileSync(path.join(u2, 'oyun.html'), eskiSayfa);
       k1 = baslat(u2, ['--deneme', '--port', String(kp)]); await bekle(800); await acik(kp);
@@ -650,9 +653,9 @@ function baslat(klasor, args) { if (args.includes('--ana-sayfa') && !args.includ
       await hc.close(); c.kill('SIGKILL'); await bekle(400);
     }
     const s = uc.v1 || {}, s2 = uc.v2 || {}, s3 = uc.v25 || {}, siz = x => !x || (x.etiket === 0 && !x.xss);
-    kontrol('Hediye kimliği uçtan uca, 1.x kütüphane: seri bitince Rose 1×5 sayılır, ad akışta jetonun yanında; HTML ad düz metin (öğe yok, betik çalışmaz)', JSON.stringify(s.sira) === JSON.stringify([['H Cem', 30], ['H Ayşe', 5]]) && (s.satir || []).some(x => /^5 jeton · Rose → /.test(x)) && (s.satir || []).some(x => x.startsWith('30 jeton · <img src=x onerror="window.__xss=1"> → ')) && siz(s), s);
-    kontrol('Hediye kimliği uçtan uca, 2.0 kütüphane (giftDetails): <b>x</b> düz metin; kimliği olmayan hediye eskisi gibi yazılır', JSON.stringify(s2.sira) === JSON.stringify([['H Sude', 30], ['H Memo', 4]]) && (s2.satir || []).some(x => x.startsWith('4 jeton · <b>x</b> → ')) && (s2.satir || []).some(x => /^30 jeton → /.test(x)) && siz(s2), s2);
-    kontrol('Hediye kimliği uçtan uca, 2.5 kütüphane (gift.name): seri bitince bir kez; uzun ad kısaltılmış gelir', JSON.stringify(s3.sira) === JSON.stringify([['H Baran', 30], ['H Elif', 3]]) && (s3.satir || []).some(x => /^3 jeton · Rose → /.test(x)) && !(s3.satir || []).some(x => /^2 jeton/.test(x)) && (s3.satir || []).some(x => x.startsWith('30 jeton · ' + 'Ş'.repeat(39) + '… → ')) && siz(s3), s3);
+    kontrol('Hediye kimliği uçtan uca, 1.x kütüphane: seri bitince Rose 1×5 sayılır, ad akışta jetonun yanında; HTML ad düz metin (öğe yok, betik çalışmaz)', JSON.stringify(s.sira) === JSON.stringify([['H Cem', 30], ['H Ayşe', 5]]) && (s.satir || []).some(x => /^Rose · 5 jeton · /.test(x)) && (s.satir || []).some(x => x.startsWith('<img src=x onerror="window.__xss=1"> · 30 jeton · ')) && siz(s), s);
+    kontrol('Hediye kimliği uçtan uca, 2.0 kütüphane (giftDetails): <b>x</b> düz metin; kimliği olmayan hediye eskisi gibi yazılır', JSON.stringify(s2.sira) === JSON.stringify([['H Sude', 30], ['H Memo', 4]]) && (s2.satir || []).some(x => x.startsWith('<b>x</b> · 4 jeton · ')) && (s2.satir || []).some(x => /^30 jeton · /.test(x)) && siz(s2), s2);
+    kontrol('Hediye kimliği uçtan uca, 2.5 kütüphane (gift.name): seri bitince bir kez; uzun ad kısaltılmış gelir', JSON.stringify(s3.sira) === JSON.stringify([['H Baran', 30], ['H Elif', 3]]) && (s3.satir || []).some(x => /^Rose · 3 jeton · /.test(x)) && !(s3.satir || []).some(x => /(^| )2 jeton · /.test(x)) && (s3.satir || []).some(x => x.startsWith('Ş'.repeat(39) + '… · 30 jeton · ')) && siz(s3), s3);
     // Deneme kipi: sahte, "deneme-" önekli kimlikler sırayla gelir (soketten okunur)
     const dk = path.join(GECICI, 'hediye-deneme'); fs.mkdirSync(dk); fs.copyFileSync(path.join(KOK, 'kopru.js'), path.join(dk, 'kopru.js')); fs.copyFileSync(OYUN_HTML, path.join(dk, 'oyun.html'));
     const dc = baslat(dk, ['--deneme', '--port', String(kp)]); await bekle(700); await acik(kp);
@@ -680,7 +683,7 @@ function baslat(klasor, args) { if (args.includes('--ana-sayfa') && !args.includ
         return r;
       };
       const u1 = await uyum(eK, fs.readFileSync(OYUN_HTML, 'utf8'), 'eski-kopru'), u2 = await uyum(fs.readFileSync(path.join(KOK, 'kopru.js'), 'utf8'), eS, 'eski-sayfa');
-      kontrol('Hediye kimliği uyumu: eski köprü + yeni sayfa: hediyeler eskisi gibi sayılır (15\'in katı), akışta ad yok', u1.bagli && u1.sira.length > 0 && u1.sira.every(x => x % 15 === 0) && u1.satir.length > 0 && u1.satir.every(x => /^15 jeton → /.test(x)), u1);
+      kontrol('Hediye kimliği uyumu: eski köprü + yeni sayfa: hediyeler eskisi gibi sayılır (15\'in katı), akışta ad yok', u1.bagli && u1.sira.length > 0 && u1.sira.every(x => x % 15 === 0) && u1.satir.length > 0 && u1.satir.every(x => /^15 jeton · /.test(x)), u1);
       kontrol('Hediye kimliği uyumu: yeni köprü + eski sayfa: fazladan alan yok sayılır, hediyeler eskisi gibi sayılır (15\'in katı)', u2.bagli && u2.sira.length > 0 && u2.sira.every(x => x % 15 === 0) && u2.satir.length > 0 && u2.satir.every(x => /^15 jeton → /.test(x)), u2);
     }
   }
