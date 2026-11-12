@@ -16,7 +16,8 @@ const CIKTI = path.join(KOK, 'test', 'cikti', OYUN_AD); // ekran görüntüleri 
 fs.mkdirSync(CIKTI, { recursive: true });
 if (!fs.existsSync(OYUN_HTML)) { console.error(path.relative(KOK, OYUN_HTML) + ' yok. Önce derle: node araclar/derle.js ' + OYUN_AD); process.exit(2); }
 // Test kademesi (TEST_KADEME, node araclar/test.js --hizli bunu "hizli" yapar). "tam" (öntanım): sürüm öncesi her şey.
-// "hizli": düzenleme döngüsü için yalnız uzun dayanıklılık testi kısalır (aynı kod yolu, aynı kontroller); başka hiçbir şey atlanmaz.
+// "hizli": düzenleme döngüsü için uzun koşular kısalır (çekirdeğin dayanıklılık testi; bir oyunun kendi testi KADEME'ye bakıp
+// kendi uzun koşularını kısaltabilir): aynı kod yolu, aynı kontroller; hiçbir şey atlanmaz.
 const KADEME = process.env.TEST_KADEME || 'tam';
 if (KADEME !== 'tam' && KADEME !== 'hizli') { console.error('TEST_KADEME "tam" ya da "hizli" olur (verilen: ' + KADEME + ')'); process.exit(2); }
 

@@ -1751,7 +1751,7 @@ const muzik = new Muzik();
  * katil / cikar / siraGuncelle: sahnedeki sıra · olay(o): DIŞARIDAN GELEN HER ŞEYİN TEK GİRİŞ KAPISI
  * (sahte izleyici, köprü ve testler hep bunu çağırır). Olay biçimi docs/OLAYLAR.md'de.
  * Kullanıcı metni burada temizlenir; hiçbir yerde HTML olarak yazılmaz.
- * Oyuna sorulanlar: oyunGiris(k) giriş yeri · oyunYerlesim() herkesin hedef yeri · oyunHediye(k, jeton, kademe, hediye)
+ * Oyuna sorulanlar: oyunGiris(k) giriş yeri · oyunYerlesim() herkesin hedef yeri · oyunHediye(k, jeton, kademe, hediye, sayi)
  * hediyenin sahnedeki etkisi · oyunLiderDegisti(eski, yeni) rol devri. Ayrıntı: docs/KANCALAR.md.
  */
 // Eksik yazılar genel karşılıklarıyla doldurulur; oyun yalnız kendine özgü olanı yazar.
@@ -1911,6 +1911,8 @@ function olay(o) {
   }
   else if (o.tip === 'hediye') {
     const adet = clamp(Math.round(+o.adet) || 0, 0, 1e7), j = clamp(Math.round((+o.jeton || 1) * (+o.adet || 1)), 1, 1e7), onceki = D.lider;
+    // tek hediyenin değeri (jeton) ve kaç tane geldiği: oyunun "tek seferde şu kadar" kuralları için (oyunHediye'nin beşinci bilgisi)
+    const birim = clamp(Math.round(+o.jeton || 1), 1, 1e7), say = { birim, adet: Math.max(1, adet) };
     const k = katil(id, ad, true), hd = hediyeKimlik(o.hediye);
     if (!k)
       return;
@@ -1918,15 +1920,19 @@ function olay(o) {
     k.son = zaman;
     D.cosku = Math.min(1, D.cosku + Math.min(0.35, j / 300));
     const kd = KADEME.find(x => j >= x.min) || KADEME[KADEME.length - 1];
+    // Kademeye yalnız seriyle (tek hediyesi eşiğin altında) gelindiyse ve kademe ayrı bir "seriAd" taşıyorsa bildirim ve
+    // akış o adı yazar (docs/KANCALAR.md, OYUN.kademe). seriAd vermeyen oyunda kademenin adı yazar, değişen bir şey yok.
+    const kdAd = kd.seriAd && birim < kd.min ? kd.seriAd : kd.ad;
     // Hediye sevinci: bir sonraki yarım vuruştan başlayıp 4 vuruş sürer (oyun k.zip0–k.zip1 arasında zıplatır).
     k.zip0 = Math.ceil(B * 2) / 2;
     k.zip1 = k.zip0 + 4;
-    bildir(ad, j + ' jeton', kd.ad + '!');
+    bildir(ad, j + ' jeton', kdAd + '!');
     muzik.zil(Math.min(1, j / 200));
     // Akış satırı: hediyenin adı ve olayın taşıdığı adet (yoksa yazılmaz), jeton, tetiklenen kademe (25-yazilar.js).
-    gunluk('hediye', ad, '', { jeton: j, ad: hd && hd.ad || '', adet: adet > 1 ? adet : 0, kademe: kd.ad }, id);
-    // Dördüncü bilgi hediyenin kimliği ({ id, ad } ya da null); üç bilgiyle yazılmış kancalar eskisi gibi çalışır.
-    oyunHediye(k, j, kd, hd);
+    gunluk('hediye', ad, '', { jeton: j, ad: hd && hd.ad || '', adet: adet > 1 ? adet : 0, kademe: kdAd }, id);
+    // Dördüncü bilgi hediyenin kimliği ({ id, ad } ya da null), beşinci tek hediyenin değeri ve adedi ({ birim, adet });
+    // daha az bilgiyle yazılmış kancalar eskisi gibi çalışır.
+    oyunHediye(k, j, kd, hd, say);
     siraGuncelle();
     if (onceki && D.lider !== onceki)
       oyunLiderDegisti(onceki, D.lider);

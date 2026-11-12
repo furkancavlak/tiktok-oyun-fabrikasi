@@ -45,7 +45,8 @@ Testler ve kareler bir tarayıcı ister. Kurulu Chrome'u göstermek en hızlıs�
 Bütün testler (`node araclar/test.js`) yaklaşık 18 dakika sürer. Her değişiklikte hepsi gerekmez: değiştirdiğin şeyi
 sınayan bölümü çalıştır. Bölümler: `derle`, `cekirdek`, `oyun` (her oyun için), `kopru`, `muzik`, `araclar` (bir kez).
 `--yalniz` bölümleri seçer, `--hizli` çekirdek testlerindeki uzun dayanıklılık testini (9 × 10 sn) kısa sürümüyle
-(4 × 10 sn) çalıştırır; başka hiçbir şeyi atlamaz. Her bölümün süresi sonda ÖZET'te yazar.
+(4 × 10 sn) çalıştırır; oyunun kendi testi de `TEST_KADEME`'ye bakıp uzun koşularını kısaltabilir (Gelin Konvoyu 3B:
+reji ve çarpışma koşuları, aynı kontrollerle). Başka hiçbir şeyi atlamaz. Her bölümün süresi sonda ÖZET'te yazar.
 
 | Ne değişti | Düzenlerken | Bitirmeden önce ekle |
 | --- | --- | --- |

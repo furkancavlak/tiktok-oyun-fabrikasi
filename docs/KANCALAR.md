@@ -89,6 +89,11 @@ const OYUN = {
 };
 ```
 
+Kademenin isteğe bağlı `seriAd` alanı: hediye bu kademeye yalnız seriyle gelmişse (tek hediyenin jetonu kademenin
+`min`'inin altında, adet × jeton üstünde) bildirim ve akış satırı `ad` yerine `seriAd` yazar. Kademenin adı tek
+seferlik bir ödül söylüyorsa (Gelin Konvoyu 3B: `{ min: 1000, ad: 'Süper araba', seriAd: 'Drift şov' }`) seri onu
+vaat etmesin diye. Masanın hediye düğmeleri ve "Bu oyunda hediyeler" listesi `ad`'ı yazar. Verilmezse bir şey değişmez.
+
 Yeni oyun şablonu (`sablon/js/00-ayar.js`) önerilen ayarlarla gelir: `etiket: { ustSinir: true, altSinir: true,
 disari: 'gizle' }`, `sahneYazi: { pankart: 'alt' }`. Bunlar verilmezse çekirdek eski davranışı sürdürür (var olan
 oyunlar böyle çalışır).
@@ -143,7 +148,7 @@ panelRenk: {}            // panel koyu kalsın
 | `oyunBosalt()` | "boşalt" düğmesinde, oyuncular silindikten sonra | Oyunun kendi durumunu sıfırlar |
 | `oyunGiris(k)` | yeni izleyici katıldığında (`siraGuncelle` sonrası) | Giriş konumunu verir (`k.x`, `k.z`); sahneye dışarıdan gelsin |
 | `oyunYerlesim()` | sıra her değiştiğinde | `D.sira` içindeki herkesin hedef yerini hesaplar |
-| `oyunHediye(k, jeton, kademe, hediye)` | hediye sayıldıktan, sıra güncellenmeden önce | Kademenin sahnedeki etkisini başlatır. `hediye` hangi hediye olduğu: `{ id, ad }` ya da bilinmiyorsa `null` ("Hediyenin kimliği") |
+| `oyunHediye(k, jeton, kademe, hediye, sayi)` | hediye sayıldıktan, sıra güncellenmeden önce | Kademenin sahnedeki etkisini başlatır. `hediye` hangi hediye olduğu: `{ id, ad }` ya da bilinmiyorsa `null` ("Hediyenin kimliği"). `sayi = { birim, adet }`: tek hediyenin jetonu ve kaç tane geldiği (seri; olay adet taşımıyorsa 1). `jeton` = birim × adet |
 | `oyunLiderDegisti(eski, yeni)` | `D.lider` değişince | Rol devri: pankart, konfeti, işaretin el değiştirmesi |
 | `oyunGuncelle(dt)` | her kare, müzik saatinden sonra | Hareket ettirir, süreleri ilerletir, eklemleri kurar |
 | `oyunKamera()` | her kare | Kadraja girmesi gereken yer noktalarını döndürür: `[[x, z], …]` ya da seçenekli nesne ("Kamera") |
@@ -185,6 +190,10 @@ Ayrıntılar:
   açtırmaz; derleme adını söyleyip durur. Çekirdeğin adları aşağıda; kendi adlarını oyuna özgü seç.
 - `muzik.sov`'u çekirdek değiştirmez; oyun açıp kapatır (halay: `oyunHediye` ve `oyunGuncelle` içinde
   `muzik.sov = B < D.sovBit`).
+
+**Tek hediyenin değeri.** `oyunHediye`'nin beşinci bilgisi `{ birim, adet }`: "tek seferde şu kadar jetonluk hediye"
+gibi bir kural toplamla (`jeton`) değil `birim` ile bakar; 100 jetonluk hediyeden 10 tanelik seri `{ birim: 100, adet: 10 }`
+gelir, `jeton` 1000'dir. Deneme düğmeleri ve sahte kalabalık adet yollamaz (`adet: 1`, `birim` = `jeton`).
 
 **Hediyenin kimliği.** `oyunHediye`'nin dördüncü bilgisi hangi hediyenin geldiğidir: `{ id, ad }` (biri eksik
 olabilir) ya da kimlik bilinmiyorsa `null` (eski köprü, elle `olay` çağrısı). Üç bilgiyle yazılmış kancalar

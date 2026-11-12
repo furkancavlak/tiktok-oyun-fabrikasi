@@ -26,8 +26,8 @@ işlevi çağırır. Sayfada `window.CanliOyun.olay(o)` olarak erişilir. Aşağ
 | `hediye.id` | Platformun hediye numarası, metin olarak (`'5655'`). En çok 32 karakter. Sayı gelirse metne çevrilir. Boş metin ve 0 "yok" sayılır. |
 | `hediye.ad` | Hediyenin adı, düz metin. Denetim karakterleri atılır, kırpılır, 40 karaktere kısaltılır. Yabancıdan gelir: izleyici adı gibi **asla HTML olarak yazılmaz** (sayfaya `textContent`, tuvale `fillText`). |
 
-Hediye kimliği oyuna `oyunHediye(k, jeton, kademe, hediye)` kancasının dördüncü bilgisi olarak gelir (bkz.
-KANCALAR.md); bilinmiyorsa `null`. Paneldeki olay akışında jetonun yanında hediyenin adı yazılır
+Hediye kimliği oyuna `oyunHediye(k, jeton, kademe, hediye, sayi)` kancasının dördüncü bilgisi olarak gelir (bkz.
+KANCALAR.md); bilinmiyorsa `null`. Beşinci bilgi `{ birim, adet }`: olayın `jeton` (tek hediye) ve `adet` alanları. Paneldeki olay akışında jetonun yanında hediyenin adı yazılır
 (`15 jeton · Rose → Zıpla`). Deneme yolları sahte, `deneme-` önekli kimlikler yollar (gerçek numarayla karışmasın):
 `{ id: 'deneme-gul', ad: 'Gül' }`, `{ id: 'deneme-kalp', ad: 'Kalp' }`, `{ id: 'deneme-yildiz', ad: 'Yıldız' }`.
 Köprünün deneme kipi bunları sırayla yollar; paneldeki Deneme düğmelerinin en küçük kademesi Gül, sonrakiler Kalp ve

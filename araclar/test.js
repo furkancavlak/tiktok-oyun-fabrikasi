@@ -29,7 +29,9 @@ const KULLANIM = `Kullanım: node araclar/test.js [<oyun>] [--yalniz <bölümler
                        yazılır. Öntanım 1 şerit (hepsi sırayla). Bilgisayarda başka bir tarayıcı testi
                        çalışıyorsa 1 şerit kullan: iki şerit makineyi yorar, kare süresi ölçümleri kalabilir.
   --hizli              düzenleme döngüsü için: çekirdek testlerindeki uzun dayanıklılık testi (9 × 10 sn)
-                       kısa sürümüyle (4 × 10 sn) çalışır; başka hiçbir şey atlanmaz (TEST_KADEME=hizli).
+                       kısa sürümüyle (4 × 10 sn) çalışır, bir oyunun kendi testi de uzun koşularını kısa
+                       sürer (Gelin Konvoyu 3B: reji ve çarpışma); kontroller aynı, hiçbiri atlanmaz
+                       (TEST_KADEME=hizli).
                        Öntanım tam kademedir (TEST_KADEME=tam); sürümden önce bir kez --hizli olmadan çalıştır.
   --yardim             bu metin`;
 function kullanim(hata) {
