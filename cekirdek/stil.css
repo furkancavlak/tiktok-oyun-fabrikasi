@@ -259,15 +259,21 @@ input[type=range]{accent-color:var(--vurgu);width:100%;min-width:80px;margin:0}
 .gunluk li.cikan .ad{text-decoration:line-through;text-decoration-color:var(--sicak)}
 .gunluk li.cikan .eylem{display:none}
 
-/* deneme izleyicisi */
+/* deneme izleyicisi: sıkı tutulur ki 1366×768'de altındaki Yayın güvenliği kartının başı da görünsün */
+#deneme-kart{gap:8px}
 .eylemler{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
-.karo{flex-direction:column;justify-content:center;gap:3px;padding:9px 6px;text-align:center;font-size:13px}
-.karo small{font-size:11px;line-height:1.2;overflow-wrap:anywhere}
-.hediyeler{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:6px}
-.hediyeler .dugme{flex-direction:column;align-items:flex-start;gap:1px;padding:7px 10px;min-width:0}
-.hediyeler .h-esik{font-weight:700;color:var(--vurgu);font-variant-numeric:tabular-nums}
-.hediyeler .h-ad{font-size:12.5px;color:var(--soluk);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.oto-satir{justify-content:space-between}
+.karo{flex-direction:column;justify-content:center;gap:1px;padding:6px 4px;text-align:center;font-size:13px;line-height:1.2}
+.karo .ik{width:16px;height:16px}
+.karo small{font-size:11px;line-height:1.15;overflow-wrap:anywhere}
+.hediyeler{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:4px}
+.hediyeler .dugme{flex-direction:column;align-items:flex-start;gap:0;padding:5px 5px 5px 7px;min-width:0;border-radius:9px}
+.hediyeler .h-esik{max-width:100%;font-size:12px;font-weight:700;letter-spacing:-.01em;color:var(--vurgu);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hediyeler .h-ad{font-size:12px;color:var(--soluk);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.oto-satir{justify-content:space-between;gap:6px 10px}
+
+/* Kip ilk karede: köprü <html data-kip> yazar (kopru.js); betik çalışmadan da canlı yayında deneme izleyicisi kartı
+   görünmez, yerinde bu oyunun hediyeleri durur. Kip yazılmamışsa (diskten açılan sayfa) deneme. */
+html[data-kip=canli] #deneme-kart,html:not([data-kip=canli]) #kademe-kart{display:none}
 
 /* bu oyunun hediyeleri (canlı yayında deneme izleyicisinin yerinde) */
 .kademe-liste{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
@@ -341,6 +347,7 @@ pre{margin:8px 0 0;overflow-x:auto;font-size:11.5px;line-height:1.5;color:var(--
     grid-template-areas:"kisiler yan" "akis yan"}
   .gelismis-ic{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
   .gel-genis{grid-column:1 / -1}
+  .hediyeler{grid-template-columns:repeat(auto-fill,minmax(100px,1fr))}
 }
 /* dar masada tek sütun: kartlar alt alta, masa kayar */
 @container masa (max-width:539px){

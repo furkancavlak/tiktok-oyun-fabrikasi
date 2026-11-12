@@ -119,6 +119,16 @@ Köprü ayrıca durum iletisi yollar; oyun bunu panelde gösterir, olay saymaz:
 `baglanti` alanı olmayan iletiler (eski köprüler) yeni sayfada da işlenir; gösterge köprüye bağlıyken **Bağlı**
 der, **Canlı** demez (köprü TikTok'a bağlandığını söylemedi). Yeni köprüyle eski sayfa da çalışır; eski sayfa alanı yok sayar.
 
+### Sayfanın kipi: `<html data-kip>`
+
+Köprü bir oyun sayfasını sunarken (`GET /` ve ana sayfa kipinde `/oyun/<ad>/`) sayfanın başına, `window.OYUN_KOPRU`'yu
+yazdığı betiğe `document.documentElement.setAttribute("data-kip", "deneme" | "canli")` ekler: `--deneme` ya da ana
+sayfadaki **Dene** ile başlatılmışsa `deneme`, TikTok yayınına bağlanacaksa `canli`. Değer köprünün seçtiği bu iki
+sabit kelimeden biridir; istekten gelen hiçbir şey yazılmaz. Masa bunu ilk karesinde okur: `canli`da deneme
+izleyicisi kartı hiç görünmez (köprünün ilk durum iletisi gelmeden önce de), `deneme`de canlı düzen hiç görünmez.
+Diskten açılan sayfada öznitelik yoktur; sayfa deneme kipindedir. Bu alanı yazmayan eski köprüde sayfa eskisi gibi
+köprüden açıldığı için canlı kipte başlar, köprünün durum iletisi gelince düzelir.
+
 ## `window.CanliOyun`
 
 | Üye | Açıklama |
@@ -137,7 +147,7 @@ Köprü yalnız `127.0.0.1` dinler ve her kipte her isteğin `Host` başlığın
 
 | Adres | Yanıt |
 | --- | --- |
-| `GET /` | Oyun. Köprü sayfaya `window.OYUN_KOPRU` yazar (`ws://…/olay/<kimlik>`); oyun bunu görünce kendiliğinden bağlanır. |
+| `GET /` | Oyun. Köprü sayfaya `window.OYUN_KOPRU` yazar (`ws://…/olay/<kimlik>`); oyun bunu görünce kendiliğinden bağlanır. Ayrıca sayfanın kipini `<html data-kip>`e yazar (aşağıda). |
 | `GET /#yayin` | Yalnız sahne (panel gizli). |
 | `GET /durum` | `{ durum, bagliSayfa, sayac }` JSON. |
 | `GET /muzik/<dosya>` | Oyunun isteğe bağlı hazır parçaları. `liste.js` yoksa boş bir betik döner (konsola 404 düşmesin). |

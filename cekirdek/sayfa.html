@@ -53,7 +53,8 @@
 
   <!-- Yayın masası. İskelet her oyunda aynıdır; oyuna özgü olan yalnız: oyunun adı, birim kelimesi, hediye kademeleri
        ve etkileri, havalar, "boşalt" yazısı, "…'ya girer" notları. Bir oyunun kendi düğmesi #bu-oyunda içine girer.
-       data-kip: "deneme" ya da "canli" (60-panel.js, kipUygula); canlıda deneme izleyicisi kartı yoktur. -->
+       Kip <html data-kip> ile: "canli" ya da "deneme". Köprü sayfayı sunarken yazar (kopru.js kipEk); masa ilk karesinde
+       doğru kartı gösterir (stil.css), betik sonra aynısını #panel[data-kip] ve kartların hidden özniteliğine yazar. -->
   <div class="panel" id="panel" role="region" aria-label="Yayın masası" data-kip="deneme">
     <header class="masa-bas">
       <h1 class="masa-oyun" id="masa-oyun"></h1>
@@ -115,7 +116,7 @@
           </div>
         </section>
 
-        <section class="kart" id="kademe-kart" aria-labelledby="kademe-baslik" hidden>
+        <section class="kart" id="kademe-kart" aria-labelledby="kademe-baslik">
           <h2 id="kademe-baslik"><svg class="ik" aria-hidden="true"><use href="#i-hediye"/></svg>Bu oyunda hediyeler</h2>
           <ol class="kademe-liste" id="kademe-liste"></ol>
           <p class="kart-ipucu">Hediye, değerinin yettiği en büyük kademeyi tetikler. Seri hediye, seri bitince bir kez sayılır.</p>

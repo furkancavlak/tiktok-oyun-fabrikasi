@@ -162,7 +162,7 @@ function olay(o) {
     gunluk('geldi', ad, '', false, id);
   }
   else if (o.tip === 'hediye') {
-    const j = clamp(Math.round((+o.jeton || 1) * (+o.adet || 1)), 1, 1e7), onceki = D.lider;
+    const adet = clamp(Math.round(+o.adet) || 0, 0, 1e7), j = clamp(Math.round((+o.jeton || 1) * (+o.adet || 1)), 1, 1e7), onceki = D.lider;
     const k = katil(id, ad, true), hd = hediyeKimlik(o.hediye);
     if (!k)
       return;
@@ -175,7 +175,8 @@ function olay(o) {
     k.zip1 = k.zip0 + 4;
     bildir(ad, j + ' jeton', kd.ad + '!');
     muzik.zil(Math.min(1, j / 200));
-    gunluk('hediye', ad, j + ' jeton' + (hd && hd.ad ? ' · ' + hd.ad : '') + ' → ' + kd.ad, true, id);
+    // Akış satırı: hediyenin adı ve olayın taşıdığı adet (yoksa yazılmaz), jeton, tetiklenen kademe (25-yazilar.js).
+    gunluk('hediye', ad, '', { jeton: j, ad: hd && hd.ad || '', adet: adet > 1 ? adet : 0, kademe: kd.ad }, id);
     // Dördüncü bilgi hediyenin kimliği ({ id, ad } ya da null); üç bilgiyle yazılmış kancalar eskisi gibi çalışır.
     oyunHediye(k, j, kd, hd);
     siraGuncelle();

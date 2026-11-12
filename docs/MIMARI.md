@@ -29,7 +29,7 @@ girer. Oyun `D`'yi başka yoldan değiştirmez.
 | `00-yardimci.js` | Sayı yardımcıları (`clamp`, `lerp`, `yumusak`, `basamak`), addan tekrarlanabilir rastgelelik (`ozet`, `rastgeleUret`), `aciFark`, `azHareket`, `$`. |
 | `10-muzik.js` | `TAKIMLAR` (çalgı takımları: `davul-zurna`, `dugun`, `mac`; ses yapı taşları `mzTon`, `mzGurultu`, `mzEzgiKur`, `mzBas`, `mzAkor`), oyunun seçtiği `TAKIM` ve `HAVALAR` (`OYUN.muzik`'ten; bildirim yoksa davul zurna), `Muzik` sınıfı ve tek örneği `muzik`: zamanlayıcı, ses zinciri, vuruş saati, hazır parça kipi. |
 | `20-oyuncular.js` | `OYUN` eksiklerini doldurur; `KADEME`, `MAKS`, `D`, `karakterYap`, `gorunumUret`, `katil`, `cikar`, `siraGuncelle`, `olay`. |
-| `25-yazilar.js` | Sıra kutusu, bildirim satırı, pankart, masadaki akışın satırları (`gunluk`, en yenisi üstte; masa biçimler). Hepsi `textContent`. |
+| `25-yazilar.js` | Sıra kutusu, bildirim satırı, pankart, masadaki akışın satırları ve süzgeci (`gunluk`, `gunlukSuzSec`; en yenisi üstte, ikon, hediye satırı). Hepsi `textContent`. |
 | `30-sahne.js` | Tuval, `RENK` / `PANEL_RENK`, kamera (`kam`, `kamKur`, `pr`), `ik`, çizim listesi (`kap`, `top`, `ozel`, `listeCiz`), `kadrajHesap`, `kameraSigdir`, `golge`, `ETIKET`, `etiketCiz`, `kenarKarart`. |
 | `31-insan.js` | İnsan takımı: `iskeletKur`, `kolKur`, `pozBekle`, `pozOtur`, `insanEkle`, `elSekilCiz`, `kafaCiz`. |
 | `32-parcacik.js` | `konfeti`, `kalpAt`, `parcaCiz`: ekran koordinatında uçan parçacıklar. |

@@ -173,8 +173,8 @@ const sunucu = http.createServer((req, res) => {
   if (yol === '/' || yol === '/index.html') {
     fs.readFile(OYUN, 'utf8', (hata, html) => {
       if (hata) { res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' }); res.end('oyun.html bulunamadı. Önce derle: node araclar/derle.js <ad>'); return; }
-      // Oyuna "seni köprü açtı, şu adrese bağlan" bilgisini ver.
-      const ek = '<script>window.OYUN_KOPRU = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "' + OLAY_YOL + '";</script>';
+      // Oyuna "seni köprü açtı, şu adrese bağlan" bilgisini ve kipini (kipEk) ver.
+      const ek = '<script>window.OYUN_KOPRU = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "' + OLAY_YOL + '";' + kipEk(DENEME) + '</script>';
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...CERCEVE_YASAK });
       res.end(html.replace('<body>', '<body>\n' + ek));
     });
@@ -836,7 +836,7 @@ function anaSayfaIstegi(req, res, yol) {
     if (!calisan || calisan.oyun !== o.id) { res.writeHead(302, { location: '/', 'cache-control': 'no-store' }); res.end(); return; }
     // Kimlikler yalnız [\w-] ve onaltılık rakamdır: betiğin içine güvenle yazılır.
     const ek = '<script>window.OYUN_KOPRU = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/olay/' + o.id + '/' + calisan.calistirma + '";' +
-      'window.OYUN_CALISTIRMA = { oyun: "' + o.id + '", kimlik: "' + calisan.calistirma + '" };</script>\n' +
+      'window.OYUN_CALISTIRMA = { oyun: "' + o.id + '", kimlik: "' + calisan.calistirma + '" };' + kipEk(calisan.kip !== 'canli') + '</script>\n' +
       (calisan.kip === 'canli' ? DENEME_ADLARINI_SIL : '') + GERI_DON_EK;
     oyunSayfasi(o, ek, res);
     return;
@@ -844,6 +844,10 @@ function anaSayfaIstegi(req, res, yol) {
   if (m[1] === 'oyun' && alt.startsWith('/muzik/')) { muzikSun(alt.slice(7), req, res, path.join(o.klasor, 'muzik')); return; }
   res.writeHead(404); res.end();
 }
+// Sayfanın kipi açılıştan bellidir: masa daha ilk karesinde doğru düzende çizilir (deneme izleyicisi kartı yalnız
+// denemede). Köprünün seçtiği iki sabit kelimeden biri yazılır, istekten gelen hiçbir şey yazılmaz; sayfa <html data-kip>
+// okur (docs/OLAYLAR.md). Diskten açılan sayfada bu yoktur, sayfa deneme kipindedir.
+function kipEk(deneme) { return 'document.documentElement.setAttribute("data-kip","' + (deneme ? 'deneme' : 'canli') + '");'; }
 function oyunSayfasi(o, ek, res) {
   fs.readFile(path.join(o.klasor, 'oyun.html'), 'utf8', (hata, html) => {
     if (hata) { res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' }); res.end('oyun.html okunamadı.'); return; }

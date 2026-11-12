@@ -269,15 +269,21 @@ input[type=range]{accent-color:var(--vurgu);width:100%;min-width:80px;margin:0}
 .gunluk li.cikan .ad{text-decoration:line-through;text-decoration-color:var(--sicak)}
 .gunluk li.cikan .eylem{display:none}
 
-/* deneme izleyicisi */
+/* deneme izleyicisi: sıkı tutulur ki 1366×768'de altındaki Yayın güvenliği kartının başı da görünsün */
+#deneme-kart{gap:8px}
 .eylemler{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
-.karo{flex-direction:column;justify-content:center;gap:3px;padding:9px 6px;text-align:center;font-size:13px}
-.karo small{font-size:11px;line-height:1.2;overflow-wrap:anywhere}
-.hediyeler{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:6px}
-.hediyeler .dugme{flex-direction:column;align-items:flex-start;gap:1px;padding:7px 10px;min-width:0}
-.hediyeler .h-esik{font-weight:700;color:var(--vurgu);font-variant-numeric:tabular-nums}
-.hediyeler .h-ad{font-size:12.5px;color:var(--soluk);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.oto-satir{justify-content:space-between}
+.karo{flex-direction:column;justify-content:center;gap:1px;padding:6px 4px;text-align:center;font-size:13px;line-height:1.2}
+.karo .ik{width:16px;height:16px}
+.karo small{font-size:11px;line-height:1.15;overflow-wrap:anywhere}
+.hediyeler{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:4px}
+.hediyeler .dugme{flex-direction:column;align-items:flex-start;gap:0;padding:5px 5px 5px 7px;min-width:0;border-radius:9px}
+.hediyeler .h-esik{max-width:100%;font-size:12px;font-weight:700;letter-spacing:-.01em;color:var(--vurgu);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hediyeler .h-ad{font-size:12px;color:var(--soluk);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.oto-satir{justify-content:space-between;gap:6px 10px}
+
+/* Kip ilk karede: köprü <html data-kip> yazar (kopru.js); betik çalışmadan da canlı yayında deneme izleyicisi kartı
+   görünmez, yerinde bu oyunun hediyeleri durur. Kip yazılmamışsa (diskten açılan sayfa) deneme. */
+html[data-kip=canli] #deneme-kart,html:not([data-kip=canli]) #kademe-kart{display:none}
 
 /* bu oyunun hediyeleri (canlı yayında deneme izleyicisinin yerinde) */
 .kademe-liste{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
@@ -351,6 +357,7 @@ pre{margin:8px 0 0;overflow-x:auto;font-size:11.5px;line-height:1.5;color:var(--
     grid-template-areas:"kisiler yan" "akis yan"}
   .gelismis-ic{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
   .gel-genis{grid-column:1 / -1}
+  .hediyeler{grid-template-columns:repeat(auto-fill,minmax(100px,1fr))}
 }
 /* dar masada tek sütun: kartlar alt alta, masa kayar */
 @container masa (max-width:539px){
@@ -446,7 +453,8 @@ body:not(.yayin) .cik-yayin{display:none}
 
   <!-- Yayın masası. İskelet her oyunda aynıdır; oyuna özgü olan yalnız: oyunun adı, birim kelimesi, hediye kademeleri
        ve etkileri, havalar, "boşalt" yazısı, "…'ya girer" notları. Bir oyunun kendi düğmesi #bu-oyunda içine girer.
-       data-kip: "deneme" ya da "canli" (60-panel.js, kipUygula); canlıda deneme izleyicisi kartı yoktur. -->
+       Kip <html data-kip> ile: "canli" ya da "deneme". Köprü sayfayı sunarken yazar (kopru.js kipEk); masa ilk karesinde
+       doğru kartı gösterir (stil.css), betik sonra aynısını #panel[data-kip] ve kartların hidden özniteliğine yazar. -->
   <div class="panel" id="panel" role="region" aria-label="Yayın masası" data-kip="deneme">
     <header class="masa-bas">
       <h1 class="masa-oyun" id="masa-oyun"></h1>
@@ -508,7 +516,7 @@ body:not(.yayin) .cik-yayin{display:none}
           </div>
         </section>
 
-        <section class="kart" id="kademe-kart" aria-labelledby="kademe-baslik" hidden>
+        <section class="kart" id="kademe-kart" aria-labelledby="kademe-baslik">
           <h2 id="kademe-baslik"><svg class="ik" aria-hidden="true"><use href="#i-hediye"/></svg>Bu oyunda hediyeler</h2>
           <ol class="kademe-liste" id="kademe-liste"></ol>
           <p class="kart-ipucu">Hediye, değerinin yettiği en büyük kademeyi tetikler. Seri hediye, seri bitince bir kez sayılır.</p>
@@ -1897,7 +1905,7 @@ function olay(o) {
     gunluk('geldi', ad, '', false, id);
   }
   else if (o.tip === 'hediye') {
-    const j = clamp(Math.round((+o.jeton || 1) * (+o.adet || 1)), 1, 1e7), onceki = D.lider;
+    const adet = clamp(Math.round(+o.adet) || 0, 0, 1e7), j = clamp(Math.round((+o.jeton || 1) * (+o.adet || 1)), 1, 1e7), onceki = D.lider;
     const k = katil(id, ad, true), hd = hediyeKimlik(o.hediye);
     if (!k)
       return;
@@ -1910,7 +1918,8 @@ function olay(o) {
     k.zip1 = k.zip0 + 4;
     bildir(ad, j + ' jeton', kd.ad + '!');
     muzik.zil(Math.min(1, j / 200));
-    gunluk('hediye', ad, j + ' jeton' + (hd && hd.ad ? ' · ' + hd.ad : '') + ' → ' + kd.ad, true, id);
+    // Akış satırı: hediyenin adı ve olayın taşıdığı adet (yoksa yazılmaz), jeton, tetiklenen kademe (25-yazilar.js).
+    gunluk('hediye', ad, '', { jeton: j, ad: hd && hd.ad || '', adet: adet > 1 ? adet : 0, kademe: kd.ad }, id);
     // Dördüncü bilgi hediyenin kimliği ({ id, ad } ya da null); üç bilgiyle yazılmış kancalar eskisi gibi çalışır.
     oyunHediye(k, j, kd, hd);
     siraGuncelle();
@@ -1920,9 +1929,9 @@ function olay(o) {
 }
 
 /* ── cekirdek/js/25-yazilar.js ── */
-/* SAHNE ÜSTÜ YAZILAR — sıra kutusu, bildirimler, pankart, paneldeki olay günlüğü.
+/* SAHNE ÜSTÜ YAZILAR — sıra kutusu, bildirimler, pankart, masadaki akış.
  * bildir(ad, orta, vurgu): sağdaki bildirim satırı · pankart(satir1, satir2): ortadan geçen büyük duyuru
- * gunluk(tur, ad, metin): paneldeki olay günlüğü. Boş sıranın yazısı OYUN.yazi.bos'tan gelir.
+ * gunluk(tur, ad, metin, hediye, id): masadaki akış; gunlukSuzSec: akışın süzgeci. Boş sıranın yazısı OYUN.yazi.bos'tan gelir.
  * Hepsi textContent ile yazılır. Sıra kutusu ve günlük olay anında değil karede bir kez güncellenir
  * (yüzlerce olay aynı anda gelse de sayfa takılmasın diye).
  */
@@ -1994,60 +2003,84 @@ function pankart(b1, b2) {
   yer.append(p);
   setTimeout(() => p.remove(), 3500);
 }
-/* ---- paneldeki olay akışı ----
- * En yenisi üstte, en çok 40 satır. Fare ya da klavye odağı akıştayken (gunlukDur) satırlar kaymaz: yeni olaylar
- * bekler, yayıncı tıklamak istediği satırı kaçırmaz. id verilen satırda "Gizle" ve "Çıkar" düğmeleri olur
- * (60-panel.js bunları dinler). hediye ve id isteğe bağlıdır; oyun gunluk(tur, ad, metin) diye de çağırabilir.
+/* ---- masadaki akış ----
+ * En yenisi üstte. Fare ya da klavye odağı akıştayken (gunlukDur) satırlar kaymaz: yeni olaylar bekler, yayıncı
+ * tıklamak istediği satırı kaçırmaz. Her satırın başında türünün ikonu (ikon: 60-panel.js); id verilen satırda ad bir
+ * düğmedir, basınca altında "Adını gizle" ve "Sahneden çıkar" açılır (60-panel.js bunları dinler).
+ * hediye isteğe bağlıdır: true satırı vurgulu yazar (oyunun kendi satırları); çekirdeğin hediye satırı
+ * { jeton, ad, adet, kademe } verir: "Gül ×60 · 60 jeton · Çök". ad (hediyenin adı) yabancıdan gelir, temizlenmiş
+ * gelir (hediyeKimlik) ve yalnız metin olur; adet yalnız olay taşıyorsa ve 1'den büyükse yazar; adsız hediyede
+ * yalnız "60 jeton · Çök". Süzgeç (Hepsi / Hediyeler / Yorumlar) her türün son 40 satırını ayrı tutar: kalabalık
+ * yayında yorumlar hediyeleri listeden itmesin. oyun gunluk(tur, ad, metin) diye de çağırabilir.
  */
+const GUNLUK_SINIR = 40;
 const gunlukBekleyen = [];
-let gunlukDur = false, gunlukYeni = 0;
+let gunlukDur = false, gunlukYeni = 0, gunlukSuz = 'hepsi';
 const GUNLUK_TIP = { yorum: 'y', 'beğeni': 'b', takip: 't', hediye: 'h', 'paylaşım': 'p', geldi: 'g', gizlendi: 'm', 'çıkarıldı': 'm', 'geri alındı': 'm' };
-function gunluk(tur, ad, metin, hediye, id) { gunlukBekleyen.push([tur, ad, metin, hediye, id, Date.now()]); gunlukYeni++; if (gunlukBekleyen.length > 40)
+const GUNLUK_IKON = { y: 'yorum', b: 'kalp', t: 'takip', h: 'hediye', p: 'paylas', g: 'kisiler', gizlendi: 'goz', 'çıkarıldı': 'cikar', 'geri alındı': 'kalkan' };
+const GUNLUK_BOS = { t: 'takip etti', p: 'yayını paylaştı', g: 'yayına geldi' };
+const GUNLUK_SUZ = { hepsi: () => true, hediye: li => li.classList.contains('t-h'), yorum: li => li.classList.contains('t-y') };
+const gunlukKayit = { hepsi: [], hediye: [], yorum: [] };
+function gunluk(tur, ad, metin, hediye, id) { gunlukBekleyen.push([tur, ad, metin, hediye, id, Date.now()]); gunlukYeni++; if (gunlukBekleyen.length > GUNLUK_SINIR)
   gunlukBekleyen.shift(); }
 const ikiHane = n => (n < 10 ? '0' : '') + n;
+const gunlukOge = (etiket, sinif, yazi) => { const e = document.createElement(etiket); e.className = sinif; if (yazi != null) e.textContent = yazi; return e; };
 function gunlukSatir(tur, ad, metin, hediye, id, t) {
-  const li = document.createElement('li'), zm = document.createElement('span'), tp = document.createElement('span'), ic = document.createElement('span'), a = document.createElement('span');
-  const s = new Date(t);
-  li.className = 't-' + (GUNLUK_TIP[tur] || (hediye ? 'h' : 'o'));
-  zm.className = 'zm';
-  zm.textContent = ikiHane(s.getHours()) + ':' + ikiHane(s.getMinutes()) + ':' + ikiHane(s.getSeconds());
-  tp.className = 'tur';
-  tp.textContent = tur;
-  ic.className = 'icerik';
-  a.className = 'ad';
-  a.textContent = String(ad);
-  ic.append(a);
-  if (metin) {
-    const m = document.createElement('span');
-    m.className = 'metin';
-    m.textContent = kisalt(String(metin), 80);
-    ic.append(m);
+  const li = document.createElement('li'), s = new Date(t), tip = GUNLUK_TIP[tur] || (hediye ? 'h' : 'o');
+  li.className = 't-' + tip;
+  // türün adı ekran okuyucu için kalır; gözle ikondan okunur
+  li.append(ikon(GUNLUK_IKON[tip === 'm' ? tur : tip] || 'akis'), gunlukOge('span', 'tur gorunmez', tur));
+  const ic = gunlukOge('span', 'icerik'), m = gunlukOge('span', 'metin');
+  ic.append(id ? gunlukOge('button', 'ad', String(ad)) : gunlukOge('span', 'ad', String(ad)), m);
+  if (hediye && typeof hediye === 'object' && hediye.jeton) {
+    const n = hediye.adet > 1 ? ' ×' + Math.round(hediye.adet).toLocaleString('tr-TR') : '';
+    if (hediye.ad)
+      m.append(hediye.ad + n + ' · ');
+    m.append(gunlukOge('span', 'h-jt', Math.round(hediye.jeton).toLocaleString('tr-TR') + ' jeton'), ' · ' + (hediye.kademe || ''));
   }
-  li.append(zm, tp, ic);
+  else if (tip === 'b' && /^×\d+$/.test(metin))
+    m.textContent = metin.slice(1) + ' beğeni';
+  else if (!metin)
+    m.textContent = GUNLUK_BOS[tip] || tur;
+  else
+    m.textContent = (tip === 'm' || tip === 'o' ? tur + ' · ' : '') + kisalt(String(metin), 80);
+  li.append(ic, gunlukOge('span', 'zm', ikiHane(s.getHours()) + ':' + ikiHane(s.getMinutes()) + ':' + ikiHane(s.getSeconds())));
   if (id) {
     li.dataset.id = id;
-    li.classList.toggle('gizli', modKume.gizli.has(id));
-    li.classList.toggle('cikan', modKume.cikan.has(id));
-    const e = document.createElement('span');
-    e.className = 'eylem';
-    for (const [sinif, yazi, etiket] of [['g-gizle', 'Gizle', 'Adını gizle: '], ['g-cikar tehlike', 'Çıkar', 'Sahneden çıkar: ']]) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'mini ' + sinif;
-      b.textContent = yazi;
-      b.setAttribute('aria-label', etiket + ad);
-      e.append(b);
+    const b = ic.firstChild, e = gunlukOge('div', 'eylem');
+    b.type = 'button';
+    b.setAttribute('aria-expanded', 'false');
+    e.hidden = true;
+    for (const [sinif, ik] of [['g-gizle', 'goz'], ['g-cikar tehlike', 'cikar']]) {
+      const x = gunlukOge('button', 'mini ' + sinif);
+      x.type = 'button';
+      x.append(ikon(ik), document.createElement('span'));
+      e.append(x);
     }
     li.append(e);
+    gunlukModYaz(li);
   }
   return li;
+}
+// Satırın kişisi çıkarıldı mı, adı gizli mi: sınıflar ve "Adını gizle / göster" yazısı (60-panel.js modYaz da çağırır).
+function gunlukModYaz(li) {
+  const id = li.dataset.id;
+  if (!id)
+    return;
+  const gizli = modKume.gizli.has(id), [g, c] = li.querySelector('.eylem').children, ad = li.querySelector('.ad').textContent;
+  li.classList.toggle('gizli', gizli);
+  li.classList.toggle('cikan', modKume.cikan.has(id));
+  g.lastChild.textContent = gizli ? 'Adını göster' : 'Adını gizle';
+  g.setAttribute('aria-label', (gizli ? 'Adını yeniden göster: ' : 'Adını gizle: ') + ad);
+  c.lastChild.textContent = 'Sahneden çıkar';
+  c.setAttribute('aria-label', 'Sahneden çıkar: ' + ad);
 }
 function gunlukYaz() {
   const dur = $('akis-dur');
   if (gunlukDur) {
     if (gunlukYeni) {
       dur.hidden = false;
-      dur.textContent = 'Durdu · ' + (gunlukYeni > 40 ? '40+' : gunlukYeni) + ' yeni';
+      dur.textContent = 'Durdu · ' + (gunlukYeni > GUNLUK_SINIR ? GUNLUK_SINIR + '+' : gunlukYeni) + ' yeni';
     }
     return;
   }
@@ -2056,13 +2089,32 @@ function gunlukYaz() {
   gunlukYeni = 0;
   if (!gunlukBekleyen.length)
     return;
-  const ul = $('gunluk'), parca = document.createDocumentFragment();
-  for (const g of gunlukBekleyen)
-    parca.prepend(gunlukSatir(...g));
-  ul.prepend(parca);
+  const yeniler = gunlukBekleyen.map(g => gunlukSatir(...g)).reverse(); // en yenisi önde
   gunlukBekleyen.length = 0;
-  while (ul.children.length > 40)
+  for (const ad in gunlukKayit) {
+    const uyan = yeniler.filter(GUNLUK_SUZ[ad]);
+    if (uyan.length)
+      gunlukKayit[ad] = uyan.concat(gunlukKayit[ad]).slice(0, GUNLUK_SINIR);
+  }
+  const gor = yeniler.filter(GUNLUK_SUZ[gunlukSuz]);
+  if (!gor.length)
+    return;
+  const ul = $('gunluk'), parca = document.createDocumentFragment();
+  parca.append(...gor);
+  ul.prepend(parca);
+  while (ul.children.length > GUNLUK_SINIR)
     ul.lastChild.remove();
+  ul.scrollTop = 0;
+}
+// Süzgeci değiştirir: listeye o türün son 40 satırı konur (aynı öğeler, yeniden kurulmaz; kişilerin durumu tazelenir).
+function gunlukSuzSec(ad) {
+  if (!GUNLUK_SUZ[ad])
+    return;
+  gunlukSuz = ad;
+  for (const li of gunlukKayit[ad])
+    gunlukModYaz(li);
+  const ul = $('gunluk');
+  ul.replaceChildren(...gunlukKayit[ad]);
   ul.scrollTop = 0;
 }
 
@@ -3421,8 +3473,7 @@ function bagDurum(sinif, ileti) { const r = $('bag-rozet'); r.className = 'rozet
  * masaYaz: durum göstergesi, özet satırı ve sahnedekiler listesi (250 ms'de bir; yayın görünümünde çalışmaz)
  * kipUygula: masanın kipi. "canli" (sayfayı köprü açtı ve köprü deneme kipinde değil): deneme izleyicisi kartı yok,
  *   yerinde bu oyunun hediyeleri yazar; "deneme" (diskten açıldı ya da köprü deneme kipinde): her şey açık.
- * Akış: 25-yazilar.js satırı kurup #gunluk'a ekler; masa onu burada biçimler (ikon, ada basınca açılan işlemler,
- *   hediye satırı) ve süzgeci uygular (akisBicim, akisSuzSec).
+ * Akış: satırları 25-yazilar.js kurar; masa ada basınca açılan işlemleri ve süzgeç düğmelerini yönetir (akisAc, akisSuzSec).
  * izleyiciGizle / izleyiciCikar (+ geri alma): yayıncının hızlı eylemleri; kimliğe göre, ayarla birlikte saklanır
  * window.CanliOyun: dışarıya açık arayüz (olay, baglan, kes, cevir, durum, _test). Testler bunu kullanır.
  * Açılış bütün parçalar çalıştıktan sonra (mikro görevde) yapılır: oyunun üst düzey const'ları kancalarda hazırdır.
@@ -3610,15 +3661,18 @@ function durumAl() {
 // Masanın kipi sayfanın nasıl açıldığından gelir, olay gelip gelmemesinden değil: köprünün açtığı sayfa canlıdır,
 // köprü "deneme" derse denemedir; diskten açılan sayfa denemedir (elle canlı bir köprüye bağlanırsa canlıya geçer).
 const CANLI_BAGLANTI = ['baglaniyor', 'bekliyor', 'bagli', 'hata'];
+// Köprü sayfayı sunarken kipi <html data-kip>'e yazar (kopru.js kipEk): masa ilk karesinden doğru düzende çizilir.
+const SUNULAN_KIP = ['deneme', 'canli'].includes(document.documentElement.getAttribute('data-kip')) ? document.documentElement.getAttribute('data-kip') : '';
 let masaKip = '';
 function kipBak() {
   const b = Yayin.kopruBaglanti;
-  kipUygula(b === 'deneme' ? 'deneme' : CANLI_BAGLANTI.includes(b) ? 'canli' : masaKip || (KOPRU ? 'canli' : 'deneme'));
+  kipUygula(b === 'deneme' ? 'deneme' : CANLI_BAGLANTI.includes(b) ? 'canli' : masaKip || SUNULAN_KIP || (KOPRU ? 'canli' : 'deneme'));
 }
 function kipUygula(k) {
   if (k === masaKip)
     return;
   masaKip = k;
+  document.documentElement.setAttribute('data-kip', k);
   $('panel').dataset.kip = k;
   // Canlı yayında deneme izleyicisi kartı masada yoktur: sahte yorum, sahte hediye, otomatik kalabalık basılamaz.
   $('deneme-kart').hidden = k === 'canli';
@@ -3745,76 +3799,9 @@ function kisiAc(id) {
 }
 
 /* ---- akış ----
- * 25-yazilar.js satırı kurar (saat, tür, ad, metin, Gizle / Çıkar) ve listeye ekler; masa her yeni satırı bir kez
- * biçimler: başına türün ikonu, adı düğme olur (basınca işlemler satırın altında açılır, sahnedekilerle aynı),
- * hediye satırında hediyenin adı, jetonu ve oyunda neyi tetiklediği ayrı yazar. Süzgeç (Hepsi / Hediyeler / Yorumlar)
- * her türün son 40 satırını ayrı tutar: kalabalık yayında yorumlar hediyeleri listeden itmesin. Süzgece uymayan satır
- * listeden alınır, süzgeç değişince geri konur (aynı öğeler; yeniden kurulmaz). */
-const AKIS_SINIR = 40;
-const AKIS_IKON = { y: 'yorum', b: 'kalp', t: 'takip', h: 'hediye', p: 'paylas', g: 'kisiler' };
-const AKIS_MOD_IKON = { gizlendi: 'goz', 'çıkarıldı': 'cikar', 'geri alındı': 'kalkan' };
-const AKIS_SUZ = { hepsi: () => true, hediye: li => li.classList.contains('t-h'), yorum: li => li.classList.contains('t-y') };
-const akisKayit = { hepsi: [], hediye: [], yorum: [] }, akisBicimli = new WeakSet();
-let akisSuz = 'hepsi', akisAcik = null;
-// 20-oyuncular.js hediye satırını "<jeton> jeton[ · <hediyenin adı>] → <kademe>" diye yazar. Masada: hediyenin adı,
-// jeton (vurgulu), tetiklediği kademe. Hediyenin adı yabancıdan gelir: yalnız metin düğümü olur.
-function hediyeMetin(m, ham) {
-  const j = /^(\d+) jeton/.exec(ham), ok = ham.lastIndexOf(' → ');
-  if (!j || ok < j[0].length)
-    return;
-  const ad = ham.slice(j[0].length, ok).replace(/^ · /, ''), jt = yeni('span', 'h-jt', sayi(+j[1]) + ' jeton');
-  m.textContent = ad ? ad + ' · ' : '';
-  m.append(jt, ' · ' + ham.slice(ok + 3));
-}
-function akisBicim(li) {
-  const tur = li.querySelector('.tur'), ic = li.querySelector('.icerik'), zm = li.querySelector('.zm'), e = li.querySelector('.eylem');
-  const tip = (/(?:^| )t-(\w)/.exec(li.className) || [])[1] || 'o', turAd = tur ? tur.textContent : '';
-  if (tur)
-    tur.className = 'tur gorunmez'; // türün adı ekran okuyucu için kalır; gözle ikondan okunur
-  li.prepend(ikon(tip === 'm' ? AKIS_MOD_IKON[turAd] || 'kalkan' : AKIS_IKON[tip] || 'akis'));
-  if (!ic)
-    return;
-  let m = ic.querySelector('.metin');
-  if (!m)
-    ic.append(m = yeni('span', 'metin'));
-  const ham = m.textContent;
-  if (tip === 'h')
-    hediyeMetin(m, ham);
-  else if (tip === 'b' && /^×\d+$/.test(ham))
-    m.textContent = ham.slice(1) + ' beğeni';
-  else if (!ham)
-    m.textContent = { t: 'takip etti', p: 'yayını paylaştı', g: 'yayına geldi' }[tip] || turAd;
-  else if (tip === 'm' || tip === 'o')
-    m.textContent = turAd + ' · ' + ham;
-  if (zm)
-    li.append(zm);
-  if (!li.dataset.id || !e)
-    return;
-  const a = ic.querySelector('.ad'), b = yeni('button', 'ad', a.textContent);
-  b.type = 'button';
-  b.setAttribute('aria-expanded', 'false');
-  a.replaceWith(b);
-  e.hidden = true;
-  for (const x of e.children)
-    x.replaceChildren(ikon(x.classList.contains('g-cikar') ? 'cikar' : 'goz'), document.createElement('span'));
-  li.append(e);
-  akisModYaz(li);
-}
-// Satırın kişisi çıkarıldı mı, adı gizli mi: sınıflar ve "Adını gizle / göster" yazısı.
-function akisModYaz(li) {
-  const id = li.dataset.id;
-  if (!id)
-    return;
-  const gizli = modKume.gizli.has(id), e = li.querySelector('.eylem');
-  li.classList.toggle('gizli', gizli);
-  li.classList.toggle('cikan', modKume.cikan.has(id));
-  if (!e || !e.firstChild.lastChild)
-    return;
-  const ad = li.querySelector('.ad').textContent, [g, c] = e.children;
-  g.lastChild.textContent = gizli ? 'Adını göster' : 'Adını gizle';
-  g.setAttribute('aria-label', (gizli ? 'Adını yeniden göster: ' : 'Adını gizle: ') + ad);
-  c.lastChild.textContent = 'Sahneden çıkar';
-}
+ * Satırları 25-yazilar.js kurar (ikon, ad düğmesi, hediye satırı, süzgeç: gunlukSatir, gunlukSuzSec). Masa burada
+ * satırdaki ada basınca işlemleri açar (sahnedekilerle aynı; aynı anda tek satır) ve süzgeç düğmelerini yazar. */
+let akisAcik = null;
 function akisAc(li) {
   if (akisAcik && akisAcik !== li) {
     akisAcik.classList.remove('acik');
@@ -3829,41 +3816,11 @@ function akisAc(li) {
   }
 }
 function akisSuzSec(ad) {
-  if (!AKIS_SUZ[ad])
-    return;
-  akisSuz = ad;
   akisAc(null);
-  const ul = $('gunluk');
-  ul.dataset.suz = ad;
+  gunlukSuzSec(ad);
+  $('gunluk').dataset.suz = gunlukSuz;
   for (const b of $('akis-suz').children)
-    b.setAttribute('aria-pressed', b.dataset.suz === ad);
-  for (const li of akisKayit[ad])
-    akisModYaz(li);
-  ul.replaceChildren(...akisKayit[ad]);
-  ul.scrollTop = 0;
-}
-function akisGozle() {
-  new MutationObserver(kayitlar => {
-    const yeniler = [];
-    for (const k of kayitlar)
-      for (const n of k.addedNodes)
-        if (n.nodeType === 1 && !akisBicimli.has(n)) {
-          akisBicimli.add(n);
-          akisBicim(n);
-          yeniler.push(n); // eklenme sırası: en yenisi önde (25-yazilar.js gunlukYaz)
-        }
-    if (!yeniler.length)
-      return;
-    for (const ad in akisKayit) {
-      const uyan = yeniler.filter(AKIS_SUZ[ad]);
-      if (uyan.length)
-        akisKayit[ad] = uyan.concat(akisKayit[ad]).slice(0, AKIS_SINIR);
-    }
-    if (akisSuz !== 'hepsi')
-      for (const n of yeniler)
-        if (!AKIS_SUZ[akisSuz](n))
-          n.remove();
-  }).observe($('gunluk'), { childList: true });
+    b.setAttribute('aria-pressed', b.dataset.suz === gunlukSuz);
 }
 
 // Yayıncının çıkardığı / adını gizlediği kişiler (Yayın güvenliği kartı): özet ve geri alma listesi.
@@ -3886,7 +3843,7 @@ function modYaz() {
   const c = ayar.cikan.length, g = ayar.gizli.length;
   yaz('mod-ozet', c || g ? c + ' çıkarılan · ' + g + ' gizli' : 'kimse yok');
   for (const li of $('gunluk').children)
-    akisModYaz(li);
+    gunlukModYaz(li);
   kisiImza = '';
   masaYaz();
 }
@@ -4118,7 +4075,6 @@ function baslat(kayit) {
   });
   $('kisi-ara').oninput = () => kisilerYaz();
   // Akış: biçimleme, süzgeç, ada basınca işlemler
-  akisGozle();
   $('akis-suz').onclick = e => { const b = e.target.closest('button'); if (b) akisSuzSec(b.dataset.suz); };
   $('gunluk').onclick = e => {
     const b = e.target.closest('button'), li = b && b.closest('li');

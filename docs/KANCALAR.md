@@ -224,8 +224,8 @@ Oyunun yazdığı bayraklar:
 
 **Olaylar ve yazılar:** `olay(o)`, `katil(id, ad, zorla)`, `cikar(k)`, `siraGuncelle()`, `bildir(ad, orta,
 vurgu)`, `pankart(satir1, satir2)`, `gunluk(tur, ad, metin, hediye, id)` (son ikisi isteğe bağlı: `hediye` satırı
-vurgulu yazar, `id` verilirse satırdaki ada basınca yayıncının "Adını gizle" / "Sahneden çıkar" işlemleri açılır;
-"Yayın masası"), `konfeti(adet, guc)`, `kalpAt(adet)`.
+vurgulu yazar (`true`; çekirdeğin hediye satırı `{ jeton, ad, adet, kademe }` verir), `id` verilirse satırdaki ada
+basınca yayıncının "Adını gizle" / "Sahneden çıkar" işlemleri açılır; "Yayın masası"), `konfeti(adet, guc)`, `kalpAt(adet)`.
 
 **Sahne:** `c` (2B çizim bağlamı, 720×1280 sanal ölçekte), `GW`, `GH`, `ALAN_UST`, `ALAN_ALT`, `kam`,
 `pr([x, y, z])` → `{ x, y, s, d, ok }`, `kap(pa, ra, pb, rb, renk, derinlik)` (iki ucu farklı yarıçaplı kapsül),
@@ -385,8 +385,9 @@ Sahnenin sağındaki masa yalnız yayıncıya görünür (`#yayin` görünümün
 | Boşaltma düğmesi | `OYUN.yazi.bosalt` |
 | Akışta hediyenin tetiklediği | kademenin `ad`ı |
 
-**Kip.** Masa sayfanın nasıl açıldığına bakar, olay gelip gelmemesine değil: köprünün açtığı sayfa canlı kiptedir
-(`#panel[data-kip="canli"]`), köprü "deneme" derse ya da sayfa diskten açıldıysa deneme kipindedir. Canlı kipte
+**Kip.** Masa sayfanın nasıl açıldığına bakar, olay gelip gelmemesine değil. Köprü sayfayı sunarken kipi
+`<html data-kip="deneme" | "canli">`e yazar (docs/OLAYLAR.md); masa daha ilk karesinde ona göre çizilir. Diskten
+açılan sayfa deneme kipindedir. Betik aynı kipi `#panel[data-kip]`e ve kartların `hidden` özniteliğine de yazar. Canlı kipte
 "Deneme izleyicisi" kartı (`#deneme-kart`: sahte yorum, beğeni, takip, hediye, otomatik kalabalık) masada yoktur;
 yerinde "Bu oyunda hediyeler" (`#kademe-kart`) yazar. Elementler sayfada durur (testler ve araçlar `#oto`,
 `#hiz-2`, `#hediyeler`'e doğrudan basar), görünmez ve klavyeyle de ulaşılmaz.
@@ -422,8 +423,9 @@ Adlar: `canli`, `deneme`, `bekliyor`, `baglaniyor`, `koptu`, `durdu`, `hata`, `k
 `hayalet`, `hediye`, `kalkan`, `davul`, `ses`, `ayar`, `yorum`, `kalp`, `takip`, `paylas`, `goz`, `cikar`, `sahne`,
 `oyunlar`, `supurge`.
 
-**Akış.** `gunluk(tur, ad, metin, hediye, id)` satırı kurar; masa onu biçimler: başına türün ikonu, hediye
-satırında hediyenin adı · jeton · tetiklediği kademe, `id` varsa ad bir düğmedir (basınca "Adını gizle" ve
+**Akış.** `gunluk(tur, ad, metin, hediye, id)` satırı kurar (25-yazilar.js): başına türün ikonu, hediye satırında
+hediyenin adı ve olayın taşıdığı adet · jeton · tetiklediği kademe ("Gül ×60 · 60 jeton · Çök"; adsız hediyede
+yalnız "60 jeton · Çök", adet olay taşımıyorsa yazılmaz), `id` varsa ad bir düğmedir (basınca "Adını gizle" ve
 "Sahneden çıkar" altında açılır). Oyun kendi türüyle (`gunluk('solo', ad, 'ortaya çıktı')`) yazarsa satır genel
 akış ikonuyla, türün adı önde yazılır. Süzgeç (Hepsi / Hediyeler / Yorumlar) her türün son 40 satırını tutar.
 

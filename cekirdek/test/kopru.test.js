@@ -67,6 +67,17 @@ function baslat(klasor, args) { if (args.includes('--ana-sayfa') && !args.includ
   const hatalar = [];
   const sayfaAc = async (ctx, url) => { const p = await ctx.newPage(); await p.addInitScript(() => { window.OYUN_MUZIK_KAPALI = true; }); p.on('pageerror', e => hatalar.push(e.message + ' @ ' + p.url() + ' ' + String(e.stack || '').split(/\r?\n/).slice(1, 3).join(' '))); p.on('console', m => { if (m.type() === 'error' && !/ERR_TUNNEL|Failed to load resource|WebSocket connection/.test(m.text())) hatalar.push(m.text()); }); await p.goto(url); return p; };
 
+  // Masanın kipini her karede, boyanmadan hemen önce (requestAnimationFrame) kaydeder: deneme izleyicisi kartı ve "Bu
+  // oyunda hediyeler" kartı görünüyor muydu. Sayfanın betikleri çalışmadan önce kurulur; ilk boyanan kare de girer.
+  const kipSayfa = async (ctx2, url) => {
+    const kp2 = await ctx2.newPage();
+    await kp2.addInitScript(() => { window.OYUN_MUZIK_KAPALI = true; window.__kipIz = []; const al = () => { const d = document.getElementById('deneme-kart'), k = document.getElementById('kademe-kart'); if (d && k) window.__kipIz.push((d.checkVisibility() ? 'D' : '-') + (k.checkVisibility() ? 'K' : '-')); if (window.__kipIz.length < 300) requestAnimationFrame(al); }; requestAnimationFrame(al); });
+    kp2.on('pageerror', e => hatalar.push(e.message + ' @ ' + kp2.url()));
+    await kp2.goto(url);
+    return kp2;
+  };
+  const kipIz = async kp2 => { const iz = await kp2.evaluate(() => window.__kipIz.slice()); return { kare: iz.length, farkli: [...new Set(iz)] }; };
+
   // ---- 2. deneme kipi uçtan uca
   let k = baslat(KOK, ['--deneme', '--oyun', OYUN_AD, '--port', String(P)]); await bekle(900); await acik(P);
   const ctx = await b.newContext({ viewport: { width: 1280, height: 800 } });
@@ -77,6 +88,11 @@ function baslat(klasor, args) { if (args.includes('--ana-sayfa') && !args.includ
   kontrol('Köprüden açılan sayfa kendiliğinden bağlanır (deneme kipinde rozet "Deneme")', d.bagli && d.rozet === 'Deneme' && new RegExp('^ws://127[.]0[.]0[.]1:' + P + '/olay/[0-9a-f]{24}$').test(d.adres), { rozet: d.rozet, adres: d.adres, ileti: d.ileti });
   kontrol('Köprü deneme kipinde masa: durum göstergesi "Deneme" der ("Canlı" değil), masa deneme kipinde (deneme izleyicisi kartı var), Gelişmiş kapalı', d.serit === 'Deneme' && d.kip === 'deneme' && d.deneme && d.kademeGizli && d.gelismisKapali, { serit: d.serit, kip: d.kip, deneme: d.deneme, kademeGizli: d.kademeGizli, gelismisKapali: d.gelismisKapali });
   kontrol('Köprüden gelen olaylar oyuna işlenir', d.alinan > 8 && d.kisi >= 3, { alinan: d.alinan, kisi: d.kisi });
+  {
+    const kd = await kipSayfa(ctx, 'http://127.0.0.1:' + P + '/'); await bekle(2500);
+    const iz = await kipIz(kd), html = await kd.evaluate(() => document.documentElement.getAttribute('data-kip')); await kd.close();
+    kontrol('Köprünün deneme kipinde masa ilk boyanan karesinden itibaren deneme düzenindedir (canlı düzen hiç görünmez): köprü sayfaya kipini yazar', iz.kare > 5 && iz.farkli.length === 1 && iz.farkli[0] === 'D-' && html === 'deneme', { ...iz, html });
+  }
   kontrol('Gerçek yayın kipinde sahte izleyici kapalı ve sahte ad yok', /kapalı/.test(d.oto) && d.sira.every(x => x[0].startsWith('D. ')), { oto: d.oto, adlar: d.sira.map(x => x[0]) });
   kontrol('Süren seri sayılmadı: jetonlar 15\'in katı', d.sira.every(x => x[1] % 15 === 0) && d.sira.some(x => x[1] >= 15), d.sira.map(x => x[1]));
   const dr = JSON.parse((await al('http://127.0.0.1:' + P + '/durum')).govde);
@@ -519,7 +535,10 @@ function baslat(klasor, args) { if (args.includes('--ana-sayfa') && !args.includ
     await api({ oyun: 'a-oyun', kip: 'canli', kullanici: 'Test_Kullanici' }); await bekle(700);
     const bek = await durum();
     const ctx10 = await b.newContext({ viewport: { width: 1280, height: 800 } });
+    const ok2 = await kipSayfa(ctx10, A + '/oyun/a-oyun/');
     const op = await sayfaAc(ctx10, A + '/oyun/a-oyun/'); await bekle(1500);
+    const izCanli = await kipIz(ok2), htmlCanli = await ok2.evaluate(() => document.documentElement.getAttribute('data-kip')); await ok2.close();
+    kontrol('Canlı başlatmada masa ilk boyanan karesinden, köprünün ilk durum iletisinden önce de canlı düzendedir: deneme izleyicisi kartı hiç görünmez', izCanli.kare > 5 && izCanli.farkli.length === 1 && izCanli.farkli[0] === '-K' && htmlCanli === 'canli', { ...izCanli, html: htmlCanli });
     const hucreBek = await op.evaluate(() => ({ hucre: document.getElementById('d-bag').textContent, alt: document.getElementById('d-bag-alt').textContent, rozet: document.getElementById('bag-rozet').textContent, cumle: document.getElementById('durum-cumle').hidden ? '' : document.getElementById('durum-cumle').textContent, kip: document.getElementById('panel').dataset.kip,
       sahteGorunur: [...document.querySelectorAll('#deneme-kart, #deneme-kart button, #deneme-kart input, #oto, #hiz-sec button, #hediyeler button, #s-yorum, #s-begeni, #s-takip, #sahte-ad')].filter(e => e.checkVisibility()).map(e => e.id || e.className),
       kademe: document.getElementById('kademe-kart').checkVisibility() ? document.querySelectorAll('#kademe-liste li').length : 0, oto: CanliOyun._test && document.getElementById('oto').getAttribute('aria-pressed') }));
@@ -653,9 +672,9 @@ function baslat(klasor, args) { if (args.includes('--ana-sayfa') && !args.includ
       await hc.close(); c.kill('SIGKILL'); await bekle(400);
     }
     const s = uc.v1 || {}, s2 = uc.v2 || {}, s3 = uc.v25 || {}, siz = x => !x || (x.etiket === 0 && !x.xss);
-    kontrol('Hediye kimliği uçtan uca, 1.x kütüphane: seri bitince Rose 1×5 sayılır, ad akışta jetonun yanında; HTML ad düz metin (öğe yok, betik çalışmaz)', JSON.stringify(s.sira) === JSON.stringify([['H Cem', 30], ['H Ayşe', 5]]) && (s.satir || []).some(x => /^Rose · 5 jeton · /.test(x)) && (s.satir || []).some(x => x.startsWith('<img src=x onerror="window.__xss=1"> · 30 jeton · ')) && siz(s), s);
-    kontrol('Hediye kimliği uçtan uca, 2.0 kütüphane (giftDetails): <b>x</b> düz metin; kimliği olmayan hediye eskisi gibi yazılır', JSON.stringify(s2.sira) === JSON.stringify([['H Sude', 30], ['H Memo', 4]]) && (s2.satir || []).some(x => x.startsWith('<b>x</b> · 4 jeton · ')) && (s2.satir || []).some(x => /^30 jeton · /.test(x)) && siz(s2), s2);
-    kontrol('Hediye kimliği uçtan uca, 2.5 kütüphane (gift.name): seri bitince bir kez; uzun ad kısaltılmış gelir', JSON.stringify(s3.sira) === JSON.stringify([['H Baran', 30], ['H Elif', 3]]) && (s3.satir || []).some(x => /^Rose · 3 jeton · /.test(x)) && !(s3.satir || []).some(x => /(^| )2 jeton · /.test(x)) && (s3.satir || []).some(x => x.startsWith('Ş'.repeat(39) + '… · 30 jeton · ')) && siz(s3), s3);
+    kontrol('Hediye kimliği uçtan uca, 1.x kütüphane: seri bitince Rose 1×5 sayılır, akışta "Rose ×5 · 5 jeton" (süren serinin adedi yazılmaz); HTML ad düz metin (öğe yok, betik çalışmaz)', JSON.stringify(s.sira) === JSON.stringify([['H Cem', 30], ['H Ayşe', 5]]) && (s.satir || []).some(x => /^Rose ×5 · 5 jeton · /.test(x)) && !(s.satir || []).some(x => /×2 /.test(x)) && (s.satir || []).some(x => x.startsWith('<img src=x onerror="window.__xss=1"> · 30 jeton · ')) && siz(s), s);
+    kontrol('Hediye kimliği uçtan uca, 2.0 kütüphane (giftDetails): <b>x</b> düz metin; kimliği olmayan hediye eskisi gibi yazılır', JSON.stringify(s2.sira) === JSON.stringify([['H Sude', 30], ['H Memo', 4]]) && (s2.satir || []).some(x => x.startsWith('<b>x</b> ×4 · 4 jeton · ')) && (s2.satir || []).some(x => /^30 jeton · /.test(x)) && siz(s2), s2);
+    kontrol('Hediye kimliği uçtan uca, 2.5 kütüphane (gift.name): seri bitince bir kez; uzun ad kısaltılmış gelir', JSON.stringify(s3.sira) === JSON.stringify([['H Baran', 30], ['H Elif', 3]]) && (s3.satir || []).some(x => /^Rose ×3 · 3 jeton · /.test(x)) && !(s3.satir || []).some(x => /(^| )2 jeton · /.test(x)) && (s3.satir || []).some(x => x.startsWith('Ş'.repeat(39) + '… · 30 jeton · ')) && siz(s3), s3);
     // Deneme kipi: sahte, "deneme-" önekli kimlikler sırayla gelir (soketten okunur)
     const dk = path.join(GECICI, 'hediye-deneme'); fs.mkdirSync(dk); fs.copyFileSync(path.join(KOK, 'kopru.js'), path.join(dk, 'kopru.js')); fs.copyFileSync(OYUN_HTML, path.join(dk, 'oyun.html'));
     const dc = baslat(dk, ['--deneme', '--port', String(kp)]); await bekle(700); await acik(kp);
