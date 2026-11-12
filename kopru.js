@@ -51,7 +51,16 @@ const oi = args.indexOf('--oyun');
 // Değer alan seçenekler: değerleri kullanıcı adı sanılmaz. --kurulum-betigi ve --kurulum-sinir yalnız testler içindir
 // (npm yerine taklit kurulum betiği ve süre sınırı); BASLAT.bat bunları hiç vermez.
 const DEGERLI = ['--port', '--oyun', '--kurulum-betigi', '--kurulum-sinir'];
-const KULLANICI = (args.find((a, i) => !a.startsWith('--') && !DEGERLI.includes(args[i - 1])) || '').replace(/^@/, '').trim();
+// Yayıncının yazdığı ad: baştaki @ (bir ya da daha çok), çevredeki boşluk ve yapıştırılan profil adresi
+// (https://www.tiktok.com/@ad, tiktok.com/@ad/live, ?… ile) çıplak ada çevrilir. Başka hiçbir şey düzeltilmez: geçerlilik
+// sonra sıkı denetlenir (ana sayfa kipinde KULLANICI_DESEN), yanlış ad yine geri çevrilir.
+function adiTemizle(v) {
+  let s = String(v == null ? '' : v).trim();
+  const m = /^(?:https?:\/\/)?(?:[a-z0-9-]+\.)*tiktok\.com\/@([^/?#\s]+)(?:[/?#]\S*)?$/i.exec(s);
+  if (m) s = m[1];
+  return s.replace(/^@+/, '').trim();
+}
+const KULLANICI = adiTemizle(args.find((a, i) => !a.startsWith('--') && !DEGERLI.includes(args[i - 1])) || '');
 function oyunlariBul() {
   const kl = path.join(__dirname, 'oyunlar');
   try { return fs.readdirSync(kl).filter(a => fs.existsSync(path.join(kl, a, 'oyun.html'))); } catch (e) { return []; }
@@ -967,7 +976,7 @@ function baslatIstegi(req, res) {
       return;
     }
     if (g.kip === 'canli') {
-      ad = String(g.kullanici == null ? '' : g.kullanici).trim().replace(/^@/, '');
+      ad = adiTemizle(g.kullanici);
       if (!KULLANICI_DESEN.test(ad)) { jsonYaz(res, 400, { tamam: false, alan: 'kullanici', hata: 'Kullanıcı adı geçersiz: yalnız harf, rakam, alt çizgi ve nokta olur (2-24 karakter, noktayla bitmez).' }); return; }
     }
     oyunCalistir(o, g.kip, ad);
@@ -1100,8 +1109,12 @@ const BH = {
   internet: 'TikTok\'a ulaşılamadı: internet bağlantısı yok ya da çok yavaş. İnterneti kontrol et; motor kendisi yeniden dener.',
   engel: 'TikTok bu bağlantıyı doğrulama (captcha) istedi ya da bu ağdan / bölgeden engelledi. Biraz sonra yeniden dene ya da başka bir ağdan (ör. telefonun interneti) bağlan.',
   imza: 'TikTok bağlantısı için gereken imza hizmeti şu an isteği geri çevirdi ya da yanıt vermiyor. Bu, kütüphanenin dayandığı başka bir şirketin hizmetidir; senin hatan değil. Birkaç dakika bekle, motor kendisi yeniden dener.',
-  oda: 'Yayın odası bulunamadı. Kullanıcı adını kontrol et (profil linkindeki ad, @ olmadan); ad doğruysa yayını TikTok\'ta başlat, köprü kendiliğinden bağlanır.'
+  oda: 'Yayın odası bulunamadı. Kullanıcı adını kontrol et (profil linkindeki ad, @ olmadan); ad doğruysa yayını TikTok\'ta başlat, köprü kendiliğinden bağlanır.',
+  yok: ad => 'TikTok\'ta ' + ad + ' adında bir hesap bulunamadı. Profil adresindeki @ işaretinden sonraki kullanıcı adını yaz (@ olmadan); profilde görünen adı değil.'
 };
+// TikTok "bu ad yok" dediğinde: API kaynağının iç hatası "[fetchRoomInfoApiLiveRoute] API Error 19881007 (user_not_found)"
+// (2.5.0, gerçek TikTok'la 12 Kasım 2026'da kaydedildi). Yalnız bu açık işaret sayılır; "not found" geçen her ileti sayılmaz.
+const HESAP_YOK = /\buser_not_found\b|\bAPI Error 19881007\b/;
 const NET_KOD = new Set(['ENOTFOUND', 'EAI_AGAIN', 'ENETUNREACH', 'ENETDOWN', 'EHOSTUNREACH', 'ETIMEDOUT', 'ESOCKETTIMEDOUT']);
 const guvenliAl = (o, k) => { try { return o === null || o === undefined || (typeof o !== 'object' && typeof o !== 'function') ? undefined : o[k]; } catch (e) { return undefined; } };
 const guvenliYazi = v => {
@@ -1146,6 +1159,10 @@ function baglantiHatasiIc(e, kullaniciAdi) {
     const ayrinti = ozetler.map(({ o: a }) => '  ' + kaynak(a.ileti) + ': ' + (a.ileti || a.kod || '(boş)').slice(0, 300));
     const asil = ozetler.filter(({ o: a }) => kaynak(a.ileti) !== 'euler');
     const ek = { ayrinti, ham: o.ileti + ' | ' + ayrinti.join(' | ') };
+    // Sıra: (1) hesap yok, (2) internet yok, (3) engel / captcha, (4) oda bulunamadı. Hesap yok önce gelir: TikTok'un
+    // API'si adın olmadığını açıkça söyler; HTML kaynağının "you might be blocked" iletisi ise bir tahmindir ve olmayan
+    // bir hesabın sayfasında da çıkar (gerçek kayıt: html "might be blocked" + api "user_not_found" birlikte gelir).
+    if (ozetler.some(({ o: a }) => HESAP_YOK.test(a.ileti) || a.kod === 'user_not_found')) return sonuc('kullanici-yok', BH.yok(ad), ek);
     if (asil.length && asil.every(({ x }) => agKodu(x))) return sonuc('internet', BH.internet, ek);
     if (asil.some(({ o: a }) => /Are you captcha-blocked by TikTok\?|you might be blocked by TikTok\.|status code 403\b/.test(a.ileti))) return sonuc('engel', BH.engel, ek);
     return sonuc('oda-yok', BH.oda, { ...ek, kisa: true });
@@ -1155,7 +1172,7 @@ function baglantiHatasiIc(e, kullaniciAdi) {
   if (sinifMi(o, 'SignAPIError', 'SignatureRateLimitError', 'SignatureMissingTokensError', 'PremiumFeatureError', 'AuthenticatedWebSocketConnectionError', 'SignatureError', 'InitialFetchError'))
     return agKodu(e) ? sonuc('internet', BH.internet) : sonuc('imza', BH.imza);
   if (sinifMi(o, 'NoWSUpgradeError')) return sonuc('engel', BH.engel);
-  if (sinifMi(o, 'InvalidUniqueIdError')) return sonuc('kullanici-yok', ad + ' adı geçersiz görünüyor. Profil adresindeki adı @ olmadan yaz.');
+  if (sinifMi(o, 'InvalidUniqueIdError') || HESAP_YOK.test(o.ileti)) return sonuc('kullanici-yok', BH.yok(ad));
   if (sinifMi(o, 'ExtractRoomIdError')) { // 1.x: "Failed to retrieve room_id from page source. <iç ileti>"
     const icI = o.ileti.replace(/^Failed to retrieve room_id from page source\. ?/, '');
     if (/^User might be offline\.$/.test(icI)) return canliDegil();
@@ -1227,6 +1244,10 @@ function tiktokBaslat(kullaniciAdi = KULLANICI) {
         if (!h.ayrinti && h.ham && h.ham !== kisaYazi(e, 600)) console.log('  ayrıntı: ' + h.ham.slice(0, 1500));
       } catch (x) { }
       // Ana sayfa kipinde Yayın düğmesi beklemeden yeniden dener: uzun beklemede bunu söyle.
+      if (h.tur === 'kullanici-yok') { // ad yanlışsa beklemek düzeltmez: yeniden denenmez, ne yapılacağı söylenir
+        durumBildir(h.cumle + (ANA ? ' Adı düzelt, sonra Yayın\'a yeniden bas.' : ' Adı düzeltip köprüyü yeniden başlat.'), 'hata');
+        return;
+      }
       const not = h.kisa && ANA ? 'hemen denemek için ana sayfada Yayın\'a yeniden bas' : '';
       yenidenDene(h.cumle, h.baglanti, [h.ek, not].filter(Boolean).join('; '), h.kisa);
     });
@@ -1270,5 +1291,5 @@ function denemeBaslat() {
   return () => clearInterval(saat);
 }
 
-module.exports = { cevir, oyunSec, agacKes, kurulumNedeni, KURULUM_NEDEN, KURULUM_KOMUTU, baglantiHatasi }; // testler için
+module.exports = { cevir, oyunSec, agacKes, kurulumNedeni, KURULUM_NEDEN, KURULUM_KOMUTU, baglantiHatasi, adiTemizle }; // testler için
 if (require.main === module) calistir();

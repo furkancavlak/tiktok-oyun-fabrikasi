@@ -160,7 +160,7 @@ Ana sayfa kipinde (`node kopru.js --ana-sayfa`; `BASLAT.bat` bunu `--gizli` ile 
 | `GET /` | Ana sayfa (`cekirdek/ana-sayfa.html`; pakette köprünün yanında). Açılışta yükleme sahnesi. |
 | `GET /api/oyunlar` | `{ anaSayfa, paket, platform: "windows" \| "mac" \| "linux", motor, arkaPlan, uyku, oyunlar: [{ id, ad, aciklama }], aktif: { oyun, ad, kip, kullanici, calistirma, baglanti } \| null, durum, kutuphane: { durum: "hazir" \| "iniyor" \| "hata", sure, neden } }`. |
 | `GET /durum` | `{ durum, bagliSayfa, sayac, aktif }` JSON. |
-| `POST /api/baslat` | Gövde `{ oyun, kip: "deneme" \| "canli", kullanici }`. Çalışanı durdurur, seçileni yeni bir başlatma kimliğiyle (`calistirma`) başlatır; eski başlatmanın soketleri kapatılır. Aynı oyun aynı kipte ve aynı adla yeniden istenirse bağlantı koparılmaz; TikTok'a henüz bağlı değilse hemen yeniden denenir. Yanıt `{ tamam, adres }` ya da `{ tamam: false, hata, alan }`. Kütüphane inmeden canlı istenirse 409 (`alan: "kutuphane"`). Kullanıcı adı: harf, rakam, `_`, `.`; 2-24 karakter; noktayla bitmez. |
+| `POST /api/baslat` | Gövde `{ oyun, kip: "deneme" \| "canli", kullanici }`. Çalışanı durdurur, seçileni yeni bir başlatma kimliğiyle (`calistirma`) başlatır; eski başlatmanın soketleri kapatılır. Aynı oyun aynı kipte ve aynı adla yeniden istenirse bağlantı koparılmaz; TikTok'a henüz bağlı değilse hemen yeniden denenir. Yanıt `{ tamam, adres }` ya da `{ tamam: false, hata, alan }`. Kütüphane inmeden canlı istenirse 409 (`alan: "kutuphane"`). Kullanıcı adı: önce baştaki `@`, çevredeki boşluk ve tam profil adresi (`https://www.tiktok.com/@ad…`, `tiktok.com/@ad/live`) çıplak ada çevrilir (`adiTemizle`; ana sayfanın bileti de aynısını yapar, yanıttaki `aktif.kullanici` kullanılan addır); sonra sıkı kural: harf, rakam, `_`, `.`; 2-24 karakter; noktayla bitmez. Bağlanma hatasının cümlesi `durum` alanındadır; sınıflandırma sırası aşağıda. |
 | `POST /api/durdur` | Gövde `{}`. Çalışan oyunun sahte olaylarını ya da TikTok bağlantısını kapatır; motor boşta bekler. |
 | `POST /api/kutuphane` | Gövde `{}`. İndirme başarısız olduysa yeniden dener. |
 | `POST /kapat` | Başlık `X-Fabrika: kapat`. Gövde `{}` (ana sayfadaki **Motoru kapat**): motoru uyutur. Çalışan oyun ve TikTok bağlantısı durur, açık oyun sayfalarına "Motor durdu" denir (yeniden bağlanmayı bırakırlar), süren kurulum kesilir; süreç yaşar, yalnız dinler. Yanıt `{ tamam, uyku: true, … }` (ana sayfa durumu). Gövde `{ tam: true }` (yalnız başka klasörün başlatıcısı; sayfa yollamaz): `{ tamam, tam, ileti }` yazılır, motor tamamen kapanır. |
@@ -170,6 +170,17 @@ Ana sayfa kipinde (`node kopru.js --ana-sayfa`; `BASLAT.bat` bunu `--gizli` ile 
 | `GET /oyun/<id>/muzik/<dosya>` | O oyunun isteğe bağlı hazır parçaları (`liste.js` yoksa boş betik). |
 | `GET /onizleme/<id>/` | Aynı oyun köprüsüz ve sessiz; ana sayfadaki kabinin önizlemesi (`#yayin` ile). |
 | WebSocket `/olay/<id>/<calistirma>` | Yalnız çalışan başlatmanın olayları. Kaynak yalnız köprünün kendi sayfası; başka yol, başka kaynak, kaynaksız istemci ve eski başlatmanın kimliği geri çevrilir. |
+
+Bağlanma hatalarının sınıflandırılması (`kopru.js`, `baglantiHatasi`). Kütüphane 2.x'in bileşik hatası ("Failed to retrieve
+Room ID from all sources.") iç hataları kaynak kaynak taşır (html / api / euler). Sıra: (1) **hesap yok**: herhangi bir
+kaynakta `user_not_found` ya da `API Error 19881007` (gerçek TikTok kaydı, 2.5.0: olmayan bir ad html'de "you might be
+blocked by TikTok." tahminini, api'de `API Error 19881007 (user_not_found)` verir) → "TikTok'ta @ad adında bir hesap
+bulunamadı. Profil adresindeki @ işaretinden sonraki kullanıcı adını yaz (@ olmadan); profilde görünen adı değil.",
+durum `hata`, yeniden denenmez; (2) **internet yok**: Euler dışındaki bütün kaynaklar ağ hatası; (3) **engel / captcha**:
+"captcha-blocked", "might be blocked" ya da 403; (4) **oda bulunamadı**: geri kalan. Hesap yok önce gelir, çünkü TikTok'un
+API'si açık konuşur, html'in "might be blocked" iletisi ise olmayan hesapta da çıkan bir tahmindir. Canlı olmayan hesap
+ayrı bir hatadır (`UserOfflineError`, "The requested user isn't online :(") → "@ad şu an canlı yayında değil.", durum
+`bekliyor`, kendisi yeniden dener.
 
 POST istekleri yalnız köprünün kendi sayfasından kabul edilir (`Host`, `Origin`, varsa `Sec-Fetch-Site`, JSON gövde,
 en çok 4 KB). `POST /kapat`, `/uyan` ve `/nabiz` ayrıca kendi `X-Fabrika` başlığını ister: tarayıcı başka bir sitenin bu başlıklı isteği için

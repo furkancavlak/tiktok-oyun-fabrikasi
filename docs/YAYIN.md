@@ -111,7 +111,7 @@ buna izin verip vermediği denenmedi.
 | Ana sayfa "Motor çalışmıyor" ya da "Motora ulaşılamıyor" diyor | Motor kapanmış (ana sayfadan kapatıldı ya da hiçbir sayfa açık değilken kendiliğinden kapandı). `BASLAT.bat` dosyasına yeniden çift tıkla; açık sayfa motor gelince kendiliğinden devam eder. |
 | Ana sayfa "Motor durdu." diyor | Motoru **Motoru kapat** ile durdurdun. **Başlat**'a bas; salon geri gelir. Oyun sayfası da "Motor durdu" der: ana sayfaya dön, **Başlat**'a bas. |
 | Ana sayfa "Motor tamamen kapandı. Yeniden açmak için BASLAT'a çift tıkla." diyor | Motor durmuştu ve "Motor durdu" sekmesi bir süre kapalı kaldı, motor da tamamen kapandı. `BASLAT.bat` dosyasına çift tıkla. |
-| Kullanıcı adı kabul edilmiyor | TikTok adında yalnız harf, rakam, alt çizgi ve nokta olur; en çok 24 karakter, noktayla bitmez. Ekrandaki adını değil, profil adresindeki `@` ile başlayan adı yaz. |
+| Kullanıcı adı kabul edilmiyor | TikTok adında yalnız harf, rakam, alt çizgi ve nokta olur; en çok 24 karakter, noktayla bitmez. Ekrandaki adını değil, profil adresindeki `@` ile başlayan adı yaz. Baştaki `@`, ad çevresindeki boşluk ya da yapıştırılan profil adresi (`https://www.tiktok.com/@ad`) sorun değil: bilet çıplak adı (`@ad`) gösterir, kullanılan odur. |
 | Bağlantı kutusu "Yayın yok" | TikTok'ta yayın henüz açık değil. Yayını başlat; motor kendisi dener ya da ana sayfada **Yayın**'a yeniden bas. |
 | Ses yok | Tarayıcılar tıklamadan ses açmaz. Sayfada başlat düğmesine bas. Pencere yakalama bilgisayar sesini ayrıca almıyorsa LIVE Studio'da ses kaynağını kontrol et. |
 | LIVE Studio'da oyun görünmüyor | Tarayıcı kaynağı yerine pencere yakalama kullan. Pencerenin küçültülmediğinden emin ol. |
@@ -120,14 +120,15 @@ buna izin verip vermediği denenmedi.
 ## Bağlanamıyorsa
 
 **Yayın**'a basınca TikTok'a bağlanılamazsa motor nedeni düz bir cümleyle yazar: ana sayfadaki "Şu an açık" şeridinde
-ve oyunun masasında, durum yazısının altında aynı cümle görünür. Motor her durumda kendisi yeniden dener; yayın yok ve oda bulunamadı durumlarında en geç 30 saniyede bir. Beklemek istemezsen ana sayfada **Yayın**'a yeniden bas: hemen dener. Kütüphanenin İngilizce
+ve oyunun masasında, durum yazısının altında aynı cümle görünür. Motor (hesap bulunamadı dışında) kendisi yeniden dener; yayın yok ve oda bulunamadı durumlarında en geç 30 saniyede bir. Beklemek istemezsen ana sayfada **Yayın**'a yeniden bas: hemen dener. Kütüphanenin İngilizce
 asıl iletisi motorun günlüğüne, paket klasöründeki `motor-gunlugu.txt` dosyasına ("TikTok bağlantı hatası (…)" satırı) yazılır
 (Mac ve Linux'ta Terminal penceresinde kalır); sorun sürerse o dosyayı ya da pencerenin ekran görüntüsünü gönder.
 
 | Ekranda | Ne demek, ne yapmalı |
 | --- | --- |
 | "@ad şu an canlı yayında değil … yayın açılınca kendiliğinden bağlanır" | Yayın açık değil. TikTok'ta yayını başlat; bir şey yapmana gerek yok. Bağlantı kutusu **Yayın yok** der. |
-| "Yayın odası bulunamadı" ya da "@ad adında bir TikTok hesabı bulunamadı" | En sık görülen durum. Ad yanlış yazılmış olabilir, hesap hiç yayın açmamış olabilir ya da TikTok bu ağa yanıt vermiyordur. Ekrandaki adını değil, profil adresindeki adı `@` olmadan yaz. Ad doğruysa yayın henüz açılmamıştır. |
+| "TikTok'ta @ad adında bir hesap bulunamadı. Profil adresindeki @ işaretinden sonraki kullanıcı adını yaz (@ olmadan); profilde görünen adı değil." | TikTok bu adda bir hesap olmadığını açıkça söyledi: ad yanlış yazılmış ya da profilde görünen ad (takma ad) yazılmış. Profil adresindeki (`tiktok.com/@…`) adı yaz, sonra **Yayın**'a yeniden bas. Motor bu durumda kendisi yeniden denemez; ad düzelmeden bağlanamaz. |
+| "Yayın odası bulunamadı" | Ad yanlış olabilir, hesap hiç yayın açmamış olabilir ya da TikTok bu ağa yanıt vermiyordur. Ekrandaki adını değil, profil adresindeki adı `@` olmadan yaz. Ad doğruysa yayın henüz açılmamıştır. |
 | "imza hizmeti şu an isteği geri çevirdi ya da yanıt vermiyor" | Kütüphane TikTok'a bağlanmak için başka bir şirketin imza hizmetini kullanır; o hizmet şu an yoğun ya da kapalı. Senin hatan değil. Birkaç dakika bekle; motor kendisi yeniden dener. |
 | "internet bağlantısı yok ya da çok yavaş" | İnterneti kontrol et (ad çözümleme hatası, zaman aşımı). Bağlantı gelince motor kendisi bağlanır. |
 | "doğrulama (captcha) istedi ya da bu ağdan / bölgeden engelledi" | TikTok bu ağdan gelen isteği durdurdu. Biraz sonra yeniden dene ya da başka bir ağdan (ör. telefonun interneti) bağlan. |

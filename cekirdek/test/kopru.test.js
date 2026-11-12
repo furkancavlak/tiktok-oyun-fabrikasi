@@ -1057,6 +1057,13 @@ else{console.error('npm ERR! network (taklit)');process.exit(1);}`);
       const v2 = ortak + "const ConnectError=class extends Error{};const UserOfflineError=class extends ConnectError{};const ConnectTimeoutError=class extends ConnectError{};const TikTokLiveError=class extends Error{};const SignAPIError=class extends TikTokLiveError{};const SignatureRateLimitError=class SignatureRateLimitError extends SignAPIError{};" +
         "const InvalidResponseError=class extends Error{constructor(c,...a){super('['+c.routeId+'] '+a.join(' '));this.config=c;}};const InvalidResponseCompositeError=class extends Error{constructor(c,...a){super(...a);this.config=c;}};" +
         "const yap=t=>({canli:()=>new UserOfflineError(\"The requested user isn't online :(\"),odaEngel:()=>new InvalidResponseCompositeError({routeId:'fetchRoomIdComposite',requestErrs:[new InvalidResponseError({routeId:'fetchRoomInfoFromHtmlRoute'},'Request failed with status code 403'),new InvalidResponseError({routeId:'fetchRoomIdFromEulerRoute'},'Failed to retrieve Room ID from Euler Stream, which was made as a last resort due to the previous methods failing. This happened due to a >>lack of permission<< for you to use Euler Stream')]},'Failed to retrieve Room ID from all sources.'),oda:()=>new InvalidResponseCompositeError({routeId:'fetchRoomIdComposite',requestErrs:[new InvalidResponseError({routeId:'fetchRoomInfoFromHtmlRoute'},'Failed to extract Room ID from HTML.'),new InvalidResponseError({routeId:'fetchRoomInfoFromApiLiveRoute'},'Failed to extract Room ID from API.')]},'Failed to retrieve Room ID from all sources.')," +
+        // Gerçek TikTok kaydı (tiktok-live-connector 2.5.0, 12 Kasım 2026): olmayan ad "bu_hesap_yok_9f3k2x7q" ve "@" ile başlayanı
+        // aynı bileşik hatayı verdi: html "might be blocked" (bir tahmin) + api "API Error 19881007 (user_not_found)" + euler izin yok.
+        // yokKarisik: aynı işaret, html'de gerçek bir captcha iletisiyle birlikte (sıra: hesap yok önce gelir).
+        // engelHtml: html "might be blocked" ama api adın olmadığını söylemiyor: engel cümlesi kalır.
+        "yok:()=>new InvalidResponseCompositeError({routeId:'fetchRoomIdRoute',requestErrs:[new InvalidResponseError({routeId:'fetchRoomInfoHtmlRoute'},'Failed to extract the SIGI_STATE HTML tag, you might be blocked by TikTok.'),new InvalidResponseError({routeId:'fetchRoomInfoApiLiveRoute'},'API Error 19881007 (user_not_found)'),new InvalidResponseError({routeId:'fetchRoomIdRoute'},'Failed to retrieve Room ID from Euler Stream, which was made as a last resort due to the previous methods failing. This happened due to a >>lack of permission<< for you to use Euler Stream')]},'Failed to retrieve Room ID from all sources.')," +
+        "yokKarisik:()=>new InvalidResponseCompositeError({routeId:'fetchRoomIdRoute',requestErrs:[new InvalidResponseError({routeId:'fetchRoomInfoHtmlRoute'},'Failed to parse SIGI_STATE into JSON. Are you captcha-blocked by TikTok?'),new InvalidResponseError({routeId:'fetchRoomInfoApiLiveRoute'},'API Error 19881007 (user_not_found)')]},'Failed to retrieve Room ID from all sources.')," +
+        "engelHtml:()=>new InvalidResponseCompositeError({routeId:'fetchRoomIdRoute',requestErrs:[new InvalidResponseError({routeId:'fetchRoomInfoHtmlRoute'},'Failed to extract the SIGI_STATE HTML tag, you might be blocked by TikTok.'),new InvalidResponseError({routeId:'fetchRoomInfoApiLiveRoute'},'Failed to extract Room ID from API.'),new InvalidResponseError({routeId:'fetchRoomIdRoute'},'Failed to retrieve Room ID from Euler Stream, which was made as a last resort due to the previous methods failing. This happened due to a >>lack of permission<< for you to use Euler Stream')]},'Failed to retrieve Room ID from all sources.')," +
         "imza:()=>new SignatureRateLimitError('[Rate Limited] (free) Too many connections started, try again later.'),imza2:()=>Object.assign(new SignAPIError('[Connect Error] Failed to connect to sign server. connect ECONNREFUSED 1.2.3.4:443'),{cause:Object.assign(new Error('connect ECONNREFUSED'),{code:'ECONNREFUSED'})})," +
         "internet:()=>Object.assign(new Error('getaddrinfo ENOTFOUND www.tiktok.com'),{code:'ENOTFOUND'}),zaman:()=>new ConnectTimeoutError('Timed out whilst connecting to WebSocket')," +
         "engel:()=>new InvalidResponseError({routeId:'fetchRoomInfoFromHtmlRoute'},'Failed to parse SIGI_STATE into JSON. Are you captcha-blocked by TikTok?'),diger:()=>new Error('Something odd happened')})[t]();" +
@@ -1070,13 +1077,16 @@ else{console.error('npm ERR! network (taklit)');process.exit(1);}`);
         oda: [/^Yayın odası bulunamadı\. Kullanıcı adını kontrol et \(profil linkindeki ad, @ olmadan\); ad doğruysa yayını TikTok'ta başlat, köprü kendiliğinden bağlanır\. \d+ saniye sonra yeniden denenecek; hemen denemek için ana sayfada Yayın'a yeniden bas\.$/, 'hata'],
         oda1: [/^@Test_Kullanici şu an canlı yayında değil\./, 'bekliyor'], // 1.x: "Failed to retrieve room_id … User might be offline."
         odaEngel: [/doğrulama \(captcha\) istedi ya da bu ağdan/, 'hata'],
+        yok: [/^TikTok'ta @Test_Kullanici adında bir hesap bulunamadı\. Profil adresindeki @ işaretinden sonraki kullanıcı adını yaz \(@ olmadan\); profilde görünen adı değil\. Adı düzelt, sonra Yayın'a yeniden bas\.$/, 'hata'],
+        yokKarisik: [/^TikTok'ta @Test_Kullanici adında bir hesap bulunamadı\./, 'hata'],
+        engelHtml: [/doğrulama \(captcha\) istedi ya da bu ağdan \/ bölgeden engelledi/, 'hata'],
         imza: [/imza hizmeti .*başka bir şirketin hizmetidir; senin hatan değil\. Birkaç dakika bekle/, 'hata'], imza2: [/imza hizmeti/, 'hata'],
         internet: [/internet bağlantısı yok ya da çok yavaş/, 'hata'], zaman: [/internet bağlantısı yok ya da çok yavaş/, 'hata'],
         engel: [/doğrulama \(captcha\) istedi ya da bu ağdan \/ bölgeden engelledi/, 'hata'], diger: [/^TikTok'a bağlanılamadı \(Something odd happened\)\./, 'hata']
       };
-      const ham = { canli: /isn't online|LIVE has ended/, oda: /Failed to retrieve Room ID from all sources\.[\s\S]*\n  html: \[fetchRoomInfoFromHtmlRoute\] Failed to extract Room ID from HTML\.\r?\n  api: \[fetchRoomInfoFromApiLiveRoute\] Failed to extract Room ID from API\./, oda1: /User might be offline/, odaEngel: /\n  html: .*status code 403[\s\S]*\n  euler: .*lack of permission/, imza: /Rate Limited|status code 429/, imza2: /sign server/, internet: /ENOTFOUND/, zaman: /Timed out/, engel: /captcha|IP or country/, diger: /Something odd/ };
+      const ham = { yok: /\n  api: \[fetchRoomInfoApiLiveRoute\] API Error 19881007 \(user_not_found\)/, yokKarisik: /user_not_found/, engelHtml: /\n  html: .*you might be blocked by TikTok\./, canli: /isn't online|LIVE has ended/, oda: /Failed to retrieve Room ID from all sources\.[\s\S]*\n  html: \[fetchRoomInfoFromHtmlRoute\] Failed to extract Room ID from HTML\.\r?\n  api: \[fetchRoomInfoFromApiLiveRoute\] Failed to extract Room ID from API\./, oda1: /User might be offline/, odaEngel: /\n  html: .*status code 403[\s\S]*\n  euler: .*lack of permission/, imza: /Rate Limited|status code 429/, imza2: /sign server/, internet: /ENOTFOUND/, zaman: /Timed out/, engel: /captcha|IP or country/, diger: /Something odd/ };
       const sonuc = {};
-      for (const [kusak, kod, turler] of [['2.x', v2, ['canli', 'oda', 'odaEngel', 'imza', 'imza2', 'internet', 'zaman', 'engel', 'diger']], ['1.x', v1, ['canli', 'oda1', 'engel', 'imza', 'internet', 'diger']]]) {
+      for (const [kusak, kod, turler] of [['2.x', v2, ['canli', 'oda', 'odaEngel', 'yok', 'yokKarisik', 'engelHtml', 'imza', 'imza2', 'internet', 'zaman', 'engel', 'diger']], ['1.x', v1, ['canli', 'oda1', 'engel', 'imza', 'internet', 'diger']]]) {
         const kl = anaKur('hata-' + kusak.replace('.', ''));
         fs.mkdirSync(path.join(kl, 'node_modules/tiktok-live-connector'), { recursive: true }); fs.writeFileSync(path.join(kl, 'node_modules/tiktok-live-connector/index.js'), kod);
         fs.writeFileSync(path.join(kl, 'hata-tur.txt'), turler[0]);
@@ -1088,6 +1098,10 @@ else{console.error('npm ERR! network (taklit)');process.exit(1);}`);
           await bekleKosul(async () => { const d = await durumA(); return d.aktif && d.aktif.baglanti !== 'baglaniyor' && m.cikti.length > once && /bağlantı hatası/.test(m.cikti.slice(once)); }, 6000);
           const d = await durumA(), konsol = m.cikti.slice(once);
           sonuc[kusak + ' ' + t] = { durum: d.durum, baglanti: d.aktif && d.aktif.baglanti, iyi: beklenen[t][0].test(d.durum) && d.aktif.baglanti === beklenen[t][1] && ham[t].test(konsol) };
+          if (kusak === '2.x' && t === 'yok') { // ad yanlışsa yeniden denenmez: süre geçse de yeni bağlanma denemesi yok
+            const ilk = (m.cikti.match(/bağlantı hatası/g) || []).length; await bekle(1500);
+            sonuc.yokDenemez = (m.cikti.match(/bağlantı hatası/g) || []).length === ilk && !/yeniden denenecek/.test((await durumA()).durum);
+          }
           if (kusak === '2.x' && t === 'imza') { // ana sayfanın şeridi ve oyunun Yayın sekmesi aynı cümleyi gösterir
             const sc = await b.newContext({ viewport: { width: 1366, height: 768 } }), ap = await sayfaAc(sc, A + '/'), op = await sayfaAc(sc, A + '/oyun/a-oyun/'); await bekle(2500);
             sonuc.serit = await ap.evaluate(() => document.getElementById('cal-durum').textContent);
@@ -1096,8 +1110,19 @@ else{console.error('npm ERR! network (taklit)');process.exit(1);}`);
             await sc.close();
           }
         }
+        if (kusak === '2.x') { // ad girişi: @, boşluk ve profil adresi çıplak ada çevrilir; başka her şey yine geri çevrilir
+          const ad = async k => { const r = await gonder(kp, '/api/baslat', { oyun: 'a-oyun', kip: 'canli', kullanici: k }); return r.kod === 200 ? r.j.aktif.kullanici : r.kod; };
+          sonuc.adKapi = { url: await ad('https://www.tiktok.com/@Test_Kullanici?lang=tr'), urlLive: await ad('tiktok.com/@ayse.k_1/live'), at: await ad('  @@Test_Kullanici  '), bosluk: await ad('ali veli'), baskaSite: await ad('https://kotu.example/@Test_Kullanici'), html: await ad('<b>x</b>') };
+          const sc = await b.newContext({ viewport: { width: 1366, height: 768 } }), ap = await sayfaAc(sc, A + '/');
+          await ap.waitForFunction(() => document.getElementById('acilis').hidden, null, { timeout: 10000 }).catch(() => { });
+          await ap.fill('#kullanici', ' https://www.tiktok.com/@ayse.k_1?lang=tr '); await ap.press('#kullanici', 'Enter'); await bekle(200);
+          sonuc.adBilet = await ap.evaluate(() => document.getElementById('kayitli-ad').textContent).catch(() => '');
+          await sc.close();
+        }
         m.kill('SIGKILL'); await bekle(300);
       }
+      kontrol('Hesap bulunamadı (gerçek TikTok kaydının biçimi): "TikTok\'ta @ad adında bir hesap bulunamadı … profilde görünen adı değil." der, durum "hata"; captcha ile birlikte gelse de hesap yok önce gelir; yeniden denenmez', !!sonuc['2.x yok'] && sonuc['2.x yok'].iyi && sonuc['2.x yokKarisik'].iyi && sonuc.yokDenemez === true, { yok: sonuc['2.x yok'], karisik: sonuc['2.x yokKarisik'], yokDenemez: sonuc.yokDenemez });
+      kontrol('Ad girişi: baştaki @, çevredeki boşluk ve yapıştırılan profil adresi (tiktok.com/@ad) motorda çıplak ada çevrilir; boşluklu ad, başka sitenin adresi ve HTML yine 400; ana sayfanın bileti çıplak adı gösterir', JSON.stringify(sonuc.adKapi) === JSON.stringify({ url: 'Test_Kullanici', urlLive: 'ayse.k_1', at: 'Test_Kullanici', bosluk: 400, baskaSite: 400, html: 400 }) && sonuc.adBilet === '@ayse.k_1', { kapi: sonuc.adKapi, bilet: sonuc.adBilet });
       kontrol('Bağlanma hataları (iki kütüphane kuşağı): yayın yok / oda yok / imza hizmeti / internet / captcha-engel / diğer ayrı düz cümleler; yayın yok "bekliyor", gerisi "hata"; ham ileti konsolda', Object.entries(sonuc).filter(([a]) => / /.test(a)).every(([, v]) => v.iyi), Object.fromEntries(Object.entries(sonuc).filter(([a, v]) => / /.test(a) && !v.iyi)));
       kontrol('Bağlanma hatasının cümlesi ana sayfanın şeridinde ve oyunun Yayın sekmesinde aynen görünür', sonuc.ayni === true, { serit: sonuc.serit, yayin: sonuc.yayinSekmesi });
     }
@@ -1168,8 +1193,28 @@ else{console.error('npm ERR! network (taklit)');process.exit(1);}`);
         agOffline: tur(new Error('Request failed: network is offline')),
         api404: tur(new Error('API Error 404 (Not Found) while fetching /api/live/detail')),
         odaYok: tur(new Error('Room does not exist')),
-        adMetinde: tur(new Error('Failed for user offline_king_live'))
+        adMetinde: tur(new Error('Failed for user offline_king_live')),
+        yokAdMetinde: tur(new Error('Failed for user user_not_found_fan')) // işaret kelime olarak geçmeli
       };
+      // Bileşik hatanın sırası (docs/OLAYLAR.md): hesap yok > internet yok > engel / captcha > oda bulunamadı. Biçimler gerçek
+      // TikTok kaydından (2.5.0): kaynak etiketleri [fetchRoomInfoHtmlRoute] / [fetchRoomInfoApiLiveRoute] / Euler.
+      const bilesik = (...ic) => Object.assign(adli('InvalidResponseCompositeError', 'Failed to retrieve Room ID from all sources.'), { config: { requestErrs: ic } });
+      const HTML_TAHMIN = adli('InvalidResponseError', '[fetchRoomInfoHtmlRoute] Failed to extract the SIGI_STATE HTML tag, you might be blocked by TikTok.');
+      const API_YOK = adli('InvalidResponseError', '[fetchRoomInfoApiLiveRoute] API Error 19881007 (user_not_found)');
+      const EULER = adli('InvalidResponseError', '[fetchRoomIdRoute] Failed to retrieve Room ID from Euler Stream, which was made as a last resort due to the previous methods failing. This happened due to a >>lack of permission<< for you to use Euler Stream');
+      const AG = () => Object.assign(adli('RequestError', 'getaddrinfo ENOTFOUND www.tiktok.com'), { code: 'ENOTFOUND' });
+      const sira = {
+        yokGercek: K.baglantiHatasi(bilesik(HTML_TAHMIN, API_YOK, EULER), 'bu_hesap_yok_9f3k2x7q'),
+        yokCaptcha: tur(bilesik(adli('InvalidResponseError', '[fetchRoomInfoHtmlRoute] Failed to parse SIGI_STATE into JSON. Are you captcha-blocked by TikTok?'), API_YOK)),
+        yokAg: tur(bilesik(AG(), API_YOK)), agHepsi: tur(bilesik(AG(), AG(), EULER)),
+        tahminTek: tur(bilesik(HTML_TAHMIN, adli('InvalidResponseError', '[fetchRoomInfoApiLiveRoute] Failed to extract Room ID from API.'), EULER)),
+        odaYok: tur(bilesik(adli('InvalidResponseError', '[fetchRoomInfoHtmlRoute] Failed to extract Room ID from HTML.'), adli('InvalidResponseError', '[fetchRoomInfoApiLiveRoute] Failed to extract Room ID from API.'))),
+        canliDegil: K.baglantiHatasi(adli('UserOfflineError', "The requested user isn't online :("), 'tiktok'),
+        tekApiYok: tur(adli('InvalidResponseError', '[fetchRoomInfoApiLiveRoute] API Error 19881007 (user_not_found)'))
+      };
+      kontrol('Sınıflandırıcı sırası (gerçek TikTok biçimleriyle): olmayan ad "hesap bulunamadı" der (html\'in "might be blocked" tahminine, captcha iletisine ve ağ hatasına rağmen); yalnız tahmin varsa engel; hepsi ağsa internet; çıplak hata oda yok; canlı olmayan hesap "bekliyor"', sira.yokGercek.tur === 'kullanici-yok' && sira.yokGercek.baglanti === 'hata' && sira.yokGercek.cumle === "TikTok'ta @bu_hesap_yok_9f3k2x7q adında bir hesap bulunamadı. Profil adresindeki @ işaretinden sonraki kullanıcı adını yaz (@ olmadan); profilde görünen adı değil." && sira.yokCaptcha === 'kullanici-yok' && sira.yokAg === 'kullanici-yok' && sira.agHepsi === 'internet' && sira.tahminTek === 'engel' && sira.odaYok === 'oda-yok' && sira.canliDegil.tur === 'canli-degil' && sira.canliDegil.baglanti === 'bekliyor' && sira.tekApiYok === 'kullanici-yok', { ...sira, yokGercek: [sira.yokGercek.tur, sira.yokGercek.cumle], canliDegil: [sira.canliDegil.tur, sira.canliDegil.baglanti] });
+      const temizle = ['@ayse', '  @@ayse  ', 'https://www.tiktok.com/@ayse.k_1?lang=tr', 'tiktok.com/@ayse/live', 'm.tiktok.com/@ayse', 'ali veli', 'https://kotu.example/@ayse', 'https://www.tiktok.com/@ayse x'].map(K.adiTemizle);
+      kontrol('Ad temizleyici: @, boşluk ve tiktok.com profil adresi çıplak ada; başka site, iç boşluk dokunulmadan kalır (sonra sıkı kural geri çevirir)', JSON.stringify(temizle) === JSON.stringify(['ayse', 'ayse', 'ayse.k_1', 'ayse', 'ayse', 'ali veli', 'https://kotu.example/@ayse', 'https://www.tiktok.com/@ayse x']), temizle);
       const dogru = {
         canli2: tur(adli('UserOfflineError', "The requested user isn't online :(")), canli1: tur(new Error('LIVE has ended')),
         engel1: tur(adli('UserOfflineError', 'Your IP or country might be blocked by TikTok.')), captcha: tur(new Error('Are you captcha-blocked by TikTok?')),

@@ -510,7 +510,13 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
 
   // ---- 1. adım: bilet. Yalnız Kaydet (ya da Enter) ile kaydedilir; kayıtlıyken ad, onay, KAYITLI ve değiştir görünür.
   // Önce temizlenir (baştaki/sondaki boşluk ve @), sonra uzunluk ve biçim denetlenir; ad hiçbir zaman kısaltılmaz.
-  function temiz(v) { return String(v || '').trim().replace(/^@+/, '').trim(); }
+  // Motordaki adiTemizle ile aynı kural: baştaki @, çevredeki boşluk ve yapıştırılan profil adresi (tiktok.com/@ad…) çıplak
+  // ada çevrilir; bilet kaydedilen çıplak adı gösterir. Başka hiçbir şey düzeltilmez, DESEN sıkı kalır.
+  function temiz(v) {
+    var s = String(v || '').trim(), m = /^(?:https?:\/\/)?(?:[a-z0-9-]+\.)*tiktok\.com\/@([^/?#\s]+)(?:[/?#]\S*)?$/i.exec(s);
+    if (m) s = m[1];
+    return s.replace(/^@+/, '').trim();
+  }
   var duzenle = false; // kayıtlı ad dururken değiştiriliyor mu
   function notYaz(metin, tur) {
     adNot.textContent = metin || '';
