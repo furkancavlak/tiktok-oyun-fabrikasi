@@ -579,8 +579,8 @@ function parcaKur(i) {
     ekle(cam.bitir(), MALZ.camli, false);
   if (!tabela.bos())
     ekle(tabela.bitir(), MALZ.tabela, false);
-  if (!bayrak.bos())
-    ekle(bayrak.bitir(), MALZ.bayrak, false, false);
+  // bayraklı ipler ayrı parça: yüksekten bakan süper araba çekiminde kameranın yakınındakiler gizlenir (50-reji.js parkGizle)
+  const bayrakMesh = bayrak.bos() ? null : ekle(bayrak.bitir(), MALZ.bayrak, false, false);
   let parkMesh = null;
   if (!park.bos()) {
     parkMesh = ekle(park.bitir(), MALZ.renkli, true);
@@ -589,7 +589,7 @@ function parcaKur(i) {
   DUNYA.sahne.add(grup);
   // arka sıralar, bahçeler, cami: kalite düşünce (zayıf ekran kartı) gizlenir
   const uzakMesh = uzak.bos() ? null : ekle(uzak.bitir(), MALZ.renkli, false);
-  DUNYA.parcalar.set(i, { grup, wx: ox, wz: oz, s0, park: parkMesh, kenar: kenarM, uzak: uzakMesh, insan });
+  DUNYA.parcalar.set(i, { grup, wx: ox, wz: oz, s0, park: parkMesh, kenar: kenarM, uzak: uzakMesh, insan, bayrak: bayrakMesh });
 }
 
 /* ---- yol kenarı: ağaçlar, direkler, bayraklı ipler ---- */
