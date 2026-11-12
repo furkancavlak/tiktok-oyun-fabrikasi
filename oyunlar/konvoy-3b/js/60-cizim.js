@@ -305,7 +305,9 @@ function oyunCiz() {
   if (!DUNYA.r)
     return;
   const kam = DUNYA.kamera, F = (GH / 2) / Math.tan(kam.fov * Math.PI / 360), ileri = DUNYA.bakis;
-  const kart = kartKonusu().k;
+  const kk = kartKonusu(), kart = kk.k;
+  // süper araba kartı ekrandayken (üç satır, şeridin altı) kartın hizasına düşen küçük adlar yazılmaz: kartın üstüne binmesin
+  const kartAlti = kk.an ? SUPER_KART_Y - 96 : Infinity;
   let yazildi = false, yedek = null, genisSay = 0;
   const genis = genisMi(D.reji.cekim);
   for (const k of gorunenArabalar) {
@@ -334,7 +336,7 @@ function oyunCiz() {
     k._etNokta.kare = kareSay;
     const et = { x: _etE.x, y: _etE.y, s, d: derin }, seritte = et.y > SERIT_UST - 45 && et.y < SERIT_ALT - 10 && et.x > 0 && et.x < GW;
     // yakın çekimin konusunun, drift atanın ve yeni gelin arabasının adı yalnız büyük kartta yazar (oyunUst)
-    if (k === kart)
+    if (k === kart || et.y > kartAlti)
       continue;
     // gelin arabasının adı her çekimde yazılır (geniş çekimde de kim olduğu görünsün). Geniş çekimde küçük adların
     // tozu olmasın: yalnız gelin arabası, ilk beş, yeni katılanlar ve son yazanlar (en çok GENIS_AD tane).
@@ -359,27 +361,51 @@ function oyunCiz() {
 // gelin arabası. Bu arabanın küçük etiketi çizilmez: ad bir kez, büyük yazılır.
 // Çıkmakta olan ya da kaydı yenilenmiş araba kartı taşımaz (konu yanlış kişiyi göstermesin).
 const kartGecerli = k => k && k.ar && !k.cikiyor && D.oy.get(k.id) === k;
-// Tek seferde 1000 jetonluk hediye hem süper arabayı hem drift şovunu başlatır; reji şovu seçer (en büyük olay). Şovun
-// kartı o zaman süper arabayı da söyler: an kaybolmasın (10-oyun.js superAraba, D.superAn).
+// Süper araba anı (10-oyun.js superAraba, D.superAn): çekime ya da vurguya bağlı an (c.an, vurgu.an); şov çekiminde ve şov
+// vurgusunda aynı arabanın taze anı da sayılır (tek seferde 1000 jetonluk hediye hem süper arabayı hem drift şovunu verir).
+// O zaman kart, çekim ne olursa olsun, üstte "SÜPER ARABA" (drift dönerken "SÜPER ARABA · DRIFT ŞOV"), ortada ad, altta
+// ikinci bilgi: aynı hediye gelin arabasını da verdiyse "Gelin arabası da artık onda", yoksa hediyenin jetonu.
 const superYeni = k => D.superAn && D.superAn.k === k && B - D.superAn.b0 < DRIFT_V * 3;
-const sovUst = k => superYeni(k) ? 'SÜPER ARABA · DRIFT ŞOV' : 'DRIFT ŞOV!';
-function kartKonusu() {
-  const R = D.reji, ad = R.cekim && R.cekim.ad;
-  if (ad === 'sov' && D.drift && kartGecerli(D.drift.k))
-    return { k: D.drift.k, ust: sovUst(D.drift.k) };
-  // bekleme süresinde gelen olay: geniş çekimin üstünde büyük ad (ve halka)
-  if (R.vurgu && B - R.vurgu.b0 < R.vurgu.sure && kartGecerli(R.vurgu.k) && genisMi(R.cekim))
-    return { k: R.vurgu.k, ust: R.vurgu.ust === 'DRIFT ŞOV!' ? sovUst(R.vurgu.k) : R.vurgu.ust, halka: true };
-  if (ad === 'yakin' && kartGecerli(R.konu))
-    return { k: R.konu, ust: (R.konu.sn + 1) + '. araba' + (R.konu.jeton > 0 ? ' · ' + R.konu.jeton + ' jeton' : '') };
-  if (ad === 'lider' && D.lider)
-    return { k: D.lider, ust: 'YENİ GELİN ARABASI' };
-  if (ad === 'super' && kartGecerli(R.cekim.k))
-    return { k: R.cekim.k, ust: 'SÜPER ARABA' };
-  if (ad === 'sollama' && kartGecerli(R.cekim.k))
-    return { k: R.cekim.k, ust: 'ÖNE GEÇİYOR' };
-  return { k: null, ust: '' };
+const donuyor = k => !!D.drift && D.drift.k === k && D.drift.donus !== null;
+function superAlt(an) {
+  if (an.lider)
+    return 'Gelin arabası da artık onda';
+  return an.tekrar ? 'Yine ' + sayi(an.birim) + ' jeton' : sayi(an.birim) + ' jetonluk hediye';
 }
+function kartKonusu() {
+  const R = D.reji, c = R.cekim, ad = c && c.ad;
+  let kart = { k: null, ust: '' };
+  if (ad === 'sov' && D.drift && kartGecerli(D.drift.k))
+    kart = { k: D.drift.k, ust: 'DRIFT ŞOV!', an: c.an };
+  // bekleme süresinde gelen olay: geniş çekimin üstünde büyük ad (ve halka). Süper araba vurgusu olay çekimi dışındaki
+  // her çekimde (kısa ara kesmede, vincin kalkışında da) çıkar: duyuru kameranın kesmesini beklemez.
+  else if (R.vurgu && B - R.vurgu.b0 < R.vurgu.sure && kartGecerli(R.vurgu.k) && (genisMi(c) || (R.vurgu.an && c && !OLAY_CEKIMLERI.includes(c.ad) && !c.olay)))
+    kart = { k: R.vurgu.k, ust: R.vurgu.ust, halka: true, an: R.vurgu.an };
+  else if (ad === 'yakin' && kartGecerli(R.konu))
+    kart = { k: R.konu, ust: (R.konu.sn + 1) + '. araba' + (R.konu.jeton > 0 ? ' · ' + R.konu.jeton + ' jeton' : ''), an: c.an };
+  else if (ad === 'lider' && D.lider)
+    kart = { k: D.lider, ust: 'YENİ GELİN ARABASI', an: c.an };
+  else if (ad === 'super' && kartGecerli(c.k))
+    kart = { k: c.k, ust: 'SÜPER ARABA', an: c.an };
+  else if (ad === 'sollama' && kartGecerli(c.k))
+    kart = { k: c.k, ust: 'ÖNE GEÇİYOR', an: c.an };
+  if (!kart.k)
+    return kart;
+  let an = kart.an && kart.an.k === kart.k ? kart.an : null;
+  if (!an && (kart.ust === 'DRIFT ŞOV!' || kart.ust === 'SÜPER ARABA') && superYeni(kart.k))
+    an = D.superAn;
+  kart.an = an;
+  if (an) {
+    kart.ust = donuyor(kart.k) ? 'SÜPER ARABA · DRIFT ŞOV' : 'SÜPER ARABA';
+    kart.alt = superAlt(an);
+  }
+  else if (kart.ust === 'SÜPER ARABA' && donuyor(kart.k))
+    kart.ust = 'SÜPER ARABA · DRIFT ŞOV';
+  return kart;
+}
+// Süper araba kartının yeri: adın hapı şeridin biraz yukarısında, altında ikinci satıra yer kalsın (alt beşte bir, 1024
+// sonrası, boş kalır). Süper araba çekimi arabayı bu kartın üstüne sığdırır (50-reji.js SUPER_ALT).
+const SUPER_KART_Y = SERIT_ALT - 60;
 // Kornada arabanın yanında beliren "DÜT!" ve büyük ad kartları.
 // Ad ile araba arasında bağ: çekirdek adı çakışmasın diye yukarı aşağı kaydırabilir; kayan ad (ya da bir başka arabanın
 // tavanına kendi arabasınınkinden yakın duran ad) kendi arabasının tavanına ince bir çizgiyle bağlanır. Böylece hiçbir
@@ -422,6 +448,18 @@ function oyunUst() {
   if (!DUNYA.r)
     return;
   etiketBagla();
+  // Süper arabanın küçük adı süper araba renginde bir halkayla çevrilir: geniş çekimde de hangi arabanın süper araba
+  // olduğu adından okunur. Çekirdek adları bu kancadan sonra çizer; halka bir önceki karenin ad kutusunun biraz dışında.
+  c.lineWidth = 3;
+  c.strokeStyle = SUPER_RENK;
+  for (const k of gorunenArabalar) {
+    const kt = k._etKutuOnce;
+    if (!kt || !k.et || k.cikiyor || !k.ar || k.ar.tip !== 'super')
+      continue;
+    c.beginPath();
+    c.roundRect(kt[0] - 3, kt[1] - 3, kt[2] + 6, kt[3] + 6, (kt[3] + 6) / 2);
+    c.stroke();
+  }
   // yayın görünümünde panel gizli: ekran kartı yetişmiyorsa sahnede bir kez, 10 sn, küçük düz bir kart
   const su = KALITE.sahneUyari;
   if (su && zaman - su.b0 < 10 && document.body.classList.contains('yayin')) {
@@ -488,12 +526,13 @@ function oyunUst() {
     c.globalAlpha = 1;
   }
   // büyük ad kartı: yakın çekimin konusu ya da drift atan (şov çekiminde). Şeridin altında, yolun üstünde durur.
-  const R = D.reji, ad = R.cekim && R.cekim.ad, kart = kartKonusu(), { k, ust } = kart, b0 = kart.halka ? R.vurgu.b0 : R.cekim ? R.cekim.b0 : B;
+  const R = D.reji, ad = R.cekim && R.cekim.ad, kart = kartKonusu(), { k, ust } = kart, b0 = kart.halka ? R.vurgu.b0 : R.cekim ? (R.cekim.kartB0 || R.cekim.b0) : B;
   // bekleme süresindeki olay: arabanın çevresinde vuruşla atan altın halka (kamera kesmeden)
   if (kart.halka && k._M) {
     const p = ekranNokta(DUNYA.kamera, _et.setFromMatrixPosition(k._M), { x: 0, y: 0, ok: false });
     const derin = rejiV1.subVectors(_et, DUNYA.kamera.position).dot(DUNYA.bakis);
-    if (p.ok && derin > 1) {
+    // halka yalnız oyuncu şeridinde: araba üstteki yazıların (sıralama, bildirim) altında kalıyorsa çizilmez
+    if (p.ok && derin > 1 && p.y > SERIT_UST - 40 && p.y < SERIT_ALT) {
       const r = clamp(3.2 * (GH / 2) / Math.tan(DUNYA.kamera.fov * Math.PI / 360) / derin, 18, 140) * (1 + 0.08 * Math.sin(TAU * B));
       c.lineWidth = 5;
       c.strokeStyle = RENK.vurgu;
@@ -505,28 +544,39 @@ function oyunUst() {
     }
   }
   if (k && B - b0 > 0.3) {
-    const gir = clamp((B - b0 - 0.3) * 2.5, 0, 1);
+    // Süper araba kartı (kart.an): üst satır iri ve süper arabanın renginde, ad hapı da o renkte (arabanın boyası), altında
+    // ikinci satır. Öbür kartlar: küçük üst satır, gelin arabasınınki sarı hap.
+    const sup = !!kart.an, gir = clamp((B - b0 - 0.3) * 2.5, 0, 1);
     c.globalAlpha = gir;
     c.font = '34px "Paytone One", Rubik, system-ui, sans-serif';
-    const w = Math.min(560, c.measureText(k.ad).width + 52), x = GW / 2, y = SERIT_ALT - 52 + (1 - gir) * 16;
-    c.fillStyle = k === D.lider ? RENK.vurgu : renkSaydam(MUREKKEP, 0.82);
-    c.strokeStyle = k === D.lider ? MUREKKEP : RENK.vurgu;
+    const w = Math.min(560, c.measureText(k.ad).width + 52), x = GW / 2, y = (sup ? SUPER_KART_Y : SERIT_ALT - 52) + (1 - gir) * 16;
+    c.fillStyle = sup ? SUPER_RENK : k === D.lider ? RENK.vurgu : renkSaydam(MUREKKEP, 0.82);
+    c.strokeStyle = sup || k === D.lider ? MUREKKEP : RENK.vurgu;
     c.lineWidth = 3;
     c.beginPath();
     c.roundRect(x - w / 2, y - 27, w, 54, 27);
     c.fill();
     c.stroke();
-    c.fillStyle = k === D.lider ? MUREKKEP : RENK.acik;
+    c.fillStyle = sup || k === D.lider ? MUREKKEP : RENK.acik;
     c.fillText(k.ad, x, y + 2, w - 30);
     // çekirdeğin ölçümüne (CanliOyun._test.olcum, "en az bir ad okunur" denetimi) bu ad da girer: docs/KANCALAR.md
     k.oyunAd = { kutu: [x - w / 2, y - 27, w, 54], kare: kareSay };
-    c.font = '20px "Paytone One", Rubik, system-ui, sans-serif';
-    c.lineWidth = 4;
+    c.font = (sup ? 34 : 20) + 'px "Paytone One", Rubik, system-ui, sans-serif';
+    c.lineWidth = sup ? 6 : 4;
     c.strokeStyle = MUREKKEP;
-    c.strokeText(ust, x, y - 42);
+    const uy = y - (sup ? 51 : 42);
+    c.strokeText(ust, x, uy, GW - 60);
     c.fillStyle = ust.startsWith('SÜPER ARABA') ? SUPER_RENK : ad === 'sov' ? RENK.sicak : RENK.vurgu;
-    c.fillText(ust, x, y - 42);
+    c.fillText(ust, x, uy, GW - 60);
+    if (kart.alt) {
+      c.font = '600 20px Rubik, system-ui, sans-serif';
+      c.lineWidth = 4;
+      c.strokeText(kart.alt, x, y + 45, GW - 60);
+      c.fillStyle = RENK.acik;
+      c.fillText(kart.alt, x, y + 45, GW - 60);
+    }
     c.globalAlpha = 1;
+    D.kartYazi = { ust, ad: k.ad, alt: kart.alt || '', kare: kareSay };
   }
   c.textBaseline = 'alphabetic';
 }

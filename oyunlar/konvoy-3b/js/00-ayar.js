@@ -23,8 +23,11 @@ const OYUN = {
   },
   kapasite: 36,
   // Büyükten küçüğe. tip, oyunHediye'nin hangi etkiyi başlatacağını seçer; etki paneldeki tabloda yazar.
+  // En üst kademenin adı süper arabadır: panel düğmesi, tablo, sahnedeki hediye satırı ve olay günlüğü bu adı yazar.
+  // Etkisi drift şovudur. Aynı kademeye küçük hediyelerin toplamıyla (100 × 10) gelinirse süper araba verilmez; o zaman
+  // satır ve günlük "Drift şov" yazar (10-oyun.js oyunHediye).
   kademe: [
-    { min: 1000, ad: 'Drift şov', tip: 'drift', etki: 'Gönderenin arabası en öne çıkar, dönerek drift atar; kamera ona geçer. ' + SUPER_ESIK + ' jetonluk hediye: süper araba' },
+    { min: 1000, ad: 'Süper araba', tip: 'drift', etki: 'Tek seferde ' + SUPER_ESIK + ' jeton: gönderen yayın boyunca süper arabayla sürer. Arabası en öne çıkıp drift atar, kamera ona geçer' },
     { min: 200, ad: 'Havai fişek', tip: 'fisek', etki: 'Gökte havai fişekler patlar, davul coşar' },
     { min: 50, ad: 'Sağ sol', tip: 'zigzag', etki: 'Bütün konvoy sağa sola kıvrılır' },
     { min: 10, ad: 'Hep beraber korna', tip: 'korna', etki: 'Bütün arabalar korna çalar, farlar yanıp söner' },

@@ -7,7 +7,8 @@
  * D'ye eklenenler: kolon (şerit sayısı), zigzag ({ bas, sure }), fisekler (gökteki havai fişekler), fisekBit / sovBit
  * (fişek ve davul şovu hangi vuruşa dek sürer), driftKuyruk + drift ({ k, bas, vardi }), kurdeleUcus (gelin süsünün yeni
  * arabaya geçişi), yol (gelin arabasının yolda aldığı yol, metre; hiç geri gitmez), hiz (metre / saniye), duman
- * (drift dumanı), sonB, reji (kamera rejisi, js/50-reji.js), superAn ({ k, b0 }: son süper araba anı).
+ * (drift dumanı), sonB, reji (kamera rejisi, js/50-reji.js), superAn ({ k, b0, birim, yeni, lider }: son süper araba
+ * anı), kartYazi (sahnede çizilen büyük kartın yazıları, 60-cizim.js).
  * Süper araba: tek seferde SUPER_ESIK jetonluk hediye atanın arabası süper arabaya döner (aşağıda "süper araba").
  * Süreler vuruşla (B) ölçülür: korna 1,5 vuruş, kurdele geçişi 2 vuruş, drift 16 vuruş.
  * Kancalar: oyunYerlesim, oyunGiris, oyunHediye, oyunLiderDegisti, oyunBaslat, oyunBosalt, oyunDurum.
@@ -117,24 +118,30 @@ function hediyeBirim(k, j) {
   n.id = null;
   return birim;
 }
-function superAraba(k) {
+// Süper araba anı (D.superAn, rejiye de bu nesne gider): k, b0 (vuruş), birim (hediyenin jetonu), yeni (kasa bu hediyeyle
+// değişti), tekrar (bu yayında daha önce de kazanmıştı), lider (aynı hediye onu gelin arabası da yaptı; oyunLiderDegisti
+// yazar). Büyük kart bundan okur: üstte
+// "SÜPER ARABA", ortada ad, altta "Gelin arabası da artık onda" ya da hediyenin jetonu (60-cizim.js).
+function superAraba(k, birim) {
+  const tekrar = SUPER_IDLER.has(k.id);
   SUPER_IDLER.add(k.id);
   const yeni = superGiydir(k);
-  D.superAn = { k, b0: B };
+  D.superAn = { k, b0: B, birim, yeni, tekrar, lider: false };
   if (yeni) {
     D.superDegisim = (D.superDegisim || 0) + 1;
     konfeti(80, 0.9);
   }
-  // Olay rejiye gider (50-reji.js: 'super' çekimi, büyük kart "SÜPER ARABA" + ad; bekleme süresindeyse geniş çekimin
-  // üstünde kart ve halka). Adı ekrana yalnız rejinin kartı yazar: ayrıca pankart açılmaz. Bekleyen daha büyük olayı
-  // (şov, gelin arabası değişimi) ezmez; bekleyen sıradan hediye olayının yerini alır.
-  if (!D.reji.olay || !['sov', 'lider'].includes(D.reji.olay.tur))
-    D.reji.olayAt('super', k);
+  // Her süper araba hediyesi rejide kendi anını alır (50-reji.js: superSira). Kamera bir sonraki ölçüde süper araba
+  // çekimine keser; bekleme süresindeyse geniş çekimin üstünde kart ve halka çıkar; başka birinin olay çekimi sürüyorsa
+  // o bitince sıra ona gelir. Adı ekrana yalnız rejinin kartı yazar: pankart açılmaz.
+  D.reji.olayAt('super', k);
 }
 function oyunHediye(k, j, kd) {
-  const v = Math.ceil(B);
-  if (hediyeBirim(k, j) >= SUPER_ESIK)
-    superAraba(k);
+  const v = Math.ceil(B), birim = hediyeBirim(k, j);
+  if (birim >= SUPER_ESIK)
+    superAraba(k, birim);
+  else if (kd.tip === 'drift')
+    superDegilYaz(k, j);
   // Her hediyede gönderen korna çalar; büyüdükçe bütün konvoy katılır.
   if (kd.tip !== 'tek')
     hepsiKorna();
@@ -158,10 +165,26 @@ function oyunHediye(k, j, kd) {
   if (kd.tip !== 'drift')
     rejiOlay('hediye', k);
 }
+// En üst kademeye küçük hediyelerin toplamıyla gelindi (seri: 100 × 10): süper araba yok. Çekirdek bildirimi ve günlüğü
+// kademe adıyla ("Süper araba!") az önce yazdı; ikisi de "Drift şov" diye düzeltilir. Bildirim satırı aynı anda gelen
+// bildirimle yer değiştirir (bildir, 25-yazilar.js); günlüğün son satırı henüz sayfaya yazılmadı (karede bir kez).
+// ÇEKİRDEĞE EKLENMELİ: kademe seçimi birim jetonu da bilsin (oyunHediye(k, j, kd, o)), ya da kademe bir "seri adı" taşısın.
+function superDegilYaz(k, j) {
+  bildir(k.ad, j + ' jeton', 'Drift şov!');
+  const son = gunlukBekleyen[gunlukBekleyen.length - 1];
+  if (son && son[0] === 'hediye' && son[1] === k.ad && son[2] === j + ' jeton → ' + OYUN.kademe[0].ad)
+    son[2] = j + ' jeton → Drift şov';
+}
 // Gelin süsü eski gelin arabasından yenisine uçar; reji yeni gelin arabasının öne geçişini gösterir.
+// Aynı hediye süper arabayı da verdiyse (oyunHediye bu çağrıdan hemen önce, aynı vuruşta) an tektir: pankart açılmaz,
+// süper araba kartının alt satırı "Gelin arabası da artık onda" der; reji lider olayını süper araba anına katar.
 function oyunLiderDegisti(eski, yeni) {
   D.kurdeleUcus = { eski, b0: B, sure: 2, kime: yeni };
-  pankart('Gelin arabası el değiştirdi', 'Kurdele artık ' + yeni.ad + ' arabasında');
+  const an = D.superAn, ayniHediye = !!an && an.k === yeni && an.b0 === B;
+  if (ayniHediye)
+    an.lider = true;
+  else
+    pankart('Gelin arabası el değiştirdi', 'Kurdele artık ' + yeni.ad + ' arabasında');
   konfeti(90, 0.9);
   D.sarsinti = 0.7;
   kornaCal(yeni);
@@ -203,6 +226,10 @@ function oyunDurum(d) {
   d.superAraba = [...D.oy.values()].filter(k => k.ar && k.ar.tip === 'super' && !k.cikiyor).map(k => k.ad);
   d.superAn = D.superAn ? D.superAn.k.ad : null;
   d.superDegisim = D.superDegisim || 0;
+  d.superSira = D.reji.superSira.map(a => a.k.ad);
+  // sahnede şu an çizilen büyük kart: [üst satır, ad, alt satır] (60-cizim.js oyunUst; yoksa null)
+  const ky = D.kartYazi;
+  d.kart = ky && kareSay - ky.kare <= 2 ? [ky.ust, ky.ad, ky.alt] : null;
   d.arabaTipleri = ARABA_TIPLERI.slice();
   d.gelinSusu = DUNYA.r ? Object.keys(GELIN.gruplar).filter(t => GELIN.gruplar[t].visible) : [];
   d.fisek = D.fisekler.length;
