@@ -159,7 +159,8 @@ console.log('\nPaket hazır: ' + hedef + '\n');
 // Paketin ZIP'i: Mac'e çalıştırma izni kaybolmadan gitsin diye BASLAT.command ve BASLAT.sh arşivde 0755 saklanır
 // (Windows'ta klasörü Explorer ile sıkıştırınca bu izin kaybolur). Yayıncıya bu ZIP verilir.
 const zipYolu = path.join(KOK, 'dist', ad + '.zip');
-zipYaz(zipYolu, hedef, ad, { calistirilabilir: ['BASLAT.command', 'BASLAT.sh'] });
+// Yalnız bu çalıştırmada yazılan dosyalar girer: klasörde önceden kalan (kilit dosyası, node_modules, notlar) girmez.
+zipYaz(zipYolu, hedef, ad, { calistirilabilir: ['BASLAT.command', 'BASLAT.sh'], yalniz: yazilan });
 for (const y of yazilan) console.log('  yazıldı  ' + y);
 console.log('  ZIP      ' + path.relative(KOK, zipYolu) + '  (yayıncıya bunu ver: Mac başlatıcısının çalıştırma izni içinde saklı)');
 console.log('\nToplam ' + yazilan.length + ' dosya. Hiçbir şey silinmedi; yeniden çalıştırırsan üstüne yazılır.\n');

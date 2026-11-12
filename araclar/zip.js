@@ -6,7 +6,7 @@
  * işaretiyle saklar, içeriği zlib ile sıkıştırır (deflate). ZIP64 yoktur: arşiv 4 GB'tan, girdi sayısı 65535'ten küçük
  * olmalıdır (paket ~100 MB, birkaç bin dosya).
  *
- *   zipYaz(hedef, kaynakKlasor, ustAd, { calistirilabilir: ['BASLAT.command', 'BASLAT.sh'] })
+ *   zipYaz(hedef, kaynakKlasor, ustAd, { calistirilabilir: ['BASLAT.command', 'BASLAT.sh'], yalniz: [...] })
  *     kaynakKlasor'un içi arşivde ustAd/ altına yazılır. calistirilabilir: ustAd'a göre yollar.
  *   zipOku(dosya) → [{ ad, mod, boyut, sikisik }]  (merkezi dizinden; testler için)
  */
@@ -30,7 +30,13 @@ function gez(kl, onek, cikti) {
 }
 function zipYaz(hedef, kaynak, ustAd, sec = {}) {
   const calis = new Set((sec.calistirilabilir || []).map(x => ustAd + '/' + x.replace(/\\/g, '/')));
-  const girdiler = [{ ad: ustAd + '/', yol: kaynak, klasor: true }, ...gez(kaynak, ustAd + '/', [])];
+  let girdiler = [{ ad: ustAd + '/', yol: kaynak, klasor: true }, ...gez(kaynak, ustAd + '/', [])];
+  // yalniz: yalnız bu dosyalar (ustAd'a göre yollar) ve onları içeren klasörler girer; klasörde başka ne durursa dursun.
+  if (sec.yalniz) {
+    const dosyalar = new Set(sec.yalniz.map(x => ustAd + '/' + x.replace(/\\/g, '/'))), klasorler = new Set([ustAd + '/']);
+    for (const d of dosyalar) { const p = d.split('/'); for (let i = 1; i < p.length; i++) klasorler.add(p.slice(0, i).join('/') + '/'); }
+    girdiler = girdiler.filter(g => g.klasor ? klasorler.has(g.ad) : dosyalar.has(g.ad));
+  }
   if (girdiler.length > 65535) throw new Error('ZIP: girdi sayısı 65535\'i geçiyor (ZIP64 desteklenmiyor).');
   const fd = fs.openSync(hedef, 'w'), merkez = [];
   let konum = 0;

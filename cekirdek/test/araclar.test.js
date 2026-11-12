@@ -171,7 +171,16 @@ if (process.platform === 'win32') {
     fs.writeFileSync(jDogru, JSON.stringify(sahte)); fs.writeFileSync(jYanlis, JSON.stringify({ ...sahte, sha256: 'f'.repeat(64) }));
     const mod = path.join(hk, 'moduller', 'tiktok-live-connector'); fs.mkdirSync(mod, { recursive: true });
     fs.writeFileSync(path.join(mod, 'package.json'), JSON.stringify({ name: 'tiktok-live-connector', version: '0.0.0-deneme', main: 'index.js' })); fs.writeFileSync(path.join(mod, 'index.js'), 'module.exports = {};');
-    const kur = (json, cikti) => spawnSync(process.execPath, [path.join(KOK, 'araclar', 'surum.js'), '--surum-json', json, '--node-zip', arsiv, '--moduller', path.join(hk, 'moduller'), '--cikti', cikti, '--zipsiz'], { cwd: KOK, encoding: 'utf8', timeout: 300000 });
+    // Geçici git deposu: bu çalışma ağacının şimdiki dosyaları (izlenen + izlenmeyen, yoksayılanlar hariç) tek işlemede.
+    // surum.js yalnız işlenmiş ağacı (git archive HEAD) paketler; testin deposu bu yüzden işlenmiş olmalı.
+    const depo = path.join(hk, 'depo'), git = (...a) => spawnSync('git', a, { cwd: depo, encoding: 'utf8' });
+    fs.mkdirSync(depo); git('init', '-q');
+    for (const y of spawnSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: KOK, encoding: 'utf8' }).stdout.split('\0').filter(Boolean)) {
+      const a = path.join(KOK, y); if (!fs.existsSync(a) || !fs.statSync(a).isFile()) continue;
+      fs.mkdirSync(path.dirname(path.join(depo, y)), { recursive: true }); fs.copyFileSync(a, path.join(depo, y));
+    }
+    git('add', '-A'); git('-c', 'user.name=test', '-c', 'user.email=test@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'test');
+    const kur = (json, cikti, ...ek) => spawnSync(process.execPath, [path.join(KOK, 'araclar', 'surum.js'), '--surum-json', json, '--node-zip', arsiv, '--moduller', path.join(hk, 'moduller'), '--cikti', cikti, '--zipsiz', '--depo', depo, ...ek], { cwd: KOK, encoding: 'utf8', timeout: 300000 });
     const yanlisCikti = path.join(hk, 'cikti-yanlis'), y = kur(jYanlis, yanlisCikti);
     const yanlisIc = fs.existsSync(yanlisCikti) ? fs.readdirSync(yanlisCikti).map(d => fs.existsSync(path.join(yanlisCikti, d, 'tiktok-oyun-fabrikasi', 'node'))) : [];
     kontrol('Hazır paket: Node arşivinin SHA-256\'sı tutmazsa araç durur, hiçbir şey paketlenmez (node klasörü yok)', y.status === 1 && /SHA-256 tutmuyor/.test(y.stderr) && yanlisIc.every(x => !x), { kod: y.status, hata: (y.stderr || '').slice(0, 300) });
@@ -180,6 +189,16 @@ if (process.platform === 'win32') {
     const sorun = fs.existsSync(pk2) ? surum.paketDenetle(pk2) : ['paket yok'];
     const surumTxt = fs.existsSync(path.join(pk2, 'SURUM.txt')) ? fs.readFileSync(path.join(pk2, 'SURUM.txt'), 'utf8') : '';
     kontrol('Hazır paket düzeni: node\\node.exe + LICENSE, node_modules\\tiktok-live-connector, üç oyun, başlatıcılar, node-yok.html, SURUM.txt; geliştirme bağımlılığı, test/cikti, .git, dist, npm yok', g.status === 0 && sorun.length === 0 && ['halay', 'konvoy', 'vur-duzelsin'].every(o => fs.existsSync(path.join(pk2, 'oyunlar', o, 'oyun.html'))) && !fs.existsSync(path.join(pk2, '.git')) && !fs.existsSync(path.join(pk2, 'test', 'cikti')) && !fs.existsSync(path.join(pk2, 'node_modules', 'playwright')) && new RegExp('Node\\.js: +' + v.replace(/\./g, '\\.')).test(surumTxt) && /tiktok-live-connector: 0\.0\.0-deneme/.test(surumTxt) && /Git işlemesi: +[0-9a-f]{40}/.test(surumTxt), { kod: g.status, sorun, hata: (g.stderr || '').slice(-300), surumTxt });
+    // Kirli ağaç: izlenmeyen dosya (.env.local, notlarim.txt) ve işlenmemiş değişiklik varken araç durur; --kirli-izin ile
+    // yalnız işlenmiş ağaç paketlenir (izlenmeyen dosyalar girmez, değişen dosya işlendiği hâliyle girer), SURUM.txt bunu yazar.
+    fs.writeFileSync(path.join(depo, '.env.local'), 'GIZLI=1\n'); fs.writeFileSync(path.join(depo, 'notlarim.txt'), 'özel not\n');
+    const readmeIslenmis = fs.readFileSync(path.join(depo, 'README.md'), 'utf8'); fs.appendFileSync(path.join(depo, 'README.md'), '\nİŞLENMEMİŞ SATIR\n');
+    const kirliCikti = path.join(hk, 'cikti-kirli'), kd = kur(jDogru, kirliCikti);
+    kontrol('Hazır paket: çalışma ağacında izlenmeyen dosya ya da işlenmemiş değişiklik varken araç durur (paket yok), nedenini yazar', kd.status === 1 && /Çalışma ağacı temiz değil/.test(kd.stderr) && /--kirli-izin/.test(kd.stderr) && !fs.existsSync(kirliCikti), { kod: kd.status, hata: (kd.stderr || '').slice(0, 300) });
+    const izinCikti = path.join(hk, 'cikti-izin'), ki = kur(jDogru, izinCikti, '--kirli-izin');
+    const pk3 = path.join(izinCikti, fs.existsSync(izinCikti) ? fs.readdirSync(izinCikti)[0] : 'yok', 'tiktok-oyun-fabrikasi');
+    const s3 = fs.existsSync(path.join(pk3, 'SURUM.txt')) ? fs.readFileSync(path.join(pk3, 'SURUM.txt'), 'utf8') : '';
+    kontrol('Hazır paket --kirli-izin: yalnız işlenmiş ağaç girer (.env.local ve notlarim.txt yok, README işlendiği hâliyle), SURUM.txt kirli ağaçtan yapıldığını söyler', ki.status === 0 && !fs.existsSync(path.join(pk3, '.env.local')) && !fs.existsSync(path.join(pk3, 'notlarim.txt')) && fs.readFileSync(path.join(pk3, 'README.md'), 'utf8') === readmeIslenmis && /--kirli-izin/.test(s3), { kod: ki.status, hata: (ki.stderr || '').slice(-300), surum: s3.slice(0, 400) });
     // Paketten, paketin kendi Node'uyla açılan motor: kapısında yanıt verir, kütüphane hazır, üç oyun listede
     if (fs.existsSync(path.join(pk2, 'node', 'node.exe'))) {
       const kp = (parseInt(process.env.KOPRU_TEST_PORT, 10) || 8791) + 12;
@@ -206,7 +225,14 @@ if (process.platform === 'win32') {
     kontrol('BASLAT.bat ZIP\'ten çıkarılmadan açılınca (yanında kopru.js yok) tek düz satırla önce klasöre çıkarmayı söyler, hatayla biter, node çalıştırmaz', zb.status === 1 && /Once ZIP'i bir klasore cikar \(sag tik, Tumunu ayikla\), sonra BASLAT\.bat'a cift tikla\./.test(zb.stdout) && !fs.existsSync(path.join(yolNode, 'cagri.txt')), zb.stdout.slice(0, 300));
   }
   // ZIP yazıcı: Mac başlatıcıları 0755, gerisi 0644, tek üst klasör; paket.js'in ZIP'i de böyle; Windows'un açıcısı açar
+  // Paket klasöründe önceki bir denemeden kalanlar (kilit, node_modules, not): paket.js yeniden çalışınca ZIP'e girmemeli
+  if (fs.existsSync(pkKl)) {
+    fs.writeFileSync(path.join(pkKl, '.kurulum-kilidi.json'), '{"bitti":true}'); fs.writeFileSync(path.join(pkKl, 'notlarim.txt'), 'not');
+    fs.mkdirSync(path.join(pkKl, 'node_modules', 'artik'), { recursive: true }); fs.writeFileSync(path.join(pkKl, 'node_modules', 'artik', 'index.js'), '');
+    calis('araclar/paket.js', 'deneme-oyun');
+  }
   const pkZip = path.join(GECICI, 'dist', 'deneme-oyun.zip'), girdi = fs.existsSync(pkZip) ? zipOku(pkZip) : [];
+  kontrol('paket.js ZIP\'i yalnız bu çalıştırmada yazılan dosyaları içerir: klasörde kalan kilit dosyası, node_modules ve notlar girmez', girdi.length > 5 && !girdi.some(x => /\.kurulum-kilidi\.json$|notlarim\.txt$|node_modules\//.test(x.ad)), girdi.map(x => x.ad).filter(a => /kilid|notlar|node_modules/.test(a)));
   const modu = ad => (girdi.find(x => x.ad === ad) || {}).mod;
   kontrol('paket.js ZIP\'i: tek üst klasör deneme-oyun/, BASLAT.command ve BASLAT.sh 0755 (Unix), kopru.js 0644; OKU.txt Mac\'te çift tıklama ile Terminal yolunu eşit yol olarak anlatır', girdi.length > 5 && girdi.every(x => x.ad.startsWith('deneme-oyun/')) && modu('deneme-oyun/BASLAT.command') === 0o100755 && modu('deneme-oyun/BASLAT.sh') === 0o100755 && modu('deneme-oyun/kopru.js') === 0o100644 && /açılmazsa Terminal'i aç, cd ile bu klasöre gir/.test(fs.readFileSync(path.join(pkKl, 'OKU.txt'), 'utf8')), girdi.slice(0, 6).map(x => x.ad + ' ' + x.mod.toString(8)));
   if (process.platform === 'win32' && fs.existsSync(pkZip)) {

@@ -10,7 +10,10 @@
  * Çıktı: dist/surum-<tarih>-<işleme>/tiktok-oyun-fabrikasi/ (paketin kendisi) ve yanında
  * tiktok-oyun-fabrikasi-<node sürümü>-windows-x64.zip (içinde tek üst klasör: tiktok-oyun-fabrikasi/).
  * Paketin içi:
- *   - deponun izlenen dosyaları (git ls-files; .gitignore'dakiler girmez, çalışma kopyasındaki hâlleriyle);
+ *   - deponun son işlemesinin (HEAD) ağacı, tam olarak "git archive HEAD" verdiği gibi: klasörde duran izlenmeyen
+ *     dosyalar (.env, notlar) ve işlenmemiş değişiklikler pakete GİRMEZ. Çalışma ağacı temiz değilse (işlenmemiş
+ *     değişiklik ya da izlenmeyen dosya varsa) araç durur; --kirli-izin verilirse yine yalnız HEAD paketlenir ve SURUM.txt
+ *     bunu yazar;
  *   - node\node.exe ve node\LICENSE: araclar/surum-node.json'da sabitlenmiş resmî Node arşivinden; arşivin sha256'sı
  *     tutmazsa araç durur, hiçbir şey paketlenmez. npm pakete girmez;
  *   - node_modules\: yalnız üretim bağımlılıkları, deponun package-lock.json'uyla paketin kendi kopyasında kurulur
@@ -19,7 +22,8 @@
  * Araç hiçbir şey silmez: her çalıştırma yeni bir klasöre yazar, eskiler kalır (dist/ depoya girmez).
  *
  * Testler için (ağa çıkmadan): --surum-json <yol> başka bir sabit dosya, --moduller <klasör> npm yerine hazır bir
- * node_modules kopyalanır, --zipsiz ZIP yazılmaz, --cikti <klasör> dist/ yerine o klasörün içine yazılır.
+ * node_modules kopyalanır, --zipsiz ZIP yazılmaz, --cikti <klasör> dist/ yerine o klasörün içine yazılır, --depo <klasör>
+ * bu deponun yerine başka bir git deposundan (ör. geçici bir klondan) paketler.
  */
 'use strict';
 const fs = require('fs'), path = require('path'), crypto = require('crypto'), https = require('https'), cp = require('child_process');
@@ -80,8 +84,14 @@ async function main() {
   const args = process.argv.slice(2), secenek = ad => { const i = args.indexOf(ad); return i >= 0 ? args[i + 1] : null; };
   const sabit = JSON.parse(fs.readFileSync(secenek('--surum-json') || path.join(__dirname, 'surum-node.json'), 'utf8'));
   if (!/^\d+\.\d+\.\d+$/.test(sabit.surum) || !sabit.url || !sabit.dosya) throw new Error('surum-node.json eksik ya da bozuk.');
-  const islem = (() => { try { return calistir('git', ['rev-parse', 'HEAD'], { cwd: KOK }).trim(); } catch (e) { return 'bilinmiyor'; } })();
-  const kirli = (() => { try { return calistir('git', ['status', '--porcelain'], { cwd: KOK }).trim() !== ''; } catch (e) { return false; } })();
+  const DEPO = path.resolve(secenek('--depo') || KOK);
+  const islem = calistir('git', ['rev-parse', 'HEAD'], { cwd: DEPO }).trim();
+  if (!/^[0-9a-f]{40}$/.test(islem)) throw new Error('Git işlemesi okunamadı: ' + DEPO);
+  // İşlenmemiş değişiklik ya da izlenmeyen dosya (yoksayılanlar hariç) varsa dur: yanlışlıkla neyin yayımlandığı belirsiz kalmasın.
+  const durum = calistir('git', ['status', '--porcelain', '--untracked-files=all'], { cwd: DEPO }).trim(), kirli = durum !== '';
+  if (kirli && !args.includes('--kirli-izin'))
+    throw new Error('Çalışma ağacı temiz değil (işlenmemiş değişiklik ya da izlenmeyen dosya var):\n  ' + durum.split(/\r?\n/).slice(0, 15).join('\n  ') +
+      '\nÖnce işle (commit) ya da kaldır. Yine de son işlemeyi (HEAD) paketlemek için: --kirli-izin');
   const zaman = new Date(), damga = zaman.toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
   const kok = path.join(secenek('--cikti') || path.join(KOK, 'dist'), 'surum-' + damga + '-' + islem.slice(0, 7) + '-' + process.pid);
   const paket = path.join(kok, UST), gecici = path.join(kok, '_gecici');
@@ -95,15 +105,12 @@ async function main() {
   hashDogrula(arsiv, sabit.sha256);
   console.log('  SHA-256 tuttu: ' + sabit.sha256);
 
-  // 2. Deponun izlenen dosyaları (çalışma kopyasındaki hâlleriyle; .gitignore'dakiler girmez)
-  const liste = calistir('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: KOK }).split('\0').filter(Boolean);
-  let n = 0;
-  for (const y of liste) {
-    const a = path.join(KOK, y);
-    if (!fs.existsSync(a) || !fs.statSync(a).isFile()) continue; // silinmiş ya da klasör
-    kopyala(a, path.join(paket, y)); n++;
-  }
-  console.log('  ' + n + ' depo dosyası kopyalandı.');
+  // 2. Son işlemenin ağacı (git archive HEAD): yalnız işlenmiş dosyalar, işlendiği hâlleriyle
+  const tarYol = path.join(gecici, 'kaynak.tar');
+  calistir('git', ['archive', '--format=tar', '-o', tarYol, islem], { cwd: DEPO });
+  calistir(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe'), ['-xf', tarYol, '-C', paket]);
+  const n = calistir('git', ['ls-tree', '-r', '--name-only', '-z', islem], { cwd: DEPO }).split('\0').filter(Boolean).length;
+  console.log('  ' + n + ' depo dosyası (işleme ' + islem.slice(0, 7) + ') açıldı.');
 
   // 3. node\node.exe ve LICENSE (arşivden; npm alınmaz)
   const ic = sabit.dosya.replace(/\.zip$/, '');
@@ -129,7 +136,7 @@ async function main() {
     'TikTok Oyun Fabrikası - Windows hazır paketi', '',
     'Node.js:            ' + sabit.surum + ' (node\\node.exe, resmî arşiv ' + sabit.dosya + ', SHA-256 ' + sabit.sha256 + ')',
     'tiktok-live-connector: ' + kutPj.version, 'Paketlendiği tarih:  ' + zaman.toISOString().slice(0, 19).replace('T', ' ') + ' UTC',
-    'Git işlemesi:       ' + islem + (kirli ? ' (çalışma kopyasında işlenmemiş değişiklikler vardı)' : ''), '',
+    'Git işlemesi:       ' + islem + (kirli ? ' (--kirli-izin: çalışma ağacında işlenmemiş değişiklik ya da izlenmeyen dosya vardı; pakete yalnız bu işleme girdi)' : ''), '',
     'Kurulum gerekmez: klasörü bir yere çıkar, BASLAT.bat dosyasına çift tıkla.', ''
   ].join('\r\n'));
 
