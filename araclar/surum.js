@@ -7,6 +7,12 @@
  *   node araclar/surum.js --node-zip <yol>         Node arşivini indirmek yerine daha önce indirileni kullanır
  *                                                  (yine sha256 denetlenir)
  *
+ * Node arşivi önbelleği: indirilen ve SHA-256'sı tutan arşiv kullanıcı başına bir klasörde saklanır
+ * (%LOCALAPPDATA%\tiktok-oyun-fabrikasi\onbellek, yoksa geçici klasör; adında sürüm ve sha256'nın ilk 12 hanesi).
+ * Sonraki çalıştırma onu indirmez: önbellekteki dosya bu çalıştırmanın klasörüne kopyalanır ve kopyanın sha256'sı,
+ * taze indirilen arşivinki gibi, aynı sabit değerle denetlenir. Tutmazsa yeniden indirilir, doğrulanan yeni arşiv
+ * önbellekteki bozuğun yerine yazılır. Önbelleğe yalnız sha256'sı tutmuş arşiv girer.
+ *
  * Çıktı: dist/surum-<tarih>-<işleme>/tiktok-oyun-fabrikasi/ (paketin kendisi) ve yanında
  * tiktok-oyun-fabrikasi-<node sürümü>-windows-x64.zip (içinde tek üst klasör: tiktok-oyun-fabrikasi/).
  * Paketin içi:
@@ -19,14 +25,16 @@
  *   - node_modules\: yalnız üretim bağımlılıkları, deponun package-lock.json'uyla paketin kendi kopyasında kurulur
  *     (npm ci --omit=dev; npm yalnız o klasörde çalışır, kendi package.json'u olduğu için üst klasöre tırmanmaz);
  *   - SURUM.txt: Node sürümü, kütüphane sürümü, tarih, git işlemesi.
- * Araç hiçbir şey silmez: her çalıştırma yeni bir klasöre yazar, eskiler kalır (dist/ depoya girmez).
+ * Araç hiçbir şey silmez: her çalıştırma yeni bir klasöre yazar, eskiler kalır (dist/ depoya girmez). Tek istisna
+ * önbellektir: sha256'sı tutmayan önbellek arşivinin üstüne doğrulanmış yenisi yazılır.
  *
  * Testler için (ağa çıkmadan): --surum-json <yol> başka bir sabit dosya, --moduller <klasör> npm yerine hazır bir
  * node_modules kopyalanır, --zipsiz ZIP yazılmaz, --cikti <klasör> dist/ yerine o klasörün içine yazılır, --depo <klasör>
- * bu deponun yerine başka bir git deposundan (ör. geçici bir klondan) paketler.
+ * bu deponun yerine başka bir git deposundan (ör. geçici bir klondan) paketler, --onbellek <klasör> Node arşivi önbelleği
+ * olarak o klasörü kullanır.
  */
 'use strict';
-const fs = require('fs'), path = require('path'), crypto = require('crypto'), https = require('https'), cp = require('child_process');
+const fs = require('fs'), os = require('os'), path = require('path'), crypto = require('crypto'), https = require('https'), cp = require('child_process');
 
 const KOK = path.join(__dirname, '..');
 const { zipYaz } = require('./zip');
@@ -71,6 +79,28 @@ function indir(url, hedef, kalan = 5) {
     }).on('error', rej);
   });
 }
+// Önbellekteki arşivin yolu: sürüm (dosya adında) ve sha256'nın ilk 12 hanesi adda. Sabit dosyadaki ad ve özet bir
+// klasör yolunun parçası olacağı için önce biçimleri denetlenir.
+function onbellekYolu(sabit, klasor) {
+  if (!/^[0-9a-f]{64}$/.test(String(sabit.sha256)) || !/^[\w.-]+\.zip$/.test(sabit.dosya) || sabit.dosya.includes('..'))
+    throw new Error('surum-node.json bozuk: sha256 64 onaltılık hane, dosya düz bir .zip adı olmalı.');
+  const kok = klasor || (process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'tiktok-oyun-fabrikasi', 'onbellek') : path.join(os.tmpdir(), 'tiktok-oyun-fabrikasi-onbellek'));
+  return path.join(kok, sabit.dosya.replace(/\.zip$/, '') + '-' + sabit.sha256.slice(0, 12) + '.zip');
+}
+// Doğrulanmış arşivi önbelleğe koyar: önce yanına yarım adla kopyalanır, sonra tek adımda yerine taşınır (yarım kalan
+// kopya önbellekte arşiv sanılmasın). Yazılamazsa paketleme sürer, yalnız bildirilir.
+function onbellegeYaz(arsiv, hedef) {
+  const yarim = hedef + '.' + process.pid + '.yarim';
+  try {
+    fs.mkdirSync(path.dirname(hedef), { recursive: true });
+    fs.copyFileSync(arsiv, yarim);
+    fs.renameSync(yarim, hedef);
+    console.log('  Önbelleğe yazıldı: ' + hedef);
+  } catch (e) {
+    console.log('  (Node arşivi önbelleğe yazılamadı: ' + e.message + ')');
+    try { if (fs.existsSync(yarim)) fs.unlinkSync(yarim); } catch (e2) { }
+  }
+}
 const calistir = (komut, argv, sec) => {
   const r = cp.spawnSync(komut, argv, { encoding: 'utf8', windowsHide: true, maxBuffer: 64 << 20, ...sec });
   if (r.error || r.status !== 0) throw new Error(komut + ' ' + argv.join(' ') + ' başarısız (' + (r.error ? r.error.message : 'kod ' + r.status) + ')\n' + String(r.stderr || '').slice(-1500));
@@ -98,9 +128,25 @@ async function main() {
   fs.mkdirSync(paket, { recursive: true }); fs.mkdirSync(gecici, { recursive: true });
   console.log('\n  Paket klasörü: ' + paket);
 
-  // 1. Node arşivi: indir (ya da verileni kullan), sha256'sını sabitlenmiş değerle karşılaştır; tutmazsa dur.
+  // 1. Node arşivi: önbellekten al ya da indir (ya da verileni kullan), sha256'sını sabitlenmiş değerle karşılaştır;
+  // tutmazsa dur. Önbellekteki arşiv bu çalıştırmanın klasörüne kopyalanıp denetlenir: paketlenen, denetlenen kopyadır.
   let arsiv = secenek('--node-zip');
-  if (!arsiv) { arsiv = path.join(gecici, sabit.dosya); console.log('  Node indiriliyor: ' + sabit.url); await indir(sabit.url, arsiv); }
+  if (!arsiv) {
+    arsiv = path.join(gecici, sabit.dosya);
+    const ob = onbellekYolu(sabit, secenek('--onbellek'));
+    let onbellekten = false;
+    if (fs.existsSync(ob)) {
+      fs.copyFileSync(ob, arsiv);
+      try { hashDogrula(arsiv, sabit.sha256); onbellekten = true; console.log('  Node arşivi önbellekten alındı (SHA-256 tuttu): ' + ob); }
+      catch (e) { console.log('  Önbellekteki Node arşivinin SHA-256\'sı tutmuyor (bozuk ya da değiştirilmiş): ' + ob + '\n  Yeniden indiriliyor.'); }
+    }
+    if (!onbellekten) {
+      console.log('  Node indiriliyor: ' + sabit.url);
+      await indir(sabit.url, arsiv);
+      hashDogrula(arsiv, sabit.sha256); // önbelleğe yalnız sha256'sı tutan arşiv girer
+      onbellegeYaz(arsiv, ob);
+    }
+  }
   console.log('  Node arşivi denetleniyor (SHA-256)…');
   hashDogrula(arsiv, sabit.sha256);
   console.log('  SHA-256 tuttu: ' + sabit.sha256);
@@ -161,5 +207,5 @@ async function main() {
   return { kok, paket, zip, boyut, ozet };
 }
 
-module.exports = { sha256Dosya, hashDogrula, paketDenetle };
+module.exports = { sha256Dosya, hashDogrula, paketDenetle, onbellekYolu };
 if (require.main === module) main().catch(e => { console.error('\n  DURDU: ' + e.message + '\n'); process.exit(1); });

@@ -189,6 +189,19 @@ if (process.platform === 'win32') {
     const sorun = fs.existsSync(pk2) ? surum.paketDenetle(pk2) : ['paket yok'];
     const surumTxt = fs.existsSync(path.join(pk2, 'SURUM.txt')) ? fs.readFileSync(path.join(pk2, 'SURUM.txt'), 'utf8') : '';
     kontrol('Hazır paket düzeni: node\\node.exe + LICENSE, node_modules\\tiktok-live-connector, üç oyun, başlatıcılar, node-yok.html, SURUM.txt; geliştirme bağımlılığı, test/cikti, .git, dist, npm yok', g.status === 0 && sorun.length === 0 && ['halay', 'konvoy', 'vur-duzelsin'].every(o => fs.existsSync(path.join(pk2, 'oyunlar', o, 'oyun.html'))) && !fs.existsSync(path.join(pk2, '.git')) && !fs.existsSync(path.join(pk2, 'test', 'cikti')) && !fs.existsSync(path.join(pk2, 'node_modules', 'playwright')) && new RegExp('Node\\.js: +' + v.replace(/\./g, '\\.')).test(surumTxt) && /tiktok-live-connector: 0\.0\.0-deneme/.test(surumTxt) && /Git işlemesi: +[0-9a-f]{40}/.test(surumTxt), { kod: g.status, sorun, hata: (g.stderr || '').slice(-300), surumTxt });
+    // Node arşivi önbelleği (ağa çıkmadan): önbellekte doğru arşiv varsa indirmeden onu kullanır; önbellekteki arşiv
+    // bozuksa (sha256 tutmuyor) kullanmaz, yeniden indirmeye kalkar (adres .invalid: indirme düşer, araç durur, hiçbir şey
+    // paketlenmez) ve bozuk dosyanın üstüne doğrulanmamış bir şey yazmaz.
+    const obKl = path.join(hk, 'onbellek'), obYol = surum.onbellekYolu(sahte, obKl);
+    fs.mkdirSync(obKl, { recursive: true }); fs.copyFileSync(arsiv, obYol);
+    const kurOb = cikti => spawnSync(process.execPath, [path.join(KOK, 'araclar', 'surum.js'), '--surum-json', jDogru, '--onbellek', obKl, '--moduller', path.join(hk, 'moduller'), '--cikti', cikti, '--zipsiz', '--depo', depo], { cwd: KOK, encoding: 'utf8', timeout: 300000 });
+    const obCikti = path.join(hk, 'cikti-onbellek'), ob1 = kurOb(obCikti);
+    const obPk = path.join(obCikti, fs.existsSync(obCikti) ? fs.readdirSync(obCikti)[0] : 'yok', 'tiktok-oyun-fabrikasi');
+    kontrol('Hazır paket: önbellekte sha256\'sı tutan Node arşivi varsa indirmeden onu kullanır (adı sürüm + sha256\'nın ilk 12 hanesi), paket tamam', ob1.status === 0 && /önbellekten alındı/.test(ob1.stdout) && !/indiriliyor/.test(ob1.stdout) && path.basename(obYol) === ic + '-' + sahte.sha256.slice(0, 12) + '.zip' && fs.existsSync(path.join(obPk, 'node', 'node.exe')), { kod: ob1.status, cikti: (ob1.stdout || '').split('\n').filter(s => /Node|önbellek/i.test(s)).join(' / '), hata: (ob1.stderr || '').slice(-300) });
+    fs.writeFileSync(obYol, 'bozuk arşiv');
+    const obCikti2 = path.join(hk, 'cikti-onbellek-bozuk'), ob2 = kurOb(obCikti2);
+    const obIc2 = fs.existsSync(obCikti2) ? fs.readdirSync(obCikti2).map(d => fs.existsSync(path.join(obCikti2, d, 'tiktok-oyun-fabrikasi', 'node'))) : [];
+    kontrol('Hazır paket: önbellekteki arşivin sha256\'sı tutmazsa kullanılmaz, yeniden indirilir (indirilemeyince araç durur, node klasörü yok), önbelleğe doğrulanmamış dosya yazılmaz', ob2.status === 1 && /SHA-256'sı tutmuyor/.test(ob2.stdout) && /Yeniden indiriliyor/.test(ob2.stdout) && /Node indiriliyor/.test(ob2.stdout) && obIc2.every(x => !x) && fs.readFileSync(obYol, 'utf8') === 'bozuk arşiv', { kod: ob2.status, cikti: (ob2.stdout || '').slice(-400), hata: (ob2.stderr || '').slice(0, 300) });
     // Kirli ağaç: izlenmeyen dosya (.env.local, notlarim.txt) ve işlenmemiş değişiklik varken araç durur; --kirli-izin ile
     // yalnız işlenmiş ağaç paketlenir (izlenmeyen dosyalar girmez, değişen dosya işlendiği hâliyle girer), SURUM.txt bunu yazar.
     fs.writeFileSync(path.join(depo, '.env.local'), 'GIZLI=1\n'); fs.writeFileSync(path.join(depo, 'notlarim.txt'), 'özel not\n');
