@@ -53892,9 +53892,9 @@ const OYUN = {
   // Büyükten küçüğe. tip, oyunHediye'nin hangi etkiyi başlatacağını seçer; etki paneldeki tabloda yazar.
   // En üst kademenin adı süper arabadır: panel düğmesi, tablo, sahnedeki hediye satırı ve olay günlüğü bu adı yazar.
   // Etkisi drift şovudur. Aynı kademeye küçük hediyelerin toplamıyla (100 × 10) gelinirse süper araba verilmez; o zaman
-  // satır ve günlük "Drift şov" yazar (10-oyun.js oyunHediye).
+  // bildirim ve akış "Drift şov" yazar (seriAd, docs/KANCALAR.md). SUPER_ESIK kademenin min'iyle aynı kalmalı.
   kademe: [
-    { min: 1000, ad: 'Süper araba', tip: 'drift', etki: 'Tek seferde ' + SUPER_ESIK + ' jeton: gönderen yayın boyunca süper arabayla sürer. Arabası en öne çıkıp drift atar, kamera ona geçer' },
+    { min: 1000, ad: 'Süper araba', seriAd: 'Drift şov', tip: 'drift', etki: 'Tek seferde ' + SUPER_ESIK + ' jeton: gönderen yayın boyunca süper arabayla sürer. Arabası en öne çıkıp drift atar, kamera ona geçer' },
     { min: 200, ad: 'Havai fişek', tip: 'fisek', etki: 'Gökte havai fişekler patlar, davul coşar' },
     { min: 50, ad: 'Sağ sol', tip: 'zigzag', etki: 'Bütün konvoy sağa sola kıvrılır' },
     { min: 10, ad: 'Hep beraber korna', tip: 'korna', etki: 'Bütün arabalar korna çalar, farlar yanıp söner' },
@@ -55028,7 +55028,7 @@ const muzik = new Muzik();
  * katil / cikar / siraGuncelle: sahnedeki sıra · olay(o): DIŞARIDAN GELEN HER ŞEYİN TEK GİRİŞ KAPISI
  * (sahte izleyici, köprü ve testler hep bunu çağırır). Olay biçimi docs/OLAYLAR.md'de.
  * Kullanıcı metni burada temizlenir; hiçbir yerde HTML olarak yazılmaz.
- * Oyuna sorulanlar: oyunGiris(k) giriş yeri · oyunYerlesim() herkesin hedef yeri · oyunHediye(k, jeton, kademe, hediye)
+ * Oyuna sorulanlar: oyunGiris(k) giriş yeri · oyunYerlesim() herkesin hedef yeri · oyunHediye(k, jeton, kademe, hediye, sayi)
  * hediyenin sahnedeki etkisi · oyunLiderDegisti(eski, yeni) rol devri. Ayrıntı: docs/KANCALAR.md.
  */
 // Eksik yazılar genel karşılıklarıyla doldurulur; oyun yalnız kendine özgü olanı yazar.
@@ -55188,6 +55188,8 @@ function olay(o) {
   }
   else if (o.tip === 'hediye') {
     const adet = clamp(Math.round(+o.adet) || 0, 0, 1e7), j = clamp(Math.round((+o.jeton || 1) * (+o.adet || 1)), 1, 1e7), onceki = D.lider;
+    // tek hediyenin değeri (jeton) ve kaç tane geldiği: oyunun "tek seferde şu kadar" kuralları için (oyunHediye'nin beşinci bilgisi)
+    const birim = clamp(Math.round(+o.jeton || 1), 1, 1e7), say = { birim, adet: Math.max(1, adet) };
     const k = katil(id, ad, true), hd = hediyeKimlik(o.hediye);
     if (!k)
       return;
@@ -55195,15 +55197,19 @@ function olay(o) {
     k.son = zaman;
     D.cosku = Math.min(1, D.cosku + Math.min(0.35, j / 300));
     const kd = KADEME.find(x => j >= x.min) || KADEME[KADEME.length - 1];
+    // Kademeye yalnız seriyle (tek hediyesi eşiğin altında) gelindiyse ve kademe ayrı bir "seriAd" taşıyorsa bildirim ve
+    // akış o adı yazar (docs/KANCALAR.md, OYUN.kademe). seriAd vermeyen oyunda kademenin adı yazar, değişen bir şey yok.
+    const kdAd = kd.seriAd && birim < kd.min ? kd.seriAd : kd.ad;
     // Hediye sevinci: bir sonraki yarım vuruştan başlayıp 4 vuruş sürer (oyun k.zip0–k.zip1 arasında zıplatır).
     k.zip0 = Math.ceil(B * 2) / 2;
     k.zip1 = k.zip0 + 4;
-    bildir(ad, j + ' jeton', kd.ad + '!');
+    bildir(ad, j + ' jeton', kdAd + '!');
     muzik.zil(Math.min(1, j / 200));
     // Akış satırı: hediyenin adı ve olayın taşıdığı adet (yoksa yazılmaz), jeton, tetiklenen kademe (25-yazilar.js).
-    gunluk('hediye', ad, '', { jeton: j, ad: hd && hd.ad || '', adet: adet > 1 ? adet : 0, kademe: kd.ad }, id);
-    // Dördüncü bilgi hediyenin kimliği ({ id, ad } ya da null); üç bilgiyle yazılmış kancalar eskisi gibi çalışır.
-    oyunHediye(k, j, kd, hd);
+    gunluk('hediye', ad, '', { jeton: j, ad: hd && hd.ad || '', adet: adet > 1 ? adet : 0, kademe: kdAd }, id);
+    // Dördüncü bilgi hediyenin kimliği ({ id, ad } ya da null), beşinci tek hediyenin değeri ve adedi ({ birim, adet });
+    // daha az bilgiyle yazılmış kancalar eskisi gibi çalışır.
+    oyunHediye(k, j, kd, hd, say);
     siraGuncelle();
     if (onceki && D.lider !== onceki)
       oyunLiderDegisti(onceki, D.lider);
@@ -57596,7 +57602,8 @@ queueMicrotask(() => {
  * anı), kartYazi (sahnede çizilen büyük kartın yazıları, 60-cizim.js).
  * Süper araba: tek seferde SUPER_ESIK jetonluk hediye atanın arabası süper arabaya döner (aşağıda "süper araba").
  * Süreler vuruşla (B) ölçülür: korna 1,5 vuruş, kurdele geçişi 2 vuruş, drift 16 vuruş.
- * Kancalar: oyunYerlesim, oyunGiris, oyunHediye, oyunLiderDegisti, oyunBaslat, oyunBosalt, oyunDurum.
+ * Kancalar: oyunYerlesim, oyunGiris, oyunHediye (beşinci bilgisi tek hediyenin değeri), oyunLiderDegisti, oyunBaslat,
+ * oyunBosalt, oyunDurum.
  */
 // ölçüler 00-ayar.js YOL_OLCU'dan
 const SERIT_L = YOL_OLCU.serit[2][0];
@@ -57676,33 +57683,11 @@ function hepsiKorna() {
  * kalır: çıkıp geri gelse de (SUPER_IDLER kimliği tutar; "Yolu boşalt" sıfırlar). Seri (aynı küçük hediyeden adet × 1000)
  * ve birkaç hediyenin toplamı saymaz. Aynı izleyici yine eşik üstü hediye atarsa kasa ikinci kez değişmez ama an yine
  * onundur: olay yeniden kalkar. Süper arabanın sürücüsü gelin arabasıysa süs onun üstündedir (gelin süsü tipe göre kurulur).
- * Çekirdek oyunHediye'ye yalnız toplamı (jeton × adet) verir. Birimi görmek için oyuna gelen hediye olayları geçerken
- * not edilir: köprüden gelenler Yayin.cevir'den, deneme / test olayları CanliOyun.olay'dan geçer; sahte izleyici ve panel
- * düğmeleri adet vermez (toplam = birim). ÇEKİRDEĞE EKLENMELİ: oyunHediye(k, j, kd, o) — o.jeton ve o.adet ile; o zaman
- * bu iki sarmalayıcı kalkar.
+ * Birim, çekirdeğin oyunHediye'ye verdiği beşinci bilgiden okunur ({ birim, adet }: tek hediyenin jetonu ve adedi;
+ * docs/KANCALAR.md). Seri yalnız kademeye ulaşırsa bildirim ve akış "Drift şov" yazar (kademenin seriAd'ı, 00-ayar.js).
  */
-const SUPER_IDLER = new Set(), SON_HEDIYE = { id: null, jeton: 0, adet: 1 };
+const SUPER_IDLER = new Set();
 function superMi(id) { return SUPER_IDLER.has(id); }
-function hediyeNotEt(o) {
-  if (o && o.tip === 'hediye') {
-    const kim = o.kullanici || {};
-    SON_HEDIYE.id = temiz(kim.id || kim.ad).slice(0, 64);
-    SON_HEDIYE.jeton = +o.jeton || 1;
-    SON_HEDIYE.adet = +o.adet || 1;
-  }
-  return o;
-}
-{
-  const cevir = Yayin.cevir, kapi = window.CanliOyun.olay;
-  Yayin.cevir = function (m) { return hediyeNotEt(cevir.call(this, m)); };
-  window.CanliOyun.olay = o => kapi(hediyeNotEt(o));
-}
-// Bu hediyenin birim değeri: not edilen olay bu kişinin bu hediyesiyse onun jetonu, değilse (adetsiz olay) toplamın kendisi.
-function hediyeBirim(k, j) {
-  const n = SON_HEDIYE, birim = n.id === k.id && Math.min(1e7, Math.max(1, Math.round(n.jeton * n.adet))) === j ? n.jeton : j;
-  n.id = null;
-  return birim;
-}
 // Süper araba anı (D.superAn, rejiye de bu nesne gider): k, b0 (vuruş), birim (hediyenin jetonu), yeni (kasa bu hediyeyle
 // değişti), tekrar (bu yayında daha önce de kazanmıştı), lider (aynı hediye onu gelin arabası da yaptı; oyunLiderDegisti
 // yazar). Büyük kart bundan okur: üstte
@@ -57721,12 +57706,10 @@ function superAraba(k, birim) {
   // o bitince sıra ona gelir. Adı ekrana yalnız rejinin kartı yazar: pankart açılmaz.
   D.reji.olayAt('super', k);
 }
-function oyunHediye(k, j, kd) {
-  const v = Math.ceil(B), birim = hediyeBirim(k, j);
+function oyunHediye(k, j, kd, hediye, sayi) {
+  const v = Math.ceil(B), birim = sayi && sayi.birim ? sayi.birim : j;
   if (birim >= SUPER_ESIK)
     superAraba(k, birim);
-  else if (kd.tip === 'drift')
-    superDegilYaz(k, j);
   // Her hediyede gönderen korna çalar; büyüdükçe bütün konvoy katılır.
   if (kd.tip !== 'tek')
     hepsiKorna();
@@ -57749,16 +57732,6 @@ function oyunHediye(k, j, kd) {
   // reji: hediye atan izleyiciyi yakın çekimde (ya da öne geçiyorsa sollamasıyla) gösterir; drift kendi şovunu alır
   if (kd.tip !== 'drift')
     rejiOlay('hediye', k);
-}
-// En üst kademeye küçük hediyelerin toplamıyla gelindi (seri: 100 × 10): süper araba yok. Çekirdek bildirimi ve günlüğü
-// kademe adıyla ("Süper araba!") az önce yazdı; ikisi de "Drift şov" diye düzeltilir. Bildirim satırı aynı anda gelen
-// bildirimle yer değiştirir (bildir, 25-yazilar.js); günlüğün son satırı henüz sayfaya yazılmadı (karede bir kez).
-// ÇEKİRDEĞE EKLENMELİ: kademe seçimi birim jetonu da bilsin (oyunHediye(k, j, kd, o)), ya da kademe bir "seri adı" taşısın.
-function superDegilYaz(k, j) {
-  bildir(k.ad, j + ' jeton', 'Drift şov!');
-  const son = gunlukBekleyen[gunlukBekleyen.length - 1];
-  if (son && son[0] === 'hediye' && son[1] === k.ad && son[2] === j + ' jeton → ' + OYUN.kademe[0].ad)
-    son[2] = j + ' jeton → Drift şov';
 }
 // Gelin süsü eski gelin arabasından yenisine uçar; reji yeni gelin arabasının öne geçişini gösterir.
 // Aynı hediye süper arabayı da verdiyse (oyunHediye bu çağrıdan hemen önce, aynı vuruşta) an tektir: pankart açılmaz,
@@ -57785,6 +57758,7 @@ function oyunBaslat() {
   }
   D.sonB = B;
   dunyaKur();
+  masaOyunKur();
 }
 function oyunBosalt() {
   D.driftKuyruk.length = 0;
@@ -59032,7 +59006,7 @@ const SOKAK_KADEME = [1, 0.65, 0.35, 0, 0];
 // oyuncu şeridi (AGENTS.md: oyuncular 505–1006 satırlarında yaşar)
 const SOKAK_SERIT = [505, 1006];
 const SOKAK_POZ = ['ayakta', 'cosku', 'alkisA', 'alkisB', 'salla'];
-const SOKAK = { kur: false, esya: {}, ins: [], havuz: 0, cizilen: 0, gizlenen: 0, sakin: 0, ms: 0, ucgen: { insan: [], esya: {} } };
+const SOKAK = { kur: false, esya: {}, ins: [], havuz: 0, cizilen: 0, gizlenen: 0, sakin: 0, kadraj: 0, ms: 0, ucgen: { insan: [], esya: {} } };
 function sokakDizi(s, Tur) {
   const ham = atob(s), u = new Uint8Array(ham.length);
   for (let i = 0; i < ham.length; i++)
@@ -59211,7 +59185,7 @@ function sokakGuncelle() {
     for (const m of sira)
       m.count = 0;
   SOKAK.havuz = kap;
-  SOKAK.cizilen = SOKAK.gizlenen = SOKAK.sakin = 0;
+  SOKAK.cizilen = SOKAK.gizlenen = SOKAK.sakin = SOKAK.kadraj = 0;
   if (kap) {
     // kadrajdaki adaylar, kameraya yakından uzağa; havuz yetmezse uzaktakiler çizilmez (sis zaten örter)
     kam.updateMatrixWorld();
@@ -59227,6 +59201,7 @@ function sokakGuncelle() {
         _sSec.push(o);
       }
     _sSec.sort((a, b) => a.uz - b.uz);
+    SOKAK.kadraj = _sSec.length;
     // konu: kamerayla arasına girip kadrajda onu örten kişi gizlenir. Konunun kadrajı ve kendisi rejiden.
     let konuUz = Infinity, kad = null, lider = null;
     const ck = D.reji && D.reji.cekim;
@@ -59309,11 +59284,12 @@ function sokakGuncelle() {
   // bu işin kare başına süresi (yumuşatılmış; rapor ve test için)
   SOKAK.ms += (performance.now() - t0 - SOKAK.ms) * 0.05;
 }
-// Testler ve rapor için (CanliOyun._test.D.sokakTest): havuz, sayılar ve yanlış yerdeki kişi (olmamalı). Adaylar ve
+// Testler ve rapor için (CanliOyun._test.D.sokakTest): havuz, kadrajdaki aday sayısı (kadrajAday: havuzdan önce),
+// çizilen / gizlenen, yanlış yerdeki kişi (olmamalı). Adaylar ve
 // ÇİZİLEN her örnek yolun yerel eksenine (s, l) çevrilip denetlenir: asfaltta, kaldırımın ötesinde, ağaç ya da direk
 // yuvasında; ayrıca ekranda kadrajın dörtte birinden uzun görünen (kameranın dibindeki dev) kişi.
 function sokakDurum() {
-  const ic = YOL_OLCU.bordurDis, r = { hazir: SOKAK_HAZIR, kademe: KALITE.kademe, havuz: SOKAK.havuz, kap: SOKAK_KAP, cizilen: SOKAK.cizilen, gizlenen: SOKAK.gizlenen, sakin: SOKAK.sakin, ms: +SOKAK.ms.toFixed(3),
+  const ic = YOL_OLCU.bordurDis, r = { hazir: SOKAK_HAZIR, kademe: KALITE.kademe, havuz: SOKAK.havuz, kap: SOKAK_KAP, kadrajAday: SOKAK.kadraj, cizilen: SOKAK.cizilen, gizlenen: SOKAK.gizlenen, sakin: SOKAK.sakin, ms: +SOKAK.ms.toFixed(3),
     ucgen: SOKAK.ucgen, aday: 0, yolda: 0, disarida: 0, agacta: 0, ornek: 0, ornekYolda: 0, ornekDisarida: 0, dev: 0, gorunenMesh: 0 };
   const yuvada = (s, l) => {
     const n = Math.round(s / YUVA), ne = yuvaNe(n, Math.sign(l)), y = ne === 'selvi' ? 0.95 : ne === 'cinar' ? 0.75 : ne === 'direk' ? 0.45 : 0;
@@ -59360,8 +59336,9 @@ function sokakDurum() {
     }
   return r;
 }
-// kalite(n): kademeyi kurar ve toparlanma saatini sıfırlar (yoksa birikmiş iyi süre kademeyi hemen geri çıkarır)
-D.sokakTest = { durum: sokakDurum, kalite: n => { kaliteKur(n); KALITE.iyiSn = 0; KALITE.deneme = 0; } };
+// kalite(n): kademeyi kurar ve toparlanma saatini sıfırlar (yoksa birikmiş iyi süre kademeyi hemen geri çıkarır); kare
+// süresi ölçümü 3 sn susar: yazılımla çizen test makinesinde kademe ölçülürken kendiliğinden inmesin.
+D.sokakTest = { durum: sokakDurum, kalite: n => { kaliteKur(n); KALITE.iyiSn = 0; KALITE.deneme = 0; KALITE.sus = performance.now() + 3000; } };
 
 /* ── oyunlar/konvoy-3b/js/40-araba.js ── */
 /* ARABALAR — her izleyicinin arabası (gerçek 3B), sürücüsü, plakası, farları; gelin arabasının süsü.
@@ -60912,6 +60889,7 @@ function rejiSifirla() {
 const OLCU = 4;
 function rejiGuncelle(dt) {
   const R = D.reji, z = konvoyOzet();
+  masaKameraYaz();
   R.dbSn = clamp(B - (R.oncekiB ?? B), 0, 0.5) / 1.85;
   R.oncekiB = B;
   // yakın çekim sırası yalnız sahnedekileri tutar
@@ -61216,9 +61194,86 @@ addEventListener('keydown', e => {
   const n = '012345678'.indexOf(e.key);
   if (n < 0)
     return;
-  D.reji.zorla = n === 0 ? null : CEKIM_SIRA[n - 1];
-  bildir('Kamera', n === 0 ? 'otomatik' : CEKIM_SIRA[n - 1], n === 0 ? 'Reji' : 'Elle çekim');
+  kameraSec(n === 0 ? null : CEKIM_SIRA[n - 1]);
 });
+function kameraSec(ad) {
+  D.reji.zorla = ad;
+  bildir('Kamera', ad ? CEKIM_AD[ad] : 'otomatik', ad ? 'Elle çekim' : 'Reji');
+}
+
+/* ---- masa: "Bu oyunda" kartı (docs/KANCALAR.md "Yayın masası") ----
+ * Yayıncının bu oyuna özgü denetimleri, iki kipte de: kamera (Otomatik ya da bir çekimi sabitle; klavye tuşu düğmenin
+ * üstünde yazar) ve arabaların görünümü (hazır modeller ya da kodla çizilmiş; sayfa yeniden açılır). Ekran kartı
+ * yetişmiyorsa kalite uyarısı da burada çıkar (60-cizim.js kaliteUyar). Yazılar sabit, textContent ile.
+ */
+const CEKIM_AD = { drone: 'Drone', yan: 'Yan', on: 'Ön', kus: 'Kuş', tur: 'Tur', yakin: 'Yakın', kenar: 'Kenar', vinc: 'Vinç' };
+const MASA = { kamera: null, son: undefined };
+// Kart sıkı tutulur: 1366×768 masada deneme kipinde "Yayın güvenliği" kartının başlığı ve balon anahtarı kaydırmadan
+// görünmeli (çekirdek testi). Bir satır başlığı ve düğmeler aynı satırda akar; kamera iki, arabalar bir satır.
+function k3Grup(id, yazi) {
+  const g = document.createElement('div'), y = document.createElement('span');
+  g.className = 'k3-grup';
+  g.id = id;
+  g.setAttribute('role', 'group');
+  g.setAttribute('aria-label', yazi);
+  y.className = 'k3-baslik';
+  y.textContent = yazi;
+  g.append(y);
+  return g;
+}
+function k3Dugme(yazi, tus, ipucu, tikla) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'dugme';
+  if (tus) {
+    const t = document.createElement('kbd');
+    t.textContent = tus;
+    b.append(t, ' ');
+  }
+  b.append(yazi);
+  b.title = ipucu;
+  b.onclick = tikla;
+  return b;
+}
+function masaOyunKur() {
+  const yer = $('bu-oyunda');
+  if (!yer || MASA.kamera)
+    return;
+  // Kartın kendi küçük stili: iskelete öğe eklenmez, yalnız #bu-oyunda içine; renkler masanın değişkenlerinden.
+  const st = document.createElement('style');
+  st.textContent = '#bu-oyunda .k3-grup{display:flex;flex-wrap:wrap;align-items:center;gap:3px;flex-basis:100%}' +
+    '#bu-oyunda .k3-baslik{font-size:12px;color:var(--soluk);margin-right:2px}' +
+    '#bu-oyunda .k3-grup .dugme{padding:2px 5px;font-size:12px;line-height:1.25;border-radius:7px}' +
+    '#bu-oyunda kbd{font:700 10px/1 inherit;padding:1px 3px;border-radius:3px;border:1px solid currentColor;opacity:.7}';
+  const kam = k3Grup('kamera-sec', 'Kamera');
+  kam.append(k3Dugme('Otomatik', '0', 'Reji çekimleri kendisi seçer (klavyede 0)', () => kameraSec(null)));
+  CEKIM_SIRA.forEach((ad, i) => kam.append(k3Dugme(CEKIM_AD[ad], String(i + 1), CEKIM_AD[ad] + ' çekimini sabitler (klavyede ' + (i + 1) + ')', () => kameraSec(ad))));
+  MASA.kamera = kam;
+  const arac = k3Grup('araba-sec', 'Arabalar');
+  for (const [deger, yazi] of [['hazir', 'Hazır modeller'], ['kod', 'Kodla çizilmiş']]) {
+    const secili = (deger === 'hazir') === ARABA_HAZIR, b = k3Dugme(yazi, '', 'Arabaların görünümü: sayfa yeniden açılır, sahne boşalır', () => {
+      const u = new URL(location.href);
+      u.searchParams.set('araba', deger);
+      location.href = u.href;
+    });
+    b.classList.toggle('secili', secili);
+    b.setAttribute('aria-pressed', String(secili));
+    arac.append(b);
+  }
+  yer.append(st, kam, arac);
+  masaKameraYaz();
+}
+// Seçili kamera düğmesi (tuşla, düğmeyle ya da testten D.reji.zorla ile değişse de): yalnız değişince yazar.
+function masaKameraYaz() {
+  if (!MASA.kamera || MASA.son === D.reji.zorla)
+    return;
+  MASA.son = D.reji.zorla;
+  [...MASA.kamera.querySelectorAll('button')].forEach((b, i) => {
+    const on = i === 0 ? !D.reji.zorla : D.reji.zorla === CEKIM_SIRA[i - 1];
+    b.classList.toggle('secili', on);
+    b.setAttribute('aria-pressed', String(on));
+  });
+}
 
 /* ── oyunlar/konvoy-3b/js/60-cizim.js ── */
 /* ÇİZİM KANCALARI — 3B sahne ile çekirdeğin 2B üst katmanını aynı karede buluşturur.
@@ -61460,15 +61515,18 @@ function kaliteKur(n) {
   }
   boyutEsle();
 }
-// Yayın masasında (panelde) düz bir uyarı satırı; izleyici görmez. Metin sabit, textContent ile yazılır.
+// Yayın masasında, "Bu oyunda" kartının başında düz bir uyarı satırı (#kalite-uyari); izleyici görmez. Metin sabit,
+// textContent ile yazılır.
 function kaliteUyar(metin) {
   if (!KALITE.uyari) {
     KALITE.uyari = document.createElement('p');
-    KALITE.uyari.className = 'not';
-    KALITE.uyari.style.color = '#ffcf4d';
-    const yer = $('panel-not');
-    if (yer && yer.parentNode)
-      yer.parentNode.insertBefore(KALITE.uyari, yer.nextSibling);
+    KALITE.uyari.className = 'kart-ipucu';
+    KALITE.uyari.style.flexBasis = '100%';
+    KALITE.uyari.id = 'kalite-uyari';
+    KALITE.uyari.style.color = 'var(--vurgu)';
+    const yer = $('bu-oyunda');
+    if (yer)
+      yer.prepend(KALITE.uyari);
   }
   KALITE.uyari.textContent = metin;
 }

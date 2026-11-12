@@ -844,7 +844,7 @@ const SOKAK_KADEME = [1, 0.65, 0.35, 0, 0];
 // oyuncu şeridi (AGENTS.md: oyuncular 505–1006 satırlarında yaşar)
 const SOKAK_SERIT = [505, 1006];
 const SOKAK_POZ = ['ayakta', 'cosku', 'alkisA', 'alkisB', 'salla'];
-const SOKAK = { kur: false, esya: {}, ins: [], havuz: 0, cizilen: 0, gizlenen: 0, sakin: 0, ms: 0, ucgen: { insan: [], esya: {} } };
+const SOKAK = { kur: false, esya: {}, ins: [], havuz: 0, cizilen: 0, gizlenen: 0, sakin: 0, kadraj: 0, ms: 0, ucgen: { insan: [], esya: {} } };
 function sokakDizi(s, Tur) {
   const ham = atob(s), u = new Uint8Array(ham.length);
   for (let i = 0; i < ham.length; i++)
@@ -1023,7 +1023,7 @@ function sokakGuncelle() {
     for (const m of sira)
       m.count = 0;
   SOKAK.havuz = kap;
-  SOKAK.cizilen = SOKAK.gizlenen = SOKAK.sakin = 0;
+  SOKAK.cizilen = SOKAK.gizlenen = SOKAK.sakin = SOKAK.kadraj = 0;
   if (kap) {
     // kadrajdaki adaylar, kameraya yakından uzağa; havuz yetmezse uzaktakiler çizilmez (sis zaten örter)
     kam.updateMatrixWorld();
@@ -1039,6 +1039,7 @@ function sokakGuncelle() {
         _sSec.push(o);
       }
     _sSec.sort((a, b) => a.uz - b.uz);
+    SOKAK.kadraj = _sSec.length;
     // konu: kamerayla arasına girip kadrajda onu örten kişi gizlenir. Konunun kadrajı ve kendisi rejiden.
     let konuUz = Infinity, kad = null, lider = null;
     const ck = D.reji && D.reji.cekim;
@@ -1121,11 +1122,12 @@ function sokakGuncelle() {
   // bu işin kare başına süresi (yumuşatılmış; rapor ve test için)
   SOKAK.ms += (performance.now() - t0 - SOKAK.ms) * 0.05;
 }
-// Testler ve rapor için (CanliOyun._test.D.sokakTest): havuz, sayılar ve yanlış yerdeki kişi (olmamalı). Adaylar ve
+// Testler ve rapor için (CanliOyun._test.D.sokakTest): havuz, kadrajdaki aday sayısı (kadrajAday: havuzdan önce),
+// çizilen / gizlenen, yanlış yerdeki kişi (olmamalı). Adaylar ve
 // ÇİZİLEN her örnek yolun yerel eksenine (s, l) çevrilip denetlenir: asfaltta, kaldırımın ötesinde, ağaç ya da direk
 // yuvasında; ayrıca ekranda kadrajın dörtte birinden uzun görünen (kameranın dibindeki dev) kişi.
 function sokakDurum() {
-  const ic = YOL_OLCU.bordurDis, r = { hazir: SOKAK_HAZIR, kademe: KALITE.kademe, havuz: SOKAK.havuz, kap: SOKAK_KAP, cizilen: SOKAK.cizilen, gizlenen: SOKAK.gizlenen, sakin: SOKAK.sakin, ms: +SOKAK.ms.toFixed(3),
+  const ic = YOL_OLCU.bordurDis, r = { hazir: SOKAK_HAZIR, kademe: KALITE.kademe, havuz: SOKAK.havuz, kap: SOKAK_KAP, kadrajAday: SOKAK.kadraj, cizilen: SOKAK.cizilen, gizlenen: SOKAK.gizlenen, sakin: SOKAK.sakin, ms: +SOKAK.ms.toFixed(3),
     ucgen: SOKAK.ucgen, aday: 0, yolda: 0, disarida: 0, agacta: 0, ornek: 0, ornekYolda: 0, ornekDisarida: 0, dev: 0, gorunenMesh: 0 };
   const yuvada = (s, l) => {
     const n = Math.round(s / YUVA), ne = yuvaNe(n, Math.sign(l)), y = ne === 'selvi' ? 0.95 : ne === 'cinar' ? 0.75 : ne === 'direk' ? 0.45 : 0;
@@ -1172,5 +1174,6 @@ function sokakDurum() {
     }
   return r;
 }
-// kalite(n): kademeyi kurar ve toparlanma saatini sıfırlar (yoksa birikmiş iyi süre kademeyi hemen geri çıkarır)
-D.sokakTest = { durum: sokakDurum, kalite: n => { kaliteKur(n); KALITE.iyiSn = 0; KALITE.deneme = 0; } };
+// kalite(n): kademeyi kurar ve toparlanma saatini sıfırlar (yoksa birikmiş iyi süre kademeyi hemen geri çıkarır); kare
+// süresi ölçümü 3 sn susar: yazılımla çizen test makinesinde kademe ölçülürken kendiliğinden inmesin.
+D.sokakTest = { durum: sokakDurum, kalite: n => { kaliteKur(n); KALITE.iyiSn = 0; KALITE.deneme = 0; KALITE.sus = performance.now() + 3000; } };

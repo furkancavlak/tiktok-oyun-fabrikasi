@@ -237,15 +237,18 @@ function kaliteKur(n) {
   }
   boyutEsle();
 }
-// Yayın masasında (panelde) düz bir uyarı satırı; izleyici görmez. Metin sabit, textContent ile yazılır.
+// Yayın masasında, "Bu oyunda" kartının başında düz bir uyarı satırı (#kalite-uyari); izleyici görmez. Metin sabit,
+// textContent ile yazılır.
 function kaliteUyar(metin) {
   if (!KALITE.uyari) {
     KALITE.uyari = document.createElement('p');
-    KALITE.uyari.className = 'not';
-    KALITE.uyari.style.color = '#ffcf4d';
-    const yer = $('panel-not');
-    if (yer && yer.parentNode)
-      yer.parentNode.insertBefore(KALITE.uyari, yer.nextSibling);
+    KALITE.uyari.className = 'kart-ipucu';
+    KALITE.uyari.style.flexBasis = '100%';
+    KALITE.uyari.id = 'kalite-uyari';
+    KALITE.uyari.style.color = 'var(--vurgu)';
+    const yer = $('bu-oyunda');
+    if (yer)
+      yer.prepend(KALITE.uyari);
   }
   KALITE.uyari.textContent = metin;
 }

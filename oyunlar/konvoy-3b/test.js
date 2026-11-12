@@ -3,10 +3,13 @@
 // tuvalinin arkasında ve aynı boyda, kamera rejisi (sekiz çekim zorlanabilir, tuşlar, olay çekimleri), konunun ve
 // adların 505–1006 şeridinde kalması, sahnenin akması.
 // Çekirdek testleri ayrıca çalışır (cekirdek/test/cekirdek.test.js konvoy-3b). Çalıştırma: node oyunlar/konvoy-3b/test.js konvoy-3b
+// ya da node araclar/test.js konvoy-3b --yalniz oyun [--hizli]. Kademe (TEST_KADEME, ortak.js): "hizli"da uzun reji
+// koşuları (geniş çekim kuralları, çarpışma) kısa sürer, aynı kontrollerle; "tam" sürüm öncesi her şeyi tam sürer.
 'use strict';
 const path = require('path');
-const { OYUN_URL, CIKTI, tarayici, raporla, kontrolcu } = require(path.join(__dirname, '..', '..', 'cekirdek', 'test', 'ortak'));
+const { OYUN_URL, CIKTI, KADEME, tarayici, raporla, kontrolcu, bekle, hazirBekle, kareBekle } = require(path.join(__dirname, '..', '..', 'cekirdek', 'test', 'ortak'));
 const { sonuc, kontrol } = kontrolcu();
+const HIZLI = KADEME === 'hizli';
 const CEKIMLER = ['drone', 'yan', 'on', 'kus', 'tur', 'yakin', 'kenar', 'vinc'];
 
 (async () => {
@@ -17,7 +20,7 @@ const CEKIMLER = ['drone', 'yan', 'on', 'kus', 'tur', 'yakin', 'kenar', 'vinc'];
   // WebGL uyarıları da hata sayılır ("Vertex buffer is not big enough" gibi; taşma testi bunlara bakar)
   p.on('console', m => { if ((m.type() === 'error' && !/ERR_TUNNEL|Failed to load resource/.test(m.text())) || (m.type() === 'warning' && /WebGL|GL_|Vertex buffer/.test(m.text()))) hatalar.push(m.text()); });
   await p.goto(OYUN_URL);
-  await p.waitForTimeout(800);
+  await hazirBekle(p);
   await p.evaluate(() => { if (document.getElementById('oto').getAttribute('aria-pressed') === 'true') document.getElementById('oto').click(); });
   const bosalt = () => p.evaluate(() => { document.getElementById('bosalt').click(); });
   const O = o => p.evaluate(o2 => CanliOyun.olay(o2), o);
@@ -36,15 +39,16 @@ const CEKIMLER = ['drone', 'yan', 'on', 'kus', 'tur', 'yakin', 'kenar', 'vinc'];
   await O({ tip: 'hediye', kullanici: { id: 'b', ad: 'Bora' }, jeton: 5 });
   const pk = await p.evaluate(() => ({ pankart: document.getElementById('pankart-yeri').textContent, ucus: !!CanliOyun._test.D.kurdeleUcus, ayniAraba: CanliOyun._test.D.kurdeleUcus && CanliOyun._test.D.kurdeleUcus.kime === CanliOyun._test.D.lider, olay: CanliOyun._test.D.reji.olay && CanliOyun._test.D.reji.olay.tur }));
   kontrol('Gelin arabası el değiştirince pankart yeni sahibini yazar, süs yeni arabaya geçer, reji lider çekimi ister', /Gelin arabası el değiştirdi/.test(pk.pankart) && pk.pankart.includes('Bora') && pk.ucus && pk.ayniAraba && pk.olay === 'lider', pk);
-  for (let i = 0; i < 25 && (await durum()).cekim !== 'lider'; i++) await p.waitForTimeout(200);
+  await bekle(p, 'reji lider çekimine kesti', () => CanliOyun.durum().cekim === 'lider', null, 5000);
   kontrol('Reji bir sonraki ölçüde yeni gelin arabasına keser (lider çekimi)', (await durum()).cekim === 'lider', (await durum()).cekim);
-  await p.waitForTimeout(1500);
+  await bekle(p, 'gelin süsünün geçişi bitti', () => !CanliOyun._test.D.kurdeleUcus, null, 1500);
   kontrol('Süsün açılış geçişi iki vuruşta biter', await p.evaluate(() => !CanliOyun._test.D.kurdeleUcus));
 
   // diziliş
   await bosalt();
   await p.evaluate(() => { for (let i = 0; i < 12; i++) CanliOyun.olay({ tip: 'yorum', kullanici: { id: 'd' + i, ad: 'dizi' + i }, metin: 'x' }); });
-  await p.waitForTimeout(3500);
+  // hedef yerler sıra değişince hemen kurulur (oyunYerlesim); birkaç kare akması yeter
+  await kareBekle(p, 3);
   const diz = await p.evaluate(() => {
     const D = CanliOyun._test.D, L = D.lider, digerleri = D.sira.slice(1), once = D.oy.get('d11').hedefS;
     const r = { liderS: L.hedefS, liderL: L.hedefL, enOnde: digerleri.every(k => k.hedefS < L.hedefS - 5), kolon: D.kolon, once };
@@ -86,7 +90,8 @@ const CEKIMLER = ['drone', 'yan', 'on', 'kus', 'tur', 'yakin', 'kenar', 'vinc'];
   for (let i = 0; i < 40; i++) {
     await p.waitForTimeout(250);
     dr = await p.evaluate(() => { const D = CanliOyun._test.D; D.reji.sonOlay = null; return D.drift && { ad: D.drift.k.ad, yildiz: D.drift.k.yildiz, gs: +D.drift.k.gs.toFixed(2), donus: D.drift.donus, cekim: CanliOyun.durum().cekim }; });
-    if (dr && dr.donus !== null && ['sov', 'super'].includes(dr.cekim)) break;
+    // dönüş, varınca ya da 12 vuruş dolunca başlar; araba ondan sonra da gelin arabasının önüne doğru sürer
+    if (dr && dr.donus !== null && ['sov', 'super'].includes(dr.cekim) && dr.gs > 8) break;
   }
   // tek seferde 1000 jeton süper araba da verir: reji süper araba çekimine keser, o çekim driftin sonuna dek dönen arabayı çeker
   kontrol('Drift sırası gelen gelin arabasının önüne fırlar, yıldız olur, dönmeye başlar; reji ona keser (şov ya da süper araba çekimi)', dr && dr.ad === 'kd1000' && dr.yildiz && dr.gs > 8 && dr.donus !== null && ['sov', 'super'].includes(dr.cekim), dr);
@@ -362,9 +367,11 @@ const CEKIMLER = ['drone', 'yan', 'on', 'kus', 'tur', 'yakin', 'kenar', 'vinc'];
 
   // Çarpışma: akış ve hediyelerle (sollama, katılan, çıkan, drift, yeni gelin arabası, şerit sayısı değişimi) 3, 9, 17
   // ve 36 arabada; her karede kesişen çift sayısı ve en küçük aralık. Hiç kesişme olmaz.
+  // hizli: her kalabalıkta 12 tur (8,4 sn), tam: 24 tur (17 sn); kontroller aynı, kare tabanı süreyle orantılı
+  const CARP_TUR = HIZLI ? 12 : 24;
   for (const n of [3, 9, 17, 36]) {
     await bosalt();
-    const cp = await p.evaluate(async n => {
+    const cp = await p.evaluate(async ([n, tur]) => {
       const D = CanliOyun._test.D, bekle = ms => new Promise(r => setTimeout(r, ms));
       for (let i = 0; i < n; i++) CanliOyun.olay({ tip: 'yorum', kullanici: { id: 'c' + i, ad: 'carp' + i }, metin: 'x' });
       await bekle(1500);
@@ -392,7 +399,7 @@ const CEKIMLER = ['drone', 'yan', 'on', 'kus', 'tur', 'yakin', 'kenar', 'vinc'];
       };
       let calis = true;
       (async () => { while (calis) { kareOlc(); await new Promise(r => requestAnimationFrame(r)); } })();
-      for (let i = 0; i < 24; i++) {
+      for (let i = 0; i < tur; i++) {
         const id = 'c' + Math.floor(Math.random() * (n + 4));
         CanliOyun.olay({ tip: 'yorum', kullanici: { id, ad: 'carp' + id.slice(1) }, metin: 'hey' });
         if (i % 3 === 0) CanliOyun.olay({ tip: 'hediye', kullanici: { id, ad: 'carp' + id.slice(1) }, jeton: [1, 10, 50, 200, 1000, 400][i % 6] });
@@ -402,8 +409,8 @@ const CEKIMLER = ['drone', 'yan', 'on', 'kus', 'tur', 'yakin', 'kenar', 'vinc'];
       calis = false;
       const o = D.carpisma;
       return { cift: o.cift, enAz: +o.enAz.toFixed(3), kare: o.kare, ornek: o.ornek || null, denetci: olc };
-    }, n);
-    kontrol(n + ' araba, akış ve her kademe hediyeyle 17 sn: hiçbir karede iki arabanın kutusu kesişmez, hiçbir araba kaldırıma çıkmaz', cp.cift === 0 && cp.kare > 200 && cp.denetci.kesisenKare === 0 && cp.denetci.kaldirimKare === 0, cp);
+    }, [n, CARP_TUR]);
+    kontrol(n + ' araba, akış ve her kademe hediyeyle ' + Math.round(CARP_TUR * 0.7) + ' sn: hiçbir karede iki arabanın kutusu kesişmez, hiçbir araba kaldırıma çıkmaz', cp.cift === 0 && cp.kare > CARP_TUR * 25 / 3 && cp.denetci.kesisenKare === 0 && cp.denetci.kaldirimKare === 0, cp);
   }
   // Denetçinin senaryoları tek tek (36 araba): katılan, arkadan 40 jetonla öne geçen, çıkan, arkadan yeni gelin arabası,
   // zigzag, havai fişek, drift; her biri 6 sn.
@@ -498,16 +505,20 @@ const CEKIMLER = ['drone', 'yan', 'on', 'kus', 'tur', 'yakin', 'kenar', 'vinc'];
     const adlar = iz.slice(0, -1).map(x => x[0]);
     return { pay: +(genis / top).toFixed(3), ardisik: adlar.some((a, i) => i && !GENIS.includes(a) && !GENIS.includes(adlar[i - 1])), olc, cekimler: [...new Set(adlar)], olaySay: adlar.filter(a => ['sov', 'lider', 'super', 'sollama'].includes(a)).length };
   }, [n, sure, hediyeler]);
-  for (const [n, sure, hediyeler] of [[9, 240, []], [36, 240, []], [36, 150, [[5, 1000, 25], [45, 5000, 30], [85, 50, 28], [110, 1000, 20]]]]) {
+  // tam: 9 ve 36 araba dörder dakika, hediyeli 150 sn. hizli: bir dakika ve 75 sn, hediyeler aynı sırayla yarı aralıklarla;
+  // kontroller aynı, kare tabanı süreyle orantılı (tam'da eskisi gibi 300 ve 150 kare).
+  const GENIS_KOSU = HIZLI ? [[9, 60, []], [36, 60, []], [36, 75, [[3, 1000, 25], [23, 5000, 30], [43, 50, 28], [55, 1000, 20]]]]
+    : [[9, 240, []], [36, 240, []], [36, 150, [[5, 1000, 25], [45, 5000, 30], [85, 50, 28], [110, 1000, 20]]]];
+  for (const [n, sure, hediyeler] of GENIS_KOSU) {
     await bosalt();
-    const gk = await genisKosu(n, sure, hediyeler), ad = n + ' araba, ' + (hediyeler.length ? sure + ' sn hediyeli' : '4 dk hediyesiz');
+    const gk = await genisKosu(n, sure, hediyeler), ad = n + ' araba, ' + sure + ' sn ' + (hediyeler.length ? 'hediyeli' : 'hediyesiz');
     const o = gk.olc, oran = x => +(o[x] / Math.max(1, o.n)).toFixed(3);
     if (!hediyeler.length)
       kontrol(ad + ': geniş çekim ≥ %80, yakın çekim art arda yok', gk.pay >= 0.8 && !gk.ardisik, { pay: gk.pay });
     else
       // 1000 ve 5000 jeton tek hediyedir: ikisi de süper araba anıdır (drift şovu ve gelin arabası değişimi o çekimin içinde)
       kontrol(ad + ': olay çekimleri geldi (en az iki; tek seferde 1000+ jeton süper araba çekimi alır)', gk.olaySay >= 2 && gk.cekimler.includes('super'), { cekimler: gk.cekimler, olaySay: gk.olaySay });
-    kontrol(ad + ': geniş çekimde yol dikey, konvoy bandı doldurur, yol bandın ≥ %30\'u (karelerin ≥ %95\'inde)', o.n > (hediyeler.length ? 150 : 300) && ['aci', 'kaplama', 'yol'].every(x => oran(x) <= 0.05), { kare: o.n, aci: oran('aci'), kaplama: oran('kaplama'), yol: oran('yol'), ornek: o.ornek });
+    kontrol(ad + ': geniş çekimde yol dikey, konvoy bandı doldurur, yol bandın ≥ %30\'u (karelerin ≥ %95\'inde)', o.n > sure * (hediyeler.length ? 1 : 1.25) && ['aci', 'kaplama', 'yol'].every(x => oran(x) <= 0.05), { kare: o.n, aci: oran('aci'), kaplama: oran('kaplama'), yol: oran('yol'), ornek: o.ornek });
     kontrol(ad + ': taban, her geniş karede çizgideki ilk altı arabanın en kısası ≥ 40 piksel', o.kisa === 0, { kare: o.n, kisa: o.kisa, ornek: o.kisaOrnek });
   }
   await bosalt();
@@ -639,15 +650,22 @@ const CEKIMLER = ['drone', 'yan', 'on', 'kus', 'tur', 'yakin', 'kenar', 'vinc'];
   }
   kontrol('Sokak: insanlar yalnız kaldırımda (çizilen örnek de aday da asfaltta ya da kaldırım dışında değil), ağaç ve direk yuvalarında değil', sk.hazir && sk.aday > 100 && sk.cizilen > 20 && sk.yolda === 0 && sk.disarida === 0 && sk.ornekYolda === 0 && sk.ornekDisarida === 0 && sk.agacta === 0, sk);
   kontrol('Sokak: çizilen örnek sayısı havuzu aşmaz (kademe 0: ' + sk.kap + ')', sk.ornek === sk.cizilen && sk.ornek <= sk.havuz && sk.havuz === sk.kap, { ornek: sk.ornek, havuz: sk.havuz });
+  // Kademeler AYNI karede karşılaştırılır: müzik saati (B) dondurulur, konvoy ve kamera durur, kadrajdaki aday kalabalık
+  // (kadrajAday) her kademede aynıdır. Eskiden kamera kayarken ölçülüyordu: ~65 kişilik kadrajda havuz (200, 130, 70) hiç
+  // sınırlamıyor, sayılar kameranın o anki yerine göre bir artıp bir azalıyordu (4 koşunun 2'sinde kalırdı). Anlamı: her
+  // kademede kadrajdaki adayların en yakın "havuz" kadarı ele alınır (çizilen + gizlenen = en çok havuz), havuz kademeyle
+  // küçülür, çizilen hiç artmaz; en düşük iki kademede kimse çizilmez.
+  await p.evaluate(() => CanliOyun._test.vurusDondur());
   const kad = [];
   for (let n = 0; n < 5; n++) {
     await p.evaluate(k => CanliOyun._test.D.sokakTest.kalite(k), n);
-    await p.waitForTimeout(600);
+    await kareBekle(p, 3);
     const d = await SD();
-    kad.push({ kademe: d.kademe, havuz: d.havuz, ornek: d.ornek, gorunen: d.gorunenMesh });
+    kad.push({ kademe: d.kademe, havuz: d.havuz, aday: d.kadrajAday, cizilen: d.cizilen, gizlenen: d.gizlenen, ornek: d.ornek, gorunen: d.gorunenMesh });
   }
-  await p.evaluate(() => CanliOyun._test.D.sokakTest.kalite(0));
-  kontrol('Sokak: kalabalık kalite kademesiyle azalır (200, 130, 70), en düşük iki kademede hiç kimse çizilmez', kad.every((x, n) => x.kademe === n && x.havuz === [200, 130, 70, 0, 0][n] && x.ornek <= x.havuz) && kad[0].ornek >= kad[1].ornek && kad[1].ornek >= kad[2].ornek && kad[2].ornek > 0 && kad[3].ornek === 0 && kad[4].ornek === 0 && kad[4].gorunen === 0, kad);
+  await p.evaluate(() => { CanliOyun._test.D.sokakTest.kalite(0); CanliOyun._test.vurusCoz(); });
+  const kadN = kad[0].aday;
+  kontrol('Sokak: kalabalık kalite kademesiyle azalır (havuz 200, 130, 70; aynı karede kadrajdaki adayların en çok havuz kadarı), en düşük iki kademede hiç kimse çizilmez', kadN > 20 && kad.every((x, n) => x.kademe === n && x.havuz === [200, 130, 70, 0, 0][n] && x.ornek <= x.havuz) && kad.slice(0, 3).every(x => x.aday === kadN && x.cizilen + x.gizlenen === Math.min(x.havuz, kadN) && x.ornek === x.cizilen) && kad[0].ornek >= kad[1].ornek && kad[1].ornek >= kad[2].ornek && kad[2].ornek > 0 && kad[3].ornek === 0 && kad[4].ornek === 0 && kad[4].gorunen === 0, kad);
   // alçak çekimlerde kameranın dibinde dev görünen kişi çizilmez (konuyu örten de; o kural sokakGuncelle'de)
   const ort = [];
   for (const ad of ['kenar', 'yan', 'yakin']) {
@@ -683,15 +701,15 @@ const CEKIMLER = ['drone', 'yan', 'on', 'kus', 'tur', 'yakin', 'kenar', 'vinc'];
   const b3 = await tarayici(['--use-angle=swiftshader', '--enable-unsafe-swiftshader']);
   const p3 = await b3.newPage({ viewport: { width: 1080, height: 1920 } });
   await p3.goto(OYUN_URL + '#yayin');
-  await p3.waitForTimeout(800);
+  await hazirBekle(p3, 2, 20000);
   await p3.evaluate(() => { for (let i = 0; i < 36; i++) CanliOyun.olay({ tip: 'yorum', kullanici: { id: 's' + i, ad: 'yazilim' + i }, metin: 'x' }); });
   // en çok 45 sn: önce kademeler iner, en düşükte bir ölçüm daha yavaşsa uyarı çıkar
   for (let i = 0; i < 15; i++) {
     await p3.waitForTimeout(3000);
-    if (await p3.evaluate(() => CanliOyun.durum().kalite >= 3 && (CanliOyun.durum().kareAralik < 33 || [...document.querySelectorAll('#panel p.not')].some(e => /yetişmiyor/.test(e.textContent)))))
+    if (await p3.evaluate(() => CanliOyun.durum().kalite >= 3 && (CanliOyun.durum().kareAralik < 33 || [...document.querySelectorAll('#bu-oyunda #kalite-uyari')].some(e => /yetişmiyor/.test(e.textContent)))))
       break;
   }
-  const sw = await p3.evaluate(() => { const d = CanliOyun.durum(); return { gpu: d.gpu, kalite: d.kalite, kareAralik: d.kareAralik, kareMs: +d.kareMs.toFixed(1), uyari: [...document.querySelectorAll('#panel p.not')].some(e => /ekran kartı 3B sahneye yetişmiyor/.test(e.textContent)) }; });
+  const sw = await p3.evaluate(() => { const d = CanliOyun.durum(); return { gpu: d.gpu, kalite: d.kalite, kareAralik: d.kareAralik, kareMs: +d.kareMs.toFixed(1), uyari: [...document.querySelectorAll('#bu-oyunda #kalite-uyari')].some(e => /ekran kartı 3B sahneye yetişmiyor/.test(e.textContent)) }; });
   kontrol('Yazılımla çizimde gerçek kare aralığı ölçülür, kalite düşer; en düşükte de yavaşsa panel uyarır', sw.kalite >= 3 && (sw.kareAralik < 33 || sw.uyari), sw);
   await b3.close();
 
@@ -706,7 +724,7 @@ const CEKIMLER = ['drone', 'yan', 'on', 'kus', 'tur', 'yakin', 'kenar', 'vinc'];
       window.requestAnimationFrame = f => { const t0 = performance.now(); const bekle = () => raf(t => (window.__aralik && t - t0 < window.__aralik - 2) ? bekle() : f(t)); return bekle(); };
     });
     await q.goto(OYUN_URL + '#yayin');
-    await q.waitForTimeout(600);
+    await hazirBekle(q);
     await q.evaluate(() => { for (let i = 0; i < 36; i++) CanliOyun.olay({ tip: 'yorum', kullanici: { id: 'q' + i, ad: 'kalite' + i }, metin: 'x' }); });
     const r = await fn(q);
     await q.close();

@@ -11,7 +11,8 @@
  * anı), kartYazi (sahnede çizilen büyük kartın yazıları, 60-cizim.js).
  * Süper araba: tek seferde SUPER_ESIK jetonluk hediye atanın arabası süper arabaya döner (aşağıda "süper araba").
  * Süreler vuruşla (B) ölçülür: korna 1,5 vuruş, kurdele geçişi 2 vuruş, drift 16 vuruş.
- * Kancalar: oyunYerlesim, oyunGiris, oyunHediye, oyunLiderDegisti, oyunBaslat, oyunBosalt, oyunDurum.
+ * Kancalar: oyunYerlesim, oyunGiris, oyunHediye (beşinci bilgisi tek hediyenin değeri), oyunLiderDegisti, oyunBaslat,
+ * oyunBosalt, oyunDurum.
  */
 // ölçüler 00-ayar.js YOL_OLCU'dan
 const SERIT_L = YOL_OLCU.serit[2][0];
@@ -91,33 +92,11 @@ function hepsiKorna() {
  * kalır: çıkıp geri gelse de (SUPER_IDLER kimliği tutar; "Yolu boşalt" sıfırlar). Seri (aynı küçük hediyeden adet × 1000)
  * ve birkaç hediyenin toplamı saymaz. Aynı izleyici yine eşik üstü hediye atarsa kasa ikinci kez değişmez ama an yine
  * onundur: olay yeniden kalkar. Süper arabanın sürücüsü gelin arabasıysa süs onun üstündedir (gelin süsü tipe göre kurulur).
- * Çekirdek oyunHediye'ye yalnız toplamı (jeton × adet) verir. Birimi görmek için oyuna gelen hediye olayları geçerken
- * not edilir: köprüden gelenler Yayin.cevir'den, deneme / test olayları CanliOyun.olay'dan geçer; sahte izleyici ve panel
- * düğmeleri adet vermez (toplam = birim). ÇEKİRDEĞE EKLENMELİ: oyunHediye(k, j, kd, o) — o.jeton ve o.adet ile; o zaman
- * bu iki sarmalayıcı kalkar.
+ * Birim, çekirdeğin oyunHediye'ye verdiği beşinci bilgiden okunur ({ birim, adet }: tek hediyenin jetonu ve adedi;
+ * docs/KANCALAR.md). Seri yalnız kademeye ulaşırsa bildirim ve akış "Drift şov" yazar (kademenin seriAd'ı, 00-ayar.js).
  */
-const SUPER_IDLER = new Set(), SON_HEDIYE = { id: null, jeton: 0, adet: 1 };
+const SUPER_IDLER = new Set();
 function superMi(id) { return SUPER_IDLER.has(id); }
-function hediyeNotEt(o) {
-  if (o && o.tip === 'hediye') {
-    const kim = o.kullanici || {};
-    SON_HEDIYE.id = temiz(kim.id || kim.ad).slice(0, 64);
-    SON_HEDIYE.jeton = +o.jeton || 1;
-    SON_HEDIYE.adet = +o.adet || 1;
-  }
-  return o;
-}
-{
-  const cevir = Yayin.cevir, kapi = window.CanliOyun.olay;
-  Yayin.cevir = function (m) { return hediyeNotEt(cevir.call(this, m)); };
-  window.CanliOyun.olay = o => kapi(hediyeNotEt(o));
-}
-// Bu hediyenin birim değeri: not edilen olay bu kişinin bu hediyesiyse onun jetonu, değilse (adetsiz olay) toplamın kendisi.
-function hediyeBirim(k, j) {
-  const n = SON_HEDIYE, birim = n.id === k.id && Math.min(1e7, Math.max(1, Math.round(n.jeton * n.adet))) === j ? n.jeton : j;
-  n.id = null;
-  return birim;
-}
 // Süper araba anı (D.superAn, rejiye de bu nesne gider): k, b0 (vuruş), birim (hediyenin jetonu), yeni (kasa bu hediyeyle
 // değişti), tekrar (bu yayında daha önce de kazanmıştı), lider (aynı hediye onu gelin arabası da yaptı; oyunLiderDegisti
 // yazar). Büyük kart bundan okur: üstte
@@ -136,12 +115,10 @@ function superAraba(k, birim) {
   // o bitince sıra ona gelir. Adı ekrana yalnız rejinin kartı yazar: pankart açılmaz.
   D.reji.olayAt('super', k);
 }
-function oyunHediye(k, j, kd) {
-  const v = Math.ceil(B), birim = hediyeBirim(k, j);
+function oyunHediye(k, j, kd, hediye, sayi) {
+  const v = Math.ceil(B), birim = sayi && sayi.birim ? sayi.birim : j;
   if (birim >= SUPER_ESIK)
     superAraba(k, birim);
-  else if (kd.tip === 'drift')
-    superDegilYaz(k, j);
   // Her hediyede gönderen korna çalar; büyüdükçe bütün konvoy katılır.
   if (kd.tip !== 'tek')
     hepsiKorna();
@@ -164,16 +141,6 @@ function oyunHediye(k, j, kd) {
   // reji: hediye atan izleyiciyi yakın çekimde (ya da öne geçiyorsa sollamasıyla) gösterir; drift kendi şovunu alır
   if (kd.tip !== 'drift')
     rejiOlay('hediye', k);
-}
-// En üst kademeye küçük hediyelerin toplamıyla gelindi (seri: 100 × 10): süper araba yok. Çekirdek bildirimi ve günlüğü
-// kademe adıyla ("Süper araba!") az önce yazdı; ikisi de "Drift şov" diye düzeltilir. Bildirim satırı aynı anda gelen
-// bildirimle yer değiştirir (bildir, 25-yazilar.js); günlüğün son satırı henüz sayfaya yazılmadı (karede bir kez).
-// ÇEKİRDEĞE EKLENMELİ: kademe seçimi birim jetonu da bilsin (oyunHediye(k, j, kd, o)), ya da kademe bir "seri adı" taşısın.
-function superDegilYaz(k, j) {
-  bildir(k.ad, j + ' jeton', 'Drift şov!');
-  const son = gunlukBekleyen[gunlukBekleyen.length - 1];
-  if (son && son[0] === 'hediye' && son[1] === k.ad && son[2] === j + ' jeton → ' + OYUN.kademe[0].ad)
-    son[2] = j + ' jeton → Drift şov';
 }
 // Gelin süsü eski gelin arabasından yenisine uçar; reji yeni gelin arabasının öne geçişini gösterir.
 // Aynı hediye süper arabayı da verdiyse (oyunHediye bu çağrıdan hemen önce, aynı vuruşta) an tektir: pankart açılmaz,
@@ -200,6 +167,7 @@ function oyunBaslat() {
   }
   D.sonB = B;
   dunyaKur();
+  masaOyunKur();
 }
 function oyunBosalt() {
   D.driftKuyruk.length = 0;
