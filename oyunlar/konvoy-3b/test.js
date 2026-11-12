@@ -400,37 +400,51 @@ const CEKIMLER = ['drone', 'yan', 'on', 'kus', 'tur', 'yakin', 'kenar', 'vinc'];
   // kadar konvoy bandın en az %60'ını kaplar ve ilk arabaların her biri en az 40 piksel boyunda, (3) bandın en az %30'u
   // yol ve kaldırım (denetçinin istediği %45 bu yol genişliği ve sıra aralığıyla ancak 3-4 araba gösterilince tutuyor;
   // rapora yazıldı). Karelerin en az %95'i tutmalı. Ayrıca geniş çekim payı ≥ %80 ve iki yakın çekim art arda yok.
-  for (const n of [9, 36]) {
-    await bosalt();
-    const gk = await p.evaluate(async n => {
-      const D = CanliOyun._test.D, bekle = ms => new Promise(r => setTimeout(r, ms)), GENIS = ['arka', 'drone', 'ucsol', 'ucsag', 'kus', 'vinc'];
-      D.reji.zorla = null;
-      for (let i = 0; i < n; i++) CanliOyun.olay({ tip: 'yorum', kullanici: { id: 'w' + i, ad: 'genis' + i }, metin: 'x' });
-      await bekle(2500);
-      const iz = [], olc = { n: 0, aci: 0, kaplama: 0, kisa: 0, yol: 0, ornek: null };
-      let son = null, t = performance.now();
-      const t0 = t;
-      while (performance.now() - t0 < 240000) {
-        const c = D.reji.cekim;
-        if (c !== son) { iz.push([c && c.ad, performance.now()]); son = c; }
-        const o = D.reji.genisOlc();
-        if (o && !o.gecis) {
-          olc.n++;
-          const kotu = [o.aci > 35, o.kaplama !== null && o.kaplama < 0.6, o.enKisa < 40, o.yol < 0.3];
-          kotu.forEach((v, i) => { if (v) olc[['aci', 'kaplama', 'kisa', 'yol'][i]]++; });
-          if (kotu.some(Boolean) && !olc.ornek) olc.ornek = o;
-        }
-        await bekle(150);
+  // Taban (her geniş karede, olaylı ya da olaysız): konvoy çizgisindeki ilk altı arabanın en kısası ≥ 40 piksel; geniş
+  // çekim çizginin dışındaki arabaya (drift atan, öne geçen, yana çekilen gelin arabası) sığdırılmaz.
+  // Olaylı koşu (36 araba, 150 sn): 1000 jeton (drift şovu + süper araba + gelin arabası), 5000 jeton (yeni gelin
+  // arabası), 50 jeton (sollama), yine 1000 jeton; aynı ölçüler.
+  const genisKosu = (n, sure, hediyeler) => p.evaluate(async ([n, sure, hediyeler]) => {
+    const D = CanliOyun._test.D, bekle = ms => new Promise(r => setTimeout(r, ms)), GENIS = ['arka', 'drone', 'ucsol', 'ucsag', 'kus', 'vinc'];
+    D.reji.zorla = null;
+    for (let i = 0; i < n; i++) CanliOyun.olay({ tip: 'yorum', kullanici: { id: 'w' + i, ad: 'genis' + i }, metin: 'x' });
+    await bekle(2500);
+    const iz = [], olc = { n: 0, aci: 0, kaplama: 0, kisa: 0, yol: 0, ornek: null, kisaOrnek: null }, kalan = hediyeler.slice();
+    let son = null;
+    const t0 = performance.now();
+    while (performance.now() - t0 < sure * 1000) {
+      while (kalan.length && performance.now() - t0 >= kalan[0][0] * 1000) {
+        const [, jeton, sira] = kalan.shift(), k = D.sira[Math.min(sira, D.sira.length - 1)];
+        CanliOyun.olay({ tip: 'hediye', kullanici: { id: k.id, ad: k.ad }, jeton });
       }
-      iz.push(['son', performance.now()]);
-      let genis = 0, top = 0;
-      for (let i = 0; i < iz.length - 1; i++) { const d = iz[i + 1][1] - iz[i][1]; top += d; if (GENIS.includes(iz[i][0])) genis += d; }
-      const adlar = iz.slice(0, -1).map(x => x[0]);
-      return { pay: +(genis / top).toFixed(3), ardisik: adlar.some((a, i) => i && !GENIS.includes(a) && !GENIS.includes(adlar[i - 1])), olc };
-    }, n);
+      const c = D.reji.cekim;
+      if (c !== son) { iz.push([c && c.ad, performance.now()]); son = c; }
+      const o = D.reji.genisOlc();
+      if (o && !o.gecis) {
+        olc.n++;
+        const kotu = [o.aci > 35, o.kaplama !== null && o.kaplama < 0.6, o.enKisa !== null && o.enKisa < 40, o.yol < 0.3];
+        kotu.forEach((v, i) => { if (v) olc[['aci', 'kaplama', 'kisa', 'yol'][i]]++; });
+        if (kotu.some(Boolean) && !olc.ornek) olc.ornek = o;
+        if (kotu[2] && !olc.kisaOrnek) olc.kisaOrnek = o;
+      }
+      await bekle(150);
+    }
+    iz.push(['son', performance.now()]);
+    let genis = 0, top = 0;
+    for (let i = 0; i < iz.length - 1; i++) { const d = iz[i + 1][1] - iz[i][1]; top += d; if (GENIS.includes(iz[i][0])) genis += d; }
+    const adlar = iz.slice(0, -1).map(x => x[0]);
+    return { pay: +(genis / top).toFixed(3), ardisik: adlar.some((a, i) => i && !GENIS.includes(a) && !GENIS.includes(adlar[i - 1])), olc, cekimler: [...new Set(adlar)] };
+  }, [n, sure, hediyeler]);
+  for (const [n, sure, hediyeler] of [[9, 240, []], [36, 240, []], [36, 150, [[5, 1000, 25], [45, 5000, 30], [85, 50, 28], [110, 1000, 20]]]]) {
+    await bosalt();
+    const gk = await genisKosu(n, sure, hediyeler), ad = n + ' araba, ' + (hediyeler.length ? sure + ' sn hediyeli' : '4 dk hediyesiz');
     const o = gk.olc, oran = x => +(o[x] / Math.max(1, o.n)).toFixed(3);
-    kontrol(n + ' araba, 4 dk hediyesiz: geniş çekim ≥ %80, yakın çekim art arda yok', gk.pay >= 0.8 && !gk.ardisik, { pay: gk.pay });
-    kontrol(n + ' araba, 4 dk hediyesiz: geniş çekimde yol dikey, konvoy bandı doldurur, arabalar okunur, yol bandın ≥ %30\'u (karelerin ≥ %95\'inde)', o.n > 300 && ['aci', 'kaplama', 'kisa', 'yol'].every(x => oran(x) <= 0.05), { kare: o.n, aci: oran('aci'), kaplama: oran('kaplama'), kisa: oran('kisa'), yol: oran('yol'), ornek: o.ornek });
+    if (!hediyeler.length)
+      kontrol(ad + ': geniş çekim ≥ %80, yakın çekim art arda yok', gk.pay >= 0.8 && !gk.ardisik, { pay: gk.pay });
+    else
+      kontrol(ad + ': olay çekimleri geldi (şov, lider, süper ya da sollama)', ['sov', 'lider', 'super', 'sollama'].filter(x => gk.cekimler.includes(x)).length >= 2, { cekimler: gk.cekimler });
+    kontrol(ad + ': geniş çekimde yol dikey, konvoy bandı doldurur, yol bandın ≥ %30\'u (karelerin ≥ %95\'inde)', o.n > (hediyeler.length ? 150 : 300) && ['aci', 'kaplama', 'yol'].every(x => oran(x) <= 0.05), { kare: o.n, aci: oran('aci'), kaplama: oran('kaplama'), yol: oran('yol'), ornek: o.ornek });
+    kontrol(ad + ': taban, her geniş karede çizgideki ilk altı arabanın en kısası ≥ 40 piksel', o.kisa === 0, { kare: o.n, kisa: o.kisa, ornek: o.kisaOrnek });
   }
   await bosalt();
   const rj2 = await p.evaluate(async () => {
