@@ -216,12 +216,14 @@ Oyunun kendi müziği yerine kendi seçtiğin bir şarkıyı YouTube'dan çalabi
 
 1. Oyunu BASLAT ile aç (diskten çift tıklanarak açılan oyunda YouTube çalmaz: "YouTube müziği yalnız BASLAT ile
    açılan oyunda çalışır." yazar).
-2. Yayın masasında **Müzik** sekmesine geç. "YouTube'dan şarkı" kutusuna linki yapıştır, **Çal**'a bas.
+2. Yayın masasının **Müzik** bölümündeki "YouTube'dan şarkı" kutusuna linki yapıştır, **Çal**'a bas.
    Kabul edilen linkler: `youtube.com/watch?v=…`, `youtu.be/…`, `youtube.com/shorts/…`, `youtube.com/live/…`,
    `music.youtube.com/watch?v=…`; sonunda başka bilgiler ya da bir çalma listesi (`list=…`) olabilir.
-3. Oynatıcı kutunun içinde görünür. Şarkı çalarken oyunun kendi müziği susar; **Durdur**'a basınca, şarkı bitince
-   ya da **Oyunun müziğine dön**'e basınca oyunun müziği kaldığı yerden geri gelir. "YouTube sesi" kaydırıcısı
-   yalnız şarkının sesini ayarlar.
+3. Oynatıcı kutunun içinde görünür. Şarkı çalarken oyunun kendi müziği susar, sahnede havanın adı ve vuruş/dk
+   yerine şarkının adı yazar. Hediye zili gibi efekt sesleri şarkının üstünde duyulmaya devam eder. **Durdur**'a
+   basınca, şarkı bitince ya da **Oyunun müziğine dön**'e basınca oyunun müziği kaldığı yerden geri gelir.
+   "YouTube sesi" kaydırıcısı yalnız şarkının sesini ayarlar; oyunun ses düğmesi ve düzeyi oyunun bütün sesini
+   (müzik ve efektler) ayarlar.
 4. "Yalnızca sahneyi göster" görünümünde şarkı çalmaya devam eder.
 
 Bilmen gerekenler:
@@ -236,10 +238,15 @@ Bilmen gerekenler:
 - YouTube bazen videonun önünde reklam gösterebilir; bu oyunun elinde değildir.
 - Son çalışan link ve YouTube ses düzeyi o oyun için hatırlanır (tarayıcının kendi deposunda). Sayfa açılınca hiçbir
   şey kendiliğinden çalmaz.
+- **İki yol.** Ses motorunda ana düzeyin (`muzik.ses.son`) altında iki yol vardır: `muzik.ses.muzikYol` (çalan müziğin
+  hepsi: davul, ezgi, eşlik, yankı, davul şovu; takımların bağlandığı `ses.ana` buraya akar) ve `muzik.ses.efektYol`
+  (tek seferlik efektler: hediye zili). YouTube çalarken yalnız müzik yolu ve hazır parçanın ses öğesi susar. Bir
+  oyuna ya da çekirdeğe yeni bir efekt sesi (korna, alkış…) eklenirse `muzik.ses.efektYol`'a bağlanır; müziğin bir
+  parçasıysa (çalan havanın içindeki dolgu gibi) takımın yollarına.
 - Nasıl çalışır: yalnız YouTube'un resmî oynatıcısı (IFrame Player API, `youtube-nocookie.com`). Şarkı indirilmez,
   sesi ayrılmaz, aracı bir hizmet kullanılmaz. Oynatıcı ancak "Çal"a basınca yüklenir; basılmadıkça oyun YouTube'a
-  hiçbir istek göndermez (`AGENTS.md` değişmez 6). Kod: `cekirdek/js/12-youtube.js`; oyunun sesini kısan
-  `muzik.disSustur(evet)`.
+  hiçbir istek göndermez (`AGENTS.md` değişmez 6). Kod: `cekirdek/js/12-youtube.js`; oyunun müziğini kısan
+  `muzik.disSustur(evet, ad)`.
 
 ## Adlar
 
@@ -249,5 +256,7 @@ Bilmen gerekenler:
 | `TAKIMLAR`, `TAKIM`, `HAVALAR` | çekirdekteki takımlar, oyunun seçtiği takım, oyunun havaları (`CanliOyun._test` içinde de) |
 | `window.OYUN_MUZIK` | `oyunlar/<ad>/muzik/liste.js` içinde `muzik-hazirla.py` tarafından yazılan parça listesi |
 | `window.OYUN_MUZIK_KAPALI` | Doğruysa `muzik/` klasörü yok sayılır; testler üretilen müziği sınamak için bunu kullanır |
-| `muzik.disSustur(evet)`, `muzik.disSessiz` | Oyunun sesini dışarıdan kısar / geri açar (YouTube çalarken). Yalnız duyulan ses değişir; saat, hava, tempo, ses açık / kapalı aynı kalır |
+| `muzik.disSustur(evet, ad)`, `muzik.disSessiz` | Oyunun müziğini dışarıdan kısar / geri açar (YouTube çalarken): yalnız `muzikYol` ve hazır parçanın ses öğesi. Efektler, saat, hava, tempo, ses açık / kapalı, ana düzey aynı kalır |
+| `muzik.disAd` | Dışarıdan çalan şarkının sahnede yazılacak adı: temizlenmiş, en çok 36 karakter, düz metin (boşsa "YouTube'dan şarkı"); dış kaynak yokken `null`. Sahnedeki çalan satırı (`35-kare.js`) bunu okur |
+| `muzik.ses.muzikYol`, `muzik.ses.efektYol` | Ana düzeyin altındaki iki yol: müzik (takımların `ses.ana`'sı buraya akar) ve tek seferlik efektler (hediye zili) |
 | `CanliOyun.youtube` | YouTube kutusu (`12-youtube.js`): `kur(kutu)`, `linkCoz(metin)`, `cal(link)`, `durdur()`, `don()`, `durum()` |

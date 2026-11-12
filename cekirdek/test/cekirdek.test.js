@@ -832,6 +832,7 @@ const { sonuc, kontrol } = kontrolcu();
   Player.prototype.playVideo = function () { var s = this; S.cagri.push('play'); setTimeout(function () { s.durumYap(3); setTimeout(function () { s.durumYap(1); }, 40); }, 30); };
   Player.prototype.stopVideo = function () { S.cagri.push('stop'); this.durumYap(5); };
   Player.prototype.setVolume = function (v) { S.cagri.push('ses:' + v); };
+  Player.prototype.getVideoData = function () { return { video_id: this.o.videoId, title: window.__ytBaslik === undefined ? '' : window.__ytBaslik }; };
   Player.prototype.destroy = function () { S.cagri.push('yok'); this.yok = true; this.d.remove(); };
   window.YT = { Player: Player };
   setTimeout(function () { window.onYouTubeIframeAPIReady(); }, 10);
@@ -953,7 +954,7 @@ addEventListener('message', e => { if (e.data === 'soru') parent.postMessage({ t
       await new Promise(z => setTimeout(z, 1500));
       let sakli = null;
       try { sakli = JSON.parse(localStorage.getItem(CanliOyun._test.OYUN.id + '-youtube')); } catch (e) { }
-      return { sus: m.disSessiz, kazanc: +m.ses.son.gain.value.toFixed(4), acik: m.acik, ileti: document.getElementById('yt-ileti').textContent, yer: [Math.round(y.width), Math.round(y.height)],
+      return { sus: m.disSessiz, kazanc: +m.ses.muzikYol.gain.value.toFixed(4), ana: +m.ses.son.gain.value.toFixed(3), duzey: m.duzey, acik: m.acik, satir: document.getElementById('cosku-bilgi').textContent, ileti: document.getElementById('yt-ileti').textContent, yer: [Math.round(y.width), Math.round(y.height)],
         hiz: +((CanliOyun.durum().vurus - b0) / ((performance.now() - t0) / 1000)).toFixed(2), beklenen: +(m.calanBpm() / 60).toFixed(2), ayar: window.__ytSahte.ayar, cagri: window.__ytSahte.cagri.slice(), sakli,
         cerceveYeri: document.getElementById('yt-kutu').contains(document.querySelector('.sahte-yt')) };
     });
@@ -961,7 +962,7 @@ addEventListener('message', e => { if (e.data === 'soru') parent.postMessage({ t
     await yq.screenshot({ path: CIKTI + '/t-youtube-caliyor.png' });
     const ay = cal.ayar || {}, pv = ay.playerVars || {};
     kontrol('YouTube: "Çal"dan sonra istenen tek şey API betiği (iki deneme, iki istek); oynatıcı youtube-nocookie.com, yalnız doğrulanmış kimlikler', ytIstek.length === 2 && ytIstek.every(u => u === API) && ay.host === 'https://www.youtube-nocookie.com' && ay.videoId === 'dQw4w9WgXcQ' && pv.list === 'PLx0sYbCqOb8TBPRdmBHs5Iftvv9TPboYG' && pv.listType === 'playlist' && pv.origin === 'http://oyun.test' && !/index|feature|share/.test(JSON.stringify(ay)), { istek: ytIstek.slice(), ayar: ay });
-    kontrol('YouTube çalarken oyunun müziği susar (son kazanç ~0), vuruş saati oyunun kendi temposunda yürür', cal.sus && cal.acik && cal.kazanc < 0.02 && cal.hiz > cal.beklenen * 0.7 && cal.hiz < cal.beklenen * 1.4 && cal.cagri.includes('play') && /^YouTube'dan çalıyor/.test(cal.ileti), { sus: cal.sus, kazanc: cal.kazanc, vurusHizi: cal.hiz, beklenen: cal.beklenen, ileti: cal.ileti });
+    kontrol('YouTube çalarken oyunun müzik yolu susar (ana düzey yerinde), vuruş saati oyunun kendi temposunda yürür', cal.sus && cal.acik && cal.kazanc < 0.02 && cal.ana > cal.duzey * 0.9 && cal.hiz > cal.beklenen * 0.7 && cal.hiz < cal.beklenen * 1.4 && cal.cagri.includes('play') && /^YouTube'dan çalıyor/.test(cal.ileti), { sus: cal.sus, kazanc: cal.kazanc, ana: cal.ana, vurusHizi: cal.hiz, beklenen: cal.beklenen, ileti: cal.ileti });
     kontrol('YouTube: oynatıcı kutunun içinde, en az 200 × 200 px; çalışan link doğrulanmış biçimiyle saklanır', cal.cerceveYeri && cal.yer[0] >= 200 && cal.yer[1] >= 200 && cal.sakli && cal.sakli.link === 'https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLx0sYbCqOb8TBPRdmBHs5Iftvv9TPboYG', { yer: cal.yer, sakli: cal.sakli });
     // 7. Yalnız sahne görünümü (#yayin): panel gizlenir, oynatıcı yerinde kalır, çalma sürer
     const yayin = await yq.evaluate(async () => {
@@ -994,6 +995,24 @@ addEventListener('message', e => { if (e.data === 'soru') parent.postMessage({ t
       return { once: a, gizliyken: g, panel: gizli };
     });
     kontrol('Tarayıcı: başka kökenden çerçevedeki ses, panel display:none iken de çalmayı sürdürür (sahne görünümünün dayandığı davranış)', tar.once && tar.gizliyken && tar.panel === 'none' && !tar.gizliyken.durdu && tar.gizliyken.t - tar.once.t > 1.5, tar);
+    // İki yol: YouTube çalarken (müzik yolu 0) hediye zili ana çıkışa ulaşır. Ölçüm ana düzeyin (son) çıkışında.
+    const canli = await yq.evaluate(async () => {
+      const m = CanliOyun._test.muzik, a = m.ctx.createAnalyser(), buf = new Float32Array(2048);
+      a.fftSize = 2048;
+      // Otomatik izleyici kapatılır: sahte hediyelerin zili "sessiz" ölçümüne karışmasın; çalan zil sönsün.
+      const oto = document.getElementById('oto');
+      if (oto.getAttribute('aria-pressed') === 'true')
+        oto.click();
+      await new Promise(z => setTimeout(z, 1200));
+      m.ses.son.connect(a);
+      const tepe = async ms => { let t = 0; const t0 = performance.now(); while (performance.now() - t0 < ms) { a.getFloatTimeDomainData(buf); for (const v of buf) t = Math.max(t, Math.abs(v)); await new Promise(z => setTimeout(z, 15)); } return +t.toFixed(4); };
+      const sessiz = await tepe(700);
+      CanliOyun.olay({ tip: 'hediye', kullanici: { id: 'ytzil', ad: 'Zil' }, jeton: 150 });
+      const zil = await tepe(450);
+      m.ses.son.disconnect(a);
+      return { sessiz, zil, muzikYol: +m.ses.muzikYol.gain.value.toFixed(4), efektYol: m.ses.efektYol.gain.value, sus: m.disSessiz, caliyor: CanliOyun.youtube.durum().caliyor };
+    });
+    kontrol('İki yol: YouTube çalarken müzik yolu 0, çıkış sessiz; hediye zili efekt yolundan çıkışa ulaşır', canli.caliyor && canli.sus && canli.muzikYol < 0.01 && canli.sessiz < 0.003 && canli.zil > 0.02, canli);
     // 8. YouTube sesi, Durdur, YouTube'da duraklatma, Oyunun müziğine dön
     const dur = await yq.evaluate(async () => {
       const m = CanliOyun._test.muzik, T = window.__ytSahte, bekle = ms => new Promise(z => setTimeout(z, ms)), r = {};
@@ -1002,7 +1021,7 @@ addEventListener('message', e => { if (e.data === 'soru') parent.postMessage({ t
       document.getElementById('yt-durdur').click();
       r.hemen = m.disSessiz;
       await bekle(400);
-      r.durdur = { kazanc: +m.ses.son.gain.value.toFixed(3), duzey: m.duzey, stop: T.cagri.includes('stop'), ileti: document.getElementById('yt-ileti').textContent, caliyor: CanliOyun.youtube.durum().caliyor };
+      r.durdur = { kazanc: +m.ses.muzikYol.gain.value.toFixed(3), duzey: m.duzey, stop: T.cagri.includes('stop'), ileti: document.getElementById('yt-ileti').textContent, caliyor: CanliOyun.youtube.durum().caliyor };
       // YouTube'un kendi düğmesiyle duraklatma: kısa beklemeden sonra oyunun müziği döner
       document.getElementById('yt-cal').click();
       const t0 = performance.now(); while (!CanliOyun.youtube.durum().caliyor && performance.now() - t0 < 4000) await bekle(50);
@@ -1015,13 +1034,13 @@ addEventListener('message', e => { if (e.data === 'soru') parent.postMessage({ t
       await bekle(100); r.tekrarCaliyor = m.disSessiz;
       document.getElementById('yt-don').click();
       await bekle(400);
-      r.don = { sus: m.disSessiz, yok: T.cagri[T.cagri.length - 1] === 'yok', gizli: document.getElementById('yt-oynatici-yer').hidden, kazanc: +m.ses.son.gain.value.toFixed(3), oynatici: CanliOyun.youtube.durum().oynatici, ileti: document.getElementById('yt-ileti').textContent };
+      r.don = { sus: m.disSessiz, yok: T.cagri[T.cagri.length - 1] === 'yok', gizli: document.getElementById('yt-oynatici-yer').hidden, kazanc: +m.ses.muzikYol.gain.value.toFixed(3), oynatici: CanliOyun.youtube.durum().oynatici, ileti: document.getElementById('yt-ileti').textContent };
       return r;
     });
     kontrol('YouTube sesi kaydırıcısı oynatıcının sesini ayarlar', dur.ses, dur.ses);
-    kontrol('YouTube: Durdur oyunun müziğini hemen geri getirir (kaldığı düzeyde)', !dur.hemen && dur.durdur.stop && dur.durdur.kazanc > dur.durdur.duzey * 0.6 && !dur.durdur.caliyor && /^Durdu/.test(dur.durdur.ileti), { hemen: dur.hemen, durdur: dur.durdur });
+    kontrol('YouTube: Durdur oyunun müziğini hemen geri getirir (kaldığı düzeyde)', !dur.hemen && dur.durdur.stop && dur.durdur.kazanc > 0.9 && !dur.durdur.caliyor && /^Durdu/.test(dur.durdur.ileti), { hemen: dur.hemen, durdur: dur.durdur });
     kontrol('YouTube: oynatıcıda duraklatınca oyunun müziği kısa beklemeyle döner (listede şarkı geçişinde araya girmez)', dur.yeniden && dur.duraklatHemen && !dur.duraklat.sus && /^Durdu/.test(dur.duraklat.ileti), { yeniden: dur.yeniden, hemen: dur.duraklatHemen, sonra: dur.duraklat });
-    kontrol('YouTube: "Oyunun müziğine dön" oynatıcıyı kaldırır, oyunun müziği geri gelir', dur.tekrarCaliyor && !dur.don.sus && dur.don.yok && dur.don.gizli && !dur.don.oynatici && dur.don.kazanc > 0.3, dur.don);
+    kontrol('YouTube: "Oyunun müziğine dön" oynatıcıyı kaldırır, oyunun müziği geri gelir', dur.tekrarCaliyor && !dur.don.sus && dur.don.yok && dur.don.gizli && !dur.don.oynatici && dur.don.kazanc > 0.9, dur.don);
     // 9. Hata kodları: düz cümle, metin olarak; oyunun müziği geri gelir
     const hk2 = await yq.evaluate(async Y => {
       const m = CanliOyun._test.muzik, T = window.__ytSahte, bekle = ms => new Promise(z => setTimeout(z, ms)), r = [];
@@ -1046,6 +1065,65 @@ addEventListener('message', e => { if (e.data === 'soru') parent.postMessage({ t
       return { ornek: o.length, geri, enDurmaSn: +enDurma.toFixed(2), sure: +((o[o.length - 1][0] - o[0][0]) / 1000).toFixed(1) };
     });
     kontrol('YouTube çalıp dururken vuruş saati hiç geri gitmez, donmaz', ytSaat.ornek > 100 && ytSaat.geri === 0 && ytSaat.enDurmaSn < 0.6, ytSaat);
+    // İki yol, sesi dosyaya yazan bağlamda (kesin): müzik yolu 0 iken müzik hiç duyulmaz, zil duyulur; zil yalnız efekt
+    // yolundan geçer (efekt yolu 0 iken zil de duyulmaz).
+    const yollar = await yq.evaluate(async () => {
+      const { Muzik } = CanliOyun._test, SR = 44100;
+      const isle = async (muzikli, zilli, ayar) => {
+        const oc = new OfflineAudioContext(1, SR * 2, SR), m = new Muzik();
+        m.sirayla = false; m.sesKur(oc); m.acik = true; m.sonraki = 0.05; ayar(m);
+        if (muzikli) while (m.sonraki < 1.9) m.adimCal();
+        if (zilli) m.zil(1);
+        const d = (await oc.startRendering()).getChannelData(0); let t = 0;
+        for (const v of d) t = Math.max(t, Math.abs(v));
+        return +t.toFixed(5);
+      };
+      return {
+        muzik: await isle(true, false, () => { }),
+        muzikSifir: await isle(true, false, m => { m.ses.muzikYol.gain.value = 0; }),
+        muzikSifirZil: await isle(true, true, m => { m.ses.muzikYol.gain.value = 0; }),
+        zil: await isle(false, true, () => { }),
+        efektSifirZil: await isle(false, true, m => { m.ses.efektYol.gain.value = 0; }),
+        muzikSifirKendiZil: await isle(false, true, m => { m.ses.muzikYol.gain.value = 0; })
+      };
+    });
+    kontrol('İki yol (dosyaya yazılan ses): müzik yolu 0 → müzik sessiz, zil duyulur; zil yalnız efekt yolundan geçer', yollar.muzik > 0.05 && yollar.muzikSifir < 1e-4 && yollar.muzikSifirZil > 0.02 && yollar.zil > 0.02 && yollar.efektSifirZil < 1e-4 && Math.abs(yollar.muzikSifirKendiZil - yollar.zil) < 1e-4, yollar);
+    // Sahnedeki çalan satırı: önce hava + vuruş/dk, YouTube çalarken şarkının adı (düz metin, temiz, kısaltılmış),
+    // ad yokken "YouTube'dan şarkı", dönünce yine hava + vuruş/dk.
+    const sah = await yq.evaluate(async () => {
+      const m = CanliOyun._test.muzik, bekle = ms => new Promise(z => setTimeout(z, ms)), satir = () => document.getElementById('cosku-bilgi').textContent, r = {};
+      const cal = async () => { document.getElementById('yt-cal').click(); const t0 = performance.now(); while (!CanliOyun.youtube.durum().caliyor && performance.now() - t0 < 4000) await bekle(50); await bekle(300); };
+      r.hava = m.calanAd();
+      r.once = satir();
+      window.__ytBaslik = '';
+      await cal();
+      r.bos = satir();
+      document.getElementById('yt-don').click();
+      await bekle(300);
+      window.__ytBaslik = '<b>Halay</b> <img src=x onerror="window.__xss=1"> Şarkısı\u0007‮ ' + 'çok uzun bir ad '.repeat(8);
+      await cal();
+      r.baslik = satir();
+      r.disAd = m.disAd;
+      r.cocuk = document.getElementById('cosku-bilgi').childElementCount;
+      r.img = document.querySelectorAll('img[src="x"]').length;
+      r.xss = window.__xss;
+      return r;
+    });
+    await yq.screenshot({ path: CIKTI + '/t-youtube-sahne-baslik.png' });
+    await yq.locator('.cosku').screenshot({ path: CIKTI + '/t-youtube-sahne-satir.png' });
+    sah.sonra = await yq.evaluate(async () => { document.getElementById('yt-don').click(); await new Promise(z => setTimeout(z, 300)); return { satir: document.getElementById('cosku-bilgi').textContent, disAd: CanliOyun._test.muzik.disAd }; });
+    // Gösterim karesi: sıradan bir şarkı adıyla sahne satırı (kontrol değil, göz için)
+    await yq.evaluate(async () => {
+      window.__ytBaslik = 'Örnek Sanatçı - Örnek Şarkı (Resmî Video)';
+      document.getElementById('yt-cal').click();
+      const t0 = performance.now(); while (!CanliOyun.youtube.durum().caliyor && performance.now() - t0 < 4000) await new Promise(z => setTimeout(z, 50));
+      await new Promise(z => setTimeout(z, 300));
+    });
+    await yq.locator('#sahne').screenshot({ path: CIKTI + '/t-youtube-sahne-ornek.png' });
+    await yq.evaluate(async () => { document.getElementById('yt-don').click(); await new Promise(z => setTimeout(z, 200)); });
+    const ilkSatir = s => s.split('\n')[0];
+    kontrol('Sahne satırı: YouTube çalmıyorken hava ve vuruş/dk; ad yokken "YouTube\'dan şarkı" (vuruş/dk yok); dönünce eski satır', ilkSatir(sah.once) === sah.hava && /vuruş\/dk/.test(sah.once) && ilkSatir(sah.bos) === 'YouTube\'dan şarkı' && !/vuruş\/dk/.test(sah.bos) && ilkSatir(sah.sonra.satir) === sah.hava && /vuruş\/dk/.test(sah.sonra.satir) && sah.sonra.disAd === null, { once: sah.once, bos: sah.bos, sonra: sah.sonra });
+    kontrol('Sahne satırı: şarkının adı düz metin (HTML çalışmaz), görünmez karakterler atılır, 36 karaktere kısalır; vuruş/dk yazmaz', ilkSatir(sah.baslik) === sah.disAd && sah.disAd.startsWith('<b>Halay</b> <img src=x') && Array.from(sah.disAd).length === 36 && sah.disAd.endsWith('…') && !/[\u0007‮]/.test(sah.disAd) && !/vuruş\/dk/.test(sah.baslik) && sah.cocuk === 0 && sah.img === 0 && sah.xss === undefined, { baslik: sah.baslik, disAd: sah.disAd, cocuk: sah.cocuk, img: sah.img });
     // 10. Yeniden açılış: link hatırlanır, hiçbir şey çalmaz, istek gitmez
     const istekOnce = ytIstek.length;
     await yq.reload();

@@ -3,9 +3,10 @@
  * - Yalnız resmî YouTube IFrame Player API'si; oynatıcı youtube-nocookie.com'dan açılır. API betiği ilk "Çal"a
  *   basılınca yüklenir: basılmadıkça sayfa YouTube'a hiçbir istek göndermez (AGENTS.md değişmez 6'nın tek istisnası).
  *   İndirme, ses ayıklama, aracı hizmet yok.
- * - YouTube çalarken oyunun sesi muzik.disSustur(true) ile kısılır; durunca, hata olunca ya da "Oyunun müziğine dön"e
- *   basılınca kaldığı hâliyle geri gelir. Vuruş saati (B) hiç değişmez: dans oyunun kendi temposunda sürer, şarkıyı
- *   izlemez (bilerek: yayıncı tempo eşlemeyi istemedi).
+ * - YouTube çalarken oyunun müziği muzik.disSustur(true, şarkının adı) ile kısılır (yalnız müzik yolu; hediye zili
+ *   gibi efektler duyulmaya devam eder); sahnedeki çalan satırında şarkının adı yazar (muzik.disAd). Durunca, hata
+ *   olunca ya da "Oyunun müziğine dön"e basılınca müzik kaldığı hâliyle geri gelir. Vuruş saati (B) hiç değişmez: dans
+ *   oyunun kendi temposunda sürer, şarkıyı izlemez (bilerek: yayıncı tempo eşlemeyi istemedi).
  * - Kutunun bütün öğeleri burada, createElement / textContent ile #yt-kutu içine kurulur. #yt-kutu yoksa hiçbir şey
  *   yapılmaz. Yapıştırılan metin hiçbir zaman HTML'e ya da bir adrese girmez: linkCoz yalnız sıkı kalıplara uyan
  *   11 karakterlik video kimliğini (ve varsa liste kimliğini) çıkarır, oynatıcıya yalnız bunlar verilir.
@@ -166,16 +167,24 @@ const YT_MUZIK = (() => {
       el.yer.hidden = true;
     }
   }
-  function durumDegisti(n, s, link) {
+  // Çalan şarkının adı oynatıcının kendi verisinden (ek istek yok). Temizleme ve kısaltma muzik.disSustur'da.
+  const baslik = o => {
+    try {
+      const v = o && typeof o.getVideoData === 'function' ? o.getVideoData() : null;
+      return v && typeof v.title === 'string' ? v.title : '';
+    }
+    catch (e) {
+      return '';
+    }
+  };
+  function durumDegisti(n, s, link, o) {
     if (n !== nesil)
       return;
     if (s === 1) {
       clearTimeout(donus);
       clearTimeout(basla);
-      if (!caliyor) {
-        caliyor = true;
-        muzik.disSustur(true);
-      }
+      caliyor = true;
+      muzik.disSustur(true, baslik(o || oyuncu)); // her çalışta: listede sıradaki şarkının adı da yazılır
       ileti(YAZI.caliyor, 'calis');
       yaz({ link: linkYaz(link) });
       dugmeler();
@@ -248,7 +257,7 @@ const YT_MUZIK = (() => {
             basla = setTimeout(() => { if (n === nesil && !caliyor)
               ileti(YAZI.basla, ''); }, 8000);
           },
-          onStateChange: e => durumDegisti(n, e && e.data, link),
+          onStateChange: e => durumDegisti(n, e && e.data, link, e && e.target),
           onError: e => {
             if (n !== nesil)
               return;

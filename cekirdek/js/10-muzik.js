@@ -631,7 +631,10 @@ class Muzik {
     this.hazirSira = 0;
     this.hz = null;
     this.calar = null;
-    this.disSessiz = false; // disSustur: başka bir kaynak (YouTube, 12-youtube.js) çalarken oyunun sesi kısık
+    // disSustur: başka bir kaynak (YouTube, 12-youtube.js) çalarken oyunun müziği kısık; disAd o kaynağın sahnede
+    // yazılacak adı (temizlenmiş, kısaltılmış düz metin), yoksa null
+    this.disSessiz = false;
+    this.disAd = null;
   }
   simdi() { return this.acik ? this.ctx.currentTime : performance.now() / 1000; }
   beatAt(t) {
@@ -767,7 +770,16 @@ class Muzik {
     sik.release.value = 0.16;
     const son = ctx.createGain();
     son.gain.value = this.duzey; /* düzey sıkıştırıcıdan sonra ayarlanır */
-    ana.connect(sik);
+    // İki yol, ikisi de sıkıştırıcıdan ve ana düzeyden (son: ses aç / kapat, düzey kaydırıcısı) geçer:
+    // muzikYol: çalan müziğin hepsi (ana'ya bağlanan davul, ezgi, eşlik, yankı); disSustur yalnız bunu kısar.
+    // efektYol: tek seferlik efekt sesleri (hediye zili); YouTube çalarken de duyulur. Yeni efekt buraya bağlanır.
+    const muzikYol = ctx.createGain();
+    muzikYol.gain.value = this.disSessiz ? 0 : 1;
+    const efektYol = ctx.createGain();
+    efektYol.gain.value = 0.7; // ana ile aynı düzey: zil eskisi kadar yüksek
+    ana.connect(muzikYol);
+    muzikYol.connect(sik);
+    efektYol.connect(sik);
     sik.connect(son);
     son.connect(ctx.destination);
     // açık hava yankısı: sönümlenen gürültüden üretilmiş kısa bir tepki
@@ -789,7 +801,7 @@ class Muzik {
     const gb = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate), gd = gb.getChannelData(0);
     for (let i = 0; i < gd.length; i++)
       gd[i] = r() * 2 - 1;
-    this.ses = { ana, son, davul, yanki: yg.gain, yankiDugum: yanki, gurultu: gb };
+    this.ses = { ana, son, muzikYol, efektYol, davul, yanki: yg.gain, yankiDugum: yanki, gurultu: gb };
     this.takim.kur(this, ctx);
   }
   dum(t, v) {
@@ -850,7 +862,7 @@ class Muzik {
       g.gain.setValueAtTime(v, t);
       g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5 + 0.3 * guc);
       o.connect(g);
-      g.connect(this.ses.ana);
+      g.connect(this.ses.efektYol);
       o.start(t);
       o.stop(t + 1);
     }
@@ -889,7 +901,7 @@ class Muzik {
       await p;
     if (!this.acik)
       this.tabanDegistir(true);
-    this.ses.son.gain.setTargetAtTime(this.disSessiz ? 0 : this.duzey, this.ctx.currentTime, 0.05);
+    this.ses.son.gain.setTargetAtTime(this.duzey, this.ctx.currentTime, 0.05);
     if (this.kaynak === 'hazir' && !this.hazirCal)
       this.hazirBaslat(this.hz ? this.hz.no : 0);
     return true;
@@ -906,18 +918,21 @@ class Muzik {
     this.duzey = v;
     if (this.calar)
       this.calar.volume = clamp(v / 0.7, 0, 1);
-    if (this.acik && !this.disSessiz)
+    if (this.acik)
       this.ses.son.gain.setTargetAtTime(v, this.ctx.currentTime, 0.05);
   }
-  // Oyunun sesini dışarıdan kısar / geri açar (12-youtube.js: YouTube'dan şarkı çalarken). Yalnız duyulan ses değişir:
-  // üretilen müzik, hazır parça ve hediye zili sessiz akmaya devam eder; vuruş saati (B), hava, tempo, ses açık /
-  // kapalı durumu hiç değişmez. disSustur(false) her şeyi kaldığı hâliyle duyulur kılar.
-  disSustur(evet) {
+  // Oyunun müziğini dışarıdan kısar / geri açar (12-youtube.js: YouTube'dan şarkı çalarken). Yalnız müzik yolu
+  // (muzikYol) ve hazır parçanın ses öğesi susar; müzik sessiz akmaya devam eder. Efekt yolu (hediye zili) duyulmayı
+  // sürdürür. Vuruş saati (B), hava, tempo, ses açık / kapalı durumu ve ana düzey hiç değişmez.
+  // ad: dış kaynağın sahnede yazılacak adı (yabancıdan gelir): temizlenir, kısaltılır, boşsa "YouTube'dan şarkı";
+  // muzik.disAd'a düşer, sahnedeki çalan satırı (35-kare.js) onu düz metin olarak yazar. disSustur(false): disAd null.
+  disSustur(evet, ad) {
     this.disSessiz = !!evet;
+    this.disAd = evet ? kisalt(temiz(ad), 36) || 'YouTube\'dan şarkı' : null;
     if (this.calar)
       this.calar.muted = this.disSessiz;
-    if (this.acik)
-      this.ses.son.gain.setTargetAtTime(this.disSessiz ? 0 : this.duzey, this.ctx.currentTime, 0.05);
+    if (this.ses)
+      this.ses.muzikYol.gain.setTargetAtTime(this.disSessiz ? 0 : 1, this.ctx.currentTime, 0.05);
   }
 
   /* ---- hazır parçalar ----
