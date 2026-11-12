@@ -25,8 +25,9 @@ const { sonuc, kontrol } = kontrolcu();
   await bosalt();
   await O({ tip: 'yorum', kullanici: { id: 'a', ad: 'Ali' }, metin: 'selam' });
   for (const [id, ad] of [['b', 'Bora'], ['c', 'Cem'], ['e', 'Ece']]) await O({ tip: 'yorum', kullanici: { id, ad }, metin: 'x' });
-  // Ali yığına çıkıp anteni tutana dek (eskiden sabit 2,5 sn): beklenen durum kontrolün kendisidir.
-  await durumBekle(p, 'Ali yığında, sağ eli antenin ucunda', () => { const D = CanliOyun._test.D, k = D.lider, u = D.antenUc; return CanliOyun.durum().antenTutan === 'Ali' && k.y0 > 0.9 && !!u && !!k.j && !!k.j.haR && Math.hypot(u[0] - k.j.haR[0], u[1] - k.j.haR[1], u[2] - k.j.haR[2]) < 1e-6; }, undefined, 8000);
+  // Sabit kalır: koşulla beklenince (y0 > 0,9 olur olmaz) Ali tırmanırken ölçülüyor, kontrol yuvarlanmış y0'a (0,90)
+  // takılıp kalıyordu. Kontrolün y0 > 0,9 sınırı tırmanışın sonuna (~0,91) çok yakın; 2,5 sn tırmanışın bittiği an.
+  await p.waitForTimeout(2500);
   let d = await durum();
   const el = await p.evaluate(() => { const D = CanliOyun._test.D, k = D.lider, u = D.antenUc; return { y0: +k.y0.toFixed(2), el: u && Math.hypot(u[0] - k.j.haR[0], u[1] - k.j.haR[1], u[2] - k.j.haR[2]) }; });
   kontrol('Lider sandalye yığınına çıkar, sağ eli antenin ucunda', d.antenTutan === 'Ali' && el.y0 > 0.9 && el.el < 1e-6, { antenTutan: d.antenTutan, el });
