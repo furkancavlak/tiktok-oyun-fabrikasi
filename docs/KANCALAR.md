@@ -377,8 +377,16 @@ cekirdek }`:
 Ortak parçalar `cekirdek/test/ortak.js`'te: oyun adı ilk bağımsız değişkenden (yoksa `halay`), sayfa
 `oyunlar/<ad>/oyun.html`, ekran görüntüleri `test/cikti/<ad>/`, `CHROME_PATH` desteklenir, her sayfada
 `window.OYUN_MUZIK_KAPALI = true`, Google Fonts istenmez (bağlantı yavaşsa sayfanın açılışını 30 sn bekletiyordu).
-- Köprü testi öntanımda 8791–8796 kapılarını kullanır. Bilgisayarda açık bir köprü varsa başka kapı ver:
-  `KOPRU_TEST_PORT=8911 node araclar/test.js` (ya da `node cekirdek/test/kopru.test.js --port 8911`).
+Sabit uyku yerine durum beklenir: `hazirBekle(p)` (oyun açıldı, kare döngüsü çiziyor), `bekle(p, ad, kosul, arg,
+sinir)` (koşul doğru olunca döner; süre dolarsa beklenen durumun adını yazar, ardından gelen kontrol kalır),
+`kareBekle(p, n)` (n kare daha çizildi). Ölçülen süreler (müzik saati, "bu arada bir şey olmadı" denetimleri,
+kontrolün süresini sınadığı canlandırmalar) sabit kalır.
+- Bölüm seçme (`--yalniz`), hızlı kademe (`--hizli`, `TEST_KADEME`) ve iki şerit (`--serit 2`): `AGENTS.md`,
+  "Test döngüsü".
+- Köprü testi P…P+11, araç testi P+12 kapısını kullanır. `node araclar/test.js` P'yi kendisi seçer: 127.0.0.1'de
+  art arda 16 boş kapı bulur ve çocuklara `KOPRU_TEST_PORT` olarak verir (aynı bilgisayardaki iki koşu çakışmaz).
+  Kapıyı sabitlemek için `KOPRU_TEST_PORT=8911 node araclar/test.js`; tek başına çalışan
+  `node cekirdek/test/kopru.test.js` öntanımda 8791 kullanır (`--port 8911` ile değişir).
 - `node araclar/kare-cek.js <ad>`: kareler (`kare-1/3/9/dolu/hediye.png`, `kare-hepsi.png`), hareket şeridi
   (`kare-hareket.png`: 9 kişi, `B` dondurulup çeyrek vuruş arayla 8 kare) ve her kare için ölçüm
   (`kare-<etiket>.json`: yüzlerin yarıçapı, ad kutuları, sahne yazılarının kutuları). Sıralama kutusuna giren ya

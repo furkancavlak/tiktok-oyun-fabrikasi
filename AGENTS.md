@@ -24,8 +24,9 @@ npm install                                   # bir kez
 node araclar/yeni-oyun.js <ad> "<Görünen Ad>" # şablondan yeni oyun
 node araclar/derle.js <ad>                    # oyunlar/<ad>/js + cekirdek → oyunlar/<ad>/oyun.html
 node araclar/kare-cek.js <ad>                 # sahne kareleri → test/cikti/<ad>/kare-hepsi.png
-node araclar/test.js <ad>                     # çekirdek testleri + oyunun kendi testi
+node araclar/test.js <ad>                     # çekirdek testleri + oyunun kendi testi (+ köprü, müzik, araçlar)
 node araclar/test.js                          # bütün oyunlar + köprü testleri
+node araclar/test.js <ad> --yalniz cekirdek,oyun --hizli   # düzenlerken: yalnız seçilen bölümler ("Test döngüsü")
 node kopru.js --ana-sayfa --ac                # ana sayfa (oyun salonu): Dene / Yayın / Durdur / Motoru kapat
                                               # BASLAT.bat bunu --gizli ile penceresiz açar (günlük: motor-gunlugu.txt)
                                               # macOS: BASLAT.command, Linux: BASLAT.sh aynısını görünür Terminal penceresinde yapar
@@ -38,6 +39,26 @@ node araclar/surum.js                         # yalnız bakımcı: Windows hazı
 Testler ve kareler bir tarayıcı ister. Kurulu Chrome'u göstermek en hızlısıdır:
 `CHROME_PATH="C:/Program Files/Google/Chrome/Application/chrome.exe" node araclar/test.js <ad>`
 (yoksa bir kez `npx playwright install chromium`).
+
+## Test döngüsü
+
+Bütün testler (`node araclar/test.js`) yaklaşık 18 dakika sürer. Her değişiklikte hepsi gerekmez: değiştirdiğin şeyi
+sınayan bölümü çalıştır. Bölümler: `derle`, `cekirdek`, `oyun` (her oyun için), `kopru`, `muzik`, `araclar` (bir kez).
+`--yalniz` bölümleri seçer, `--hizli` çekirdek testlerindeki uzun dayanıklılık testini (9 × 10 sn) kısa sürümüyle
+(4 × 10 sn) çalıştırır; başka hiçbir şeyi atlamaz. Her bölümün süresi sonda ÖZET'te yazar.
+
+| Ne değişti | Düzenlerken | Bitirmeden önce ekle |
+| --- | --- | --- |
+| (a) yalnız `kopru.js` | `node araclar/test.js halay --yalniz kopru --hizli` | `araclar` (paketin içinden motoru açar) |
+| (b) yalnız `cekirdek/ana-sayfa.html` | `node araclar/test.js halay --yalniz kopru --hizli` (ana sayfa testleri köprü testinin içinde) | `araclar` (pakete girdiğini denetler) |
+| (c) bir oyunun `oyunlar/<ad>/js/` dosyaları | `node araclar/derle.js <ad>`, sonra `node araclar/test.js <ad> --yalniz derle,cekirdek,oyun --hizli` | müziğe (`OYUN.muzik`) dokunduysan `muzik` |
+| (d) çekirdek `cekirdek/js/` | `node araclar/derle.js --hepsi`, sonra `node araclar/test.js --yalniz derle,cekirdek,oyun --hizli` (bütün oyunlar) | `node araclar/test.js --hizli` (köprü istemcisi, müzik, araçlar da çekirdeği kullanır) |
+
+Kural: düzenleme döngüsünde `--hizli` ve `--yalniz`. Sürümden (ve `araclar/surum.js`'ten) önce bir kez tam koşu:
+`node araclar/test.js` (`--hizli` olmadan). Bilgisayarda başka bir tarayıcı testi çalışmıyorsa `--serit 2` ekle:
+oyun bölümleri ile köprü → müzik → araçlar aynı anda yürür. Başka bir tarayıcı testi çalışıyorsa tek şeritte kal;
+iki şerit makineyi yorar, kare süresi ölçümleri kalabilir. Köprü test kapılarını araç kendisi boş bir bloktan seçer
+(sabitlemek için `KOPRU_TEST_PORT`), iki koşu birbirinin kapısına çarpmaz.
 
 ## Harita
 
