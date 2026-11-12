@@ -20,9 +20,10 @@
  *
  * Penceresiz motor (--gizli): başlatıcı, motoru aynı bağımsız değişkenlerle ve iç işaret --arka-plan ile ayrı (detached),
  * penceresiz bir süreç olarak açar; motorun çıktısı motor-gunlugu.txt dosyasına gider. Motorun penceresi olmadığı için
- * kapatmanın iki yolu vardır: ana sayfadaki "Motoru kapat" (POST /kapat) ve boşta kapanma (hiçbir sayfa soketle bağlı
- * değilken ve 10 dakika boyunca motora hiçbir istek gelmezse motor kendiliğinden kapanır; unutulan gizli bir süreç
- * klasörü sonsuza dek tutmasın). Kapıda aynı klasörün aynı sürümü zaten çalışıyorsa yenisi açılmaz; başka bir klasörün
+ * kapatmanın iki yolu vardır: ana sayfadaki "Motoru kapat" (POST /kapat: motor uyur, sayfa "Başlat" ile POST /uyan
+ * yollayıp uyandırır; "Motor durdu" ekranı kapanınca nabız kesilir, motor 150 sn sonra tamamen kapanır) ve boşta kapanma
+ * (hiçbir sayfa soketle bağlı değilken ve 10 dakika boyunca motora hiçbir istek gelmezse motor kendiliğinden kapanır;
+ * unutulan gizli bir süreç klasörü sonsuza dek tutmasın). Kapıda aynı klasörün aynı sürümü zaten çalışıyorsa yenisi açılmaz; başka bir klasörün
  * ya da sürümün motoru çalışıyorsa ona kapanmasını söyler, kapı boşalınca kendi motorunu açar.
  * Hangi oyun: --oyun <ad> verilirse oyunlar/<ad>/oyun.html. Verilmezse önce bu dosyanın yanındaki oyun.html
  * (yayıncı paketi böyle gelir), o da yoksa depoda tek oyun varsa o açılır. Birden çok oyun varsa hangisinin
@@ -31,7 +32,7 @@
  * Ana sayfa kipi (--ana-sayfa): köprü oyunsuz ve kullanıcı adsız açılır, / adresinde ana sayfayı
  * (cekirdek/ana-sayfa.html; pakette köprünün yanında) sunar. Sayfadaki düğmeler POST /api/baslat ile hangi oyunun
  * hangi kipte (deneme ya da canlı) çalışacağını söyler; köprü çalışanı durdurup yenisini başlatır. POST /api/durdur
- * çalışanı durdurur; köprü boşta bekler (ana sayfada bu sürece "motor" denir). POST /kapat motoru kapatır. Oyunlar:
+ * çalışanı durdurur; köprü boşta bekler (ana sayfada bu sürece "motor" denir). POST /kapat motoru uyutur ({ tam: true } ile kapatır), POST /uyan uyandırır. Oyunlar:
  * köprünün yanında oyun.html varsa yalnız o (paket), yoksa derlenmiş her oyunlar/<ad>/ ("vitrin": false olanlar hariç).
  */
 'use strict';
@@ -104,6 +105,11 @@ const GUNLUK = path.join(__dirname, 'motor-gunlugu.txt');
 const BOS_KAPANIS_MS = +process.env.KOPRU_BOS_KAPANIS_MS > 0 ? +process.env.KOPRU_BOS_KAPANIS_MS : 10 * 60e3;
 // Motor kapanınca sayfalara giden cümle (ana sayfa da aynısını yazar).
 const KAPANDI = 'Motor kapandı. Yeniden açmak için ' + (PLATFORM === 'linux' ? 'BASLAT.sh dosyasını çalıştır.' : 'BASLAT\'a çift tıkla.');
+const UYUDU = 'Motor durdu. Yeniden başlatmak için ana sayfaya dön ve Başlat\'a bas.';
+// Uykudaki motor bu süre boyunca "Motor durdu" ekranından nabız almazsa tamamen kapanır. Arka plandaki sekmenin
+// zamanlayıcısı dakikada bire kısılır; ekran 20 sn'de bir nabız yollar, 150 sn iki kısılmış turu da kaldırır.
+// KOPRU_UYKU_MS yalnız testler içindir.
+const UYKU_MS = +process.env.KOPRU_UYKU_MS > 0 ? +process.env.KOPRU_UYKU_MS : 150e3;
 const sureYazi = ms => ms >= 60e3 ? Math.round(ms / 60e3) + ' dakika' : Math.max(1, Math.round(ms / 1000)) + ' saniye';
 
 /* ------------------------------------------------------------------ oyun sayfası + WebSocket sunucusu */
@@ -308,7 +314,7 @@ function dinle() {
       console.log('\n  TikTok Oyun Fabrikası açık:  http://localhost:' + PORT + '/');
       if (ARKA) {
         yaz('Motor açıldı (süreç ' + process.pid + '), penceresiz çalışıyor.');
-        console.log('  Kapatmak için ana sayfada "Motoru kapat"a bas. Tarayıcıda hiçbir oyun fabrikası sayfası açık değilken ' + sureYazi(BOS_KAPANIS_MS) + ' sonra kendiliğinden kapanır.\n');
+        console.log('  Durdurmak için ana sayfada "Motoru kapat"a bas; o sekme de kapanınca motor tamamen kapanır. Tarayıcıda hiçbir oyun fabrikası sayfası açık değilken ' + sureYazi(BOS_KAPANIS_MS) + ' sonra kendiliğinden kapanır.\n');
         bostaKapanmayiKur();
       } else console.log('  Bu ' + METIN.pencere + ' oyunların motorudur. Açık kalsın; kapatınca oyunlar durur. Ana sayfadaki "Motoru kapat" da kapatır.\n');
       if (args.includes('--ac')) tarayicidaAc('http://localhost:' + PORT + '/');
@@ -374,14 +380,17 @@ function gizliBaslat() {
   kapiyaBak(k => {
     if (k.tur === 'bos') return motoruAc();
     if (k.tur === 'ana' && k.j.motor === MOTOR_KIMLIK) {
-      console.log('\n  Oyun fabrikası zaten açık: ' + adres + '\n');
-      if (args.includes('--ac')) tarayicidaAc(adres);
-      setTimeout(() => process.exit(0), args.includes('--ac') ? 600 : 0);
+      // Aynı klasörün motoru: uykudaysa (ana sayfadan durduruldu) uyandırılır, sonra sayfa açılır.
+      uyandirIste(k.j, () => {
+        console.log('\n  Oyun fabrikası zaten açık: ' + adres + '\n');
+        if (args.includes('--ac')) tarayicidaAc(adres);
+        setTimeout(() => process.exit(0), args.includes('--ac') ? 600 : 0);
+      });
       return;
     }
-    if (k.tur === 'ana') { // başka bir klasörün ya da başka bir sürümün motoru: kapanmasını iste, kapı boşalınca aç
+    if (k.tur === 'ana') { // başka bir klasörün ya da başka bir sürümün motoru: tamamen kapanmasını iste, kapı boşalınca aç
       console.log('\n  Başka bir oyun klasöründen ya da başka bir sürümden açılmış motor çalışıyor; o kapatılıyor.');
-      kapiIstek('/kapat', { yontem: 'POST', govde: {}, basliklar: { 'x-fabrika': 'kapat' } }, (h, j, kod) => {
+      kapiIstek('/kapat', { yontem: 'POST', govde: { tam: true }, basliklar: { 'x-fabrika': 'kapat' } }, (h, j, kod) => {
         if (kod !== 200) {
           console.log('\n  Oyun fabrikasının eski bir motoru açık ve kendiliğinden kapanmıyor.\n  O ' + METIN.pencereyi + ' kapat, sonra ' + METIN.yeniden + '.\n');
           process.exit(1);
@@ -466,15 +475,48 @@ function motoruKapat(neden) {
   soketleriKapat(() => true, KAPANDI);
   kurulumuKes();
   if (neden === 'bos') yaz('Motor ' + sureYazi(BOS_KAPANIS_MS) + ' boyunca hiçbir sayfayla görüşmedi; kendiliğinden kapanıyor.');
-  else yaz('Motor ana sayfadan kapatıldı.');
+  else if (neden === 'uyku') yaz('Motor durmuştu ve ' + sureYazi(UYKU_MS) + ' boyunca "Motor durdu" ekranından ses gelmedi; tamamen kapanıyor.');
+  else yaz('Motor tamamen kapatıldı (başka bir klasörün başlatıcısı istedi).');
   try { sunucu.close(); } catch (e) { }
   setTimeout(() => process.exit(0), 600); // soketlere kapanış iletisi gitsin
 }
+// Uyku: ana sayfadaki "Motoru kapat" süreci bitirmez, motoru uyutur. Çalışan oyun durur (sahte olay saati ya da TikTok
+// bağlantısı kesilir), oyun sayfalarına "durdu" denir, süren kurulum ağacıyla kesilir; geriye yalnız dinleyen sunucu kalır.
+// Sayfa ölü bir süreci başlatamaz; uykudaki motoru ise "Başlat" (POST /uyan) uyandırır. Uykuda sıradan istekler (öbür
+// sekmelerin yoklaması) motoru ne uyandırır ne yaşatır: yalnız "Motor durdu" ekranının nabzı (POST /nabiz) yaşatır. Nabız
+// UYKU_MS boyunca gelmezse motor tamamen kapanır (penceresiz ve görünür pencereli motorda aynı).
+let uyku = false, sonNabiz = 0, uykuSaat = null;
+function uykuyaGec() {
+  sonNabiz = Date.now();
+  if (uyku) return;
+  uyku = true;
+  oyunDurdur(UYUDU);
+  soketleriKapat(() => true, UYUDU);
+  kurulumuKes();
+  if (kutuphane.iptal) kutuphane.iptal(); // kesilen kurulum "iniyor" kalmasın; uyanınca yeniden bakılır
+  sonDurum = 'Motor durdu.'; sonBaglanti = 'durdu';
+  yaz('Motor ana sayfadan durduruldu (uyku). "Motor durdu" ekranı açık kaldıkça bekler; ' + sureYazi(UYKU_MS) + ' ses gelmezse tamamen kapanır.');
+  uykuSaat = setInterval(() => { if (Date.now() - sonNabiz >= UYKU_MS) { clearInterval(uykuSaat); motoruKapat('uyku'); } }, Math.max(200, Math.min(10000, Math.floor(UYKU_MS / 5))));
+}
+function uyan() {
+  if (!uyku) return;
+  uyku = false; clearInterval(uykuSaat); uykuSaat = null;
+  temas(); // boşta kapanma süresi uyanıştan başlar
+  sonDurum = 'Henüz bir oyun açılmadı.'; sonBaglanti = 'durdu';
+  yaz('Motor uyandı.');
+  kutuphaneHazirla();
+}
+// Başlatıcı: kapıdaki aynı klasörün motoru uykudaysa uyandırır (j: /api/oyunlar yanıtı), sonra devam eder.
+function uyandirIste(j, sonra) {
+  if (!j || j.uyku !== true) { sonra(); return; }
+  kapiIstek('/uyan', { yontem: 'POST', govde: {}, basliklar: { 'x-fabrika': 'uyan' } }, () => sonra());
+}
 // Yalnız arka plandaki motorda: hiçbir oyun sayfası soketle bağlı değilken ve süre boyunca motora istek gelmezse kapanır.
 // Bağlı bir soket hep temas sayılır (yayında saatlerce arka planda kalan sekmenin zamanlayıcıları kısılır, soket kalır).
-// Kütüphane inerken de kapanmaz (kurulumun kendi süre sınırı vardır).
+// Kütüphane inerken de kapanmaz (kurulumun kendi süre sınırı vardır). Uykudayken bu kural değil, uykunun nabız süresi geçer.
 function bostaKapanmayiKur() {
   const t = setInterval(() => {
+    if (uyku) return;
     if (istemciler.size || kutuphane.cocuk) { temas(); return; }
     if (Date.now() - sonTemas >= BOS_KAPANIS_MS) { clearInterval(t); motoruKapat('bos'); }
   }, Math.max(200, Math.min(30000, Math.floor(BOS_KAPANIS_MS / 5))));
@@ -656,6 +698,7 @@ function kilitBekle(k) {
   }, 1000);
 }
 function kutuphaneHazirla() {
+  if (uyku) return; // uyuyan motor kurulum başlatmaz; uyanınca bakılır
   if (kutuphane.durum === 'iniyor' || kutuphane.durum === 'hazir' || kutuphane.cocuk) return;
   const baskasiSuruyor = kilitOku(); // başka bir motorun süren kurulumu: "hazır" denmez, beklenir (aşağıda)
   if (!baskasiSuruyor && kutuphaneVarMi(true)) { kutuphane.durum = 'hazir'; return; }
@@ -691,7 +734,7 @@ function kutuphaneHazirla() {
   let son = '', bitti = false, c = null;
   const bitir = (kod, neden) => {
     if (bitti) return;
-    bitti = true; clearTimeout(sinir); kutuphane.cocuk = null;
+    bitti = true; clearTimeout(sinir); kutuphane.cocuk = null; kutuphane.iptal = null;
     // Kilit yalnız npm başarıyla bittiyse "bitti" olur; yarıda kalan kurulum sonraki açılışta yeniden yapılır.
     if (kod === 0) kilitBirak();
     if (kod === 0 && kutuphaneVarMi(true)) { kutuphane.durum = 'hazir'; console.log('  TikTok kütüphanesi indi. Yayın düğmeleri hazır.\n'); return; }
@@ -713,6 +756,9 @@ function kutuphaneHazirla() {
       : spawn(KURULUM_KOMUTU, { ...sec, shell: true });
   } catch (e) { bitir(null, KURULUM_NEDEN.npmYok); return; }
   kutuphane.cocuk = c;
+  // Motor uykuya geçerken (kurulumuKes ağacı öldürdükten sonra): sonuç yazılmaz, süre sınırı durur, durum yeniden bakılacak
+  // hâle döner. Kilit "bitti" yazılmaz; kurucusu yaşamayan kilit bir sonraki bakışta bayat sayılır.
+  kutuphane.iptal = () => { bitti = true; clearTimeout(sinir); kutuphane.cocuk = null; kutuphane.iptal = null; kutuphane.durum = 'bilinmiyor'; kutuphane.neden = ''; kutuphaneYuklenir = null; };
   kilitYaz(c.pid);
   // 1,5 ve 8 sn sonra: kurulumun alt süreçleri kilide eklenir (npm kabuğun altında açılır)
   for (const ms of [1500, 8000]) setTimeout(() => { if (!bitti && !surecBitti(c)) altSurecler(c.pid, p => { if (!bitti && p.length) kilitYaz(c.pid, p); }); }, ms);
@@ -736,7 +782,8 @@ function kurulumuKes() {
 function anaDurum() {
   return {
     // motor: klasör + sürüm özeti (başlatıcı karşılaştırır); arkaPlan: motor penceresiz mi (sayfanın yazısı buna göre)
-    anaSayfa: true, paket: paketMi(), platform: PLATFORM, motor: MOTOR_KIMLIK, arkaPlan: ARKA,
+    // uyku: motor ana sayfadan durduruldu, "Başlat" (POST /uyan) bekliyor
+    anaSayfa: true, paket: paketMi(), platform: PLATFORM, motor: MOTOR_KIMLIK, arkaPlan: ARKA, uyku,
     oyunlar: vitrindekiler().map(o => ({ id: o.id, ad: o.ad, aciklama: o.aciklama })),
     aktif: calisan ? { oyun: calisan.oyun, ad: calisan.ad, kip: calisan.kip, kullanici: calisan.kullanici, calistirma: calisan.calistirma, baglanti: sonBaglanti } : null,
     durum: sonDurum,
@@ -774,6 +821,8 @@ function anaSayfaIstegi(req, res, yol) {
   if (yol === '/api/baslat') { baslatIstegi(req, res); return; }
   if (yol === '/api/durdur') { durdurIstegi(req, res); return; }
   if (yol === '/kapat') { kapatIstegi(req, res); return; }
+  if (yol === '/uyan') { uyanIstegi(req, res); return; }
+  if (yol === '/nabiz') { nabizIstegi(req, res); return; }
   if (yol === '/api/kutuphane') { postAl(req, res, () => { if (kutuphane.durum === 'hata') kutuphaneHazirla(); jsonYaz(res, 200, { tamam: true, ...anaDurum() }); }); return; }
   if (yol === '/durum') { jsonYaz(res, 200, { durum: sonDurum, bagliSayfa: istemciler.size, sayac, aktif: anaDurum().aktif }); return; }
   const m = /^\/(oyun|onizleme)\/([^/]+)(\/.*)?$/.exec(yol);
@@ -822,6 +871,7 @@ const GERI_DON_EK = '<style>.ana-don{display:inline-flex;align-items:center;gap:
   'function bak(){fetch("/api/oyunlar",{cache:"no-store"}).then(function(r){return r.json();}).then(function(d){var a=d&&d.aktif;' +
   'if(a&&a.oyun===C.oyun&&a.calistirma===C.kimlik){if(ortu){ortu.remove();ortu=null;}return;}' +
   'if(a&&a.oyun===C.oyun){location.reload();return;}' +
+  'if(d&&d.uyku){kapak("Motor durdu","Yeniden başlatmak için ana sayfaya dön ve Başlat\'a bas.");return;}' +
   'kapak("Bu oyun artık çalışmıyor",a?"Şu an başka bir oyun açık: "+a.ad+". Bu sayfa olay almıyor.":"Oyun ana sayfadan durduruldu. Bu sayfa olay almıyor.");}).catch(function(){});}' +
   'setInterval(bak,2000);addEventListener("kopru-durdu",function(){setTimeout(bak,150);});})();</script>';
 // Canlı yayına geçerken: oyun, köprüden açılınca tarayıcıda sakladığı jeton sırasını geri yükler. Az önce Dene ile
@@ -858,22 +908,38 @@ function postAl(req, res, isle, kapi = r => yerelIstek(r, true)) {
 function durdurIstegi(req, res) {
   postAl(req, res, () => { oyunDurdur(); jsonYaz(res, 200, { tamam: true, ...anaDurum() }); });
 }
-// "Motoru kapat" (ana sayfa) ve başka klasörün başlatıcısı: yanıt yazılır, sonra motor düzgün kapanır.
-// Kapı öbür POST'lardan sıkıdır: Host bizim olmalı, ayrıca özel bir başlık (X-Fabrika: kapat) gerekir. Tarayıcı başka bir
-// sitenin bu başlıklı isteği için önce izin sorar (CORS ön isteği); motor izin vermez, istek hiç gelmez. Origin varsa bizim
-// olmalı, Sec-Fetch-Site varsa same-origin. Origin yoksa istek tarayıcıdan gelmemiştir (tarayıcı her POST'a Origin yazar):
-// bu bilgisayardaki bir program, ör. başka klasörün başlatıcısı; böyle bir program motoru zaten kapatabilir.
-function kapatKapisi(req) {
-  if (!hostIyi(req) || String(req.headers['x-fabrika'] || '').toLowerCase() !== 'kapat') return false;
+// Motorun kendi durumunu değiştiren üç istek: /kapat (uyku; gövdede tam: true ise tamamen kapanır), /uyan (uykudan
+// uyandırır), /nabiz ("Motor durdu" ekranı açık: uykudaki motor yaşasın). Kapı öbür POST'lardan sıkıdır: Host bizim
+// olmalı, ayrıca adresin kendi özel başlığı gerekir (X-Fabrika: kapat / uyan / nabiz). Tarayıcı başka bir sitenin bu
+// başlıklı isteği için önce izin sorar (CORS ön isteği); motor izin vermez, istek hiç gelmez. Origin varsa bizim olmalı,
+// Sec-Fetch-Site varsa same-origin. Origin yoksa istek tarayıcıdan gelmemiştir (tarayıcı her POST'a Origin yazar): bu
+// bilgisayardaki bir program, ör. başlatıcı; böyle bir program motoru zaten kapatabilir.
+const fabrikaKapisi = deger => req => {
+  if (!hostIyi(req) || String(req.headers['x-fabrika'] || '').toLowerCase() !== deger) return false;
   const kaynak = req.headers.origin, site = req.headers['sec-fetch-site'];
   if (kaynak !== undefined && !IZINLI_HOST.some(h => String(kaynak).toLowerCase() === 'http://' + h)) return false;
   return !site || site === 'same-origin';
-}
+};
+// Ana sayfadaki "Motoru kapat": motor uyur (süreç yaşar, "Başlat" uyandırır). Başka klasörün başlatıcısı { tam: true }
+// yollar: yanıt yazılır, sonra motor tamamen kapanır. Sayfa tam: true hiç yollamaz.
 function kapatIstegi(req, res) {
-  postAl(req, res, () => {
-    res.on('finish', () => motoruKapat('kapat'));
-    jsonYaz(res, 200, { tamam: true, ileti: KAPANDI });
-  }, kapatKapisi);
+  postAl(req, res, g => {
+    if (g.tam === true) {
+      res.on('finish', () => motoruKapat('tam'));
+      jsonYaz(res, 200, { tamam: true, tam: true, ileti: KAPANDI });
+      return;
+    }
+    uykuyaGec();
+    jsonYaz(res, 200, { tamam: true, ...anaDurum() });
+  }, fabrikaKapisi('kapat'));
+}
+function uyanIstegi(req, res) {
+  postAl(req, res, () => { uyan(); jsonYaz(res, 200, { tamam: true, ...anaDurum() }); }, fabrikaKapisi('uyan'));
+}
+// Nabız yalnız uykudaki motoru yaşatır; uyanık motorda sıradan bir temastır. Yanıt motorun uyuyup uyumadığını söyler
+// (başka sekmeden ya da başlatıcıdan uyandırıldıysa ekran salona döner).
+function nabizIstegi(req, res) {
+  postAl(req, res, () => { if (uyku) sonNabiz = Date.now(); jsonYaz(res, 200, { tamam: true, uyku }); }, fabrikaKapisi('nabiz'));
 }
 function oyunDurdur(ileti) { // ileti: motor kapanırken sayfalara söylenen (yoksa ana sayfadaki Durdur)
   if (!calisan) return;
@@ -886,6 +952,8 @@ function oyunDurdur(ileti) { // ileti: motor kapanırken sayfalara söylenen (yo
 }
 function baslatIstegi(req, res) {
   postAl(req, res, g => {
+    // Uyuyan motor oyun başlatmaz: yalnız "Başlat" (POST /uyan) ya da başlatıcı uyandırır.
+    if (uyku) { jsonYaz(res, 409, { tamam: false, alan: 'uyku', hata: 'Motor durdu. Ana sayfada Başlat\'a bas.' }); return; }
     const o =typeof g.oyun === 'string' && OYUN_DESEN.test(g.oyun) ? vitrindekiler().find(x => x.id === g.oyun) : null;
     if (!o) { jsonYaz(res, 404, { tamam: false, hata: 'Bu oyun bulunamadı. Sayfayı yenileyip yeniden dene.' }); return; }
     if (g.kip !== 'deneme' && g.kip !== 'canli') { jsonYaz(res, 400, { tamam: false, hata: 'Kip "deneme" ya da "canli" olmalı.' }); return; }
@@ -944,7 +1012,10 @@ function zatenAcik() {
   const istekler = [];
   const sinir = setTimeout(() => { istekler.forEach(r => { try { r.destroy(); } catch (e) { } }); yabanci(); }, 3000);
   sor('/api/oyunlar', j => {
-    if (j && j.anaSayfa === true) return son('\n  Oyun fabrikası zaten açık: ' + adres + '\n  O sayfayı kullanabilirsin. Bu pencereyi kapatabilirsin.\n', 0, true);
+    if (j && j.anaSayfa === true) { // aynı klasörün motoru ana sayfadan durdurulduysa (uyku) önce uyandırılır
+      clearTimeout(sinir);
+      return uyandirIste(j.motor === MOTOR_KIMLIK ? j : null, () => son('\n  Oyun fabrikası zaten açık: ' + adres + '\n  O sayfayı kullanabilirsin. Bu pencereyi kapatabilirsin.\n', 0, true));
+    }
     sor('/durum', d => {
       if (d && d.sayac && typeof d.durum === 'string') return son('\n  Oyun motoru başka bir pencerede zaten açık (tek oyunla, eski yoldan başlatılmış).\n  O ' + METIN.pencereyi + ' kapat, sonra ' + METIN.yeniden + '.\n', 1);
       yabanci();

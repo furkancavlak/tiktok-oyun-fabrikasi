@@ -29,8 +29,10 @@ Bu rehber, programcı olmayan bir yayıncı içindir. Elinde bir oyun paketi kla
    **Beklemeden dene** ile oyunu sahte izleyicilerle açabilirsin; kırmızı düğmeler kütüphane inince kendiliğinden yanar.
    İnemezse ekran "İndirilemedi. İnternet bağlantını kontrol et." der: **Yeniden dene** ya da **Şimdilik yalnız dene**.
 3. Hazır olunca ana sayfa (oyun salonu) açılır. Çift tıklayınca bir an görünen siyah pencere motor hazır olunca
-   kendiliğinden kapanır: oyunun motoru arka planda, penceresiz çalışır. Motoru kapatmak için ana sayfanın altındaki
-   **Motoru kapat**'a bas, sonra **Evet, kapat**. Tarayıcıda oyun fabrikasının hiçbir sayfası açık değilse motor
+   kendiliğinden kapanır: oyunun motoru arka planda, penceresiz çalışır. Motoru durdurmak için ana sayfanın altındaki
+   **Motoru kapat**'a bas, sonra **Evet, kapat**. Açık oyun durur, sayfa "Motor durdu." der ve **Başlat** düğmesini
+   gösterir; ona basınca salon aynı sekmede geri gelir. O sekmeyi kapatınca motor iki üç dakika içinde tamamen
+   kapanır (klasörü silebilir ya da taşıyabilirsin). Tarayıcıda oyun fabrikasının hiçbir sayfası açık değilse motor
    10 dakika sonra kendiliğinden de kapanır; açık bir oyun sayfası (yayında yakalanan sekme) varken kapanmaz.
    Motor açılamazsa siyah pencere kapanmaz ve nedenini yazar.
 4. Önce sarı **Dene** düğmesine bas: oyun TikTok'a bağlanmadan, sahte izleyicilerle açılır. Neye benzediğini gör.
@@ -100,12 +102,13 @@ buna izin verip vermediği denenmedi.
 | "Yayın kapalı" ya da kullanıcı bulunamadı | Yayın açık değil ya da kullanıcı adı yanlış. Önce TikTok'ta yayını başlat, adı `@` olmadan yaz. |
 | İkinci çift tıklamada yeni motor açılmıyor | Motor zaten arka planda açık. Sorun değil: `BASLAT.bat` ana sayfayı yeniden açar, onu kullan. |
 | Siyah pencere "Oyun motoru açılamadı" deyip açık kalıyor | Motor açılırken durdu. Pencerede motorun son satırları yazar; o pencerenin ekran görüntüsünü gönder. Aynı satırlar paket klasöründeki `motor-gunlugu.txt` dosyasında da durur. |
-| Klasör silinmiyor ya da taşınmıyor ("dosya kullanımda") | Motor arka planda hâlâ açık. Ana sayfada **Motoru kapat**'a bas ya da tarayıcıdaki oyun sayfalarını kapatıp 10 dakika bekle. Sayfa açık değilse `BASLAT.bat` ile aç, sonra **Motoru kapat**. |
+| Klasör silinmiyor ya da taşınmıyor ("dosya kullanımda") | Motor arka planda hâlâ açık. Ana sayfada **Motoru kapat**'a bas, sonra o sekmeyi kapatıp üç dakika bekle; ya da tarayıcıdaki bütün oyun sayfalarını kapatıp 10 dakika bekle. Sayfa açık değilse `BASLAT.bat` ile aç, sonra **Motoru kapat**. |
 | "Oyun motoru başka bir pencerede zaten açık" | Motor eski yoldan (komut satırından, tek oyunla) başka bir pencerede açık. O siyah pencereyi kapat, `BASLAT.bat` dosyasına yeniden çift tıkla. |
 | "Oyun fabrikasının eski bir motoru açık ve kendiliğinden kapanmıyor" | Eski bir sürümün motoru (görünür siyah pencereyle) açık. O siyah pencereyi kapat, `BASLAT.bat` dosyasına yeniden çift tıkla. Başka bir klasörün yeni motorunu ise `BASLAT.bat` kendisi kapatır. |
 | Kapı dolu (port meşgul) | Başka bir program aynı kapıyı tutuyor; onu kapat. Olmazsa komut satırında `node kopru.js --ana-sayfa --port 9000 --ac` çalıştır. |
 | Ana sayfa "Motor çalışmıyor" ya da "Motora ulaşılamıyor" diyor | Motor kapanmış (ana sayfadan kapatıldı ya da hiçbir sayfa açık değilken kendiliğinden kapandı). `BASLAT.bat` dosyasına yeniden çift tıkla; açık sayfa motor gelince kendiliğinden devam eder. |
-| Ana sayfa "Motor kapandı. Yeniden açmak için BASLAT'a çift tıkla." diyor | Motoru **Motoru kapat** ile kapattın. Yeniden açmak için `BASLAT.bat` dosyasına çift tıkla. |
+| Ana sayfa "Motor durdu." diyor | Motoru **Motoru kapat** ile durdurdun. **Başlat**'a bas; salon geri gelir. Oyun sayfası da "Motor durdu" der: ana sayfaya dön, **Başlat**'a bas. |
+| Ana sayfa "Motor tamamen kapandı. Yeniden açmak için BASLAT'a çift tıkla." diyor | Motor durmuştu ve "Motor durdu" sekmesi bir süre kapalı kaldı, motor da tamamen kapandı. `BASLAT.bat` dosyasına çift tıkla. |
 | Kullanıcı adı kabul edilmiyor | TikTok adında yalnız harf, rakam, alt çizgi ve nokta olur; en çok 24 karakter, noktayla bitmez. Ekrandaki adını değil, profil adresindeki `@` ile başlayan adı yaz. |
 | Bağlantı kutusu "Yayın yok" | TikTok'ta yayın henüz açık değil. Yayını başlat; motor kendisi dener ya da ana sayfada **Yayın**'a yeniden bas. |
 | Ses yok | Tarayıcılar tıklamadan ses açmaz. Sayfada başlat düğmesine bas. Pencere yakalama bilgisayar sesini ayrıca almıyorsa LIVE Studio'da ses kaynağını kontrol et. |

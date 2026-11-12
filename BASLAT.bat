@@ -15,8 +15,8 @@ if errorlevel 1 goto nodeyok
 
 rem Motor arka planda, penceresiz acilir (--gizli) ve ana sayfayi tarayicida acar. Gereken kutuphaneyi ilk seferde
 rem kendisi indirir; durumu sayfada gorunur. Motor hazir olunca bu pencere kendiliginden kapanir. Motor acilamazsa
-rem nedeni ve motorun son satirlari bu pencerede kalir (:hata). Motor ana sayfadaki "Motoru kapat" ile kapanir;
-rem tarayicida hicbir sayfasi acik degilken 10 dakika sonra kendiliginden de kapanir.
+rem nedeni ve motorun son satirlari bu pencerede kalir (:hata). Ana sayfadaki "Motoru kapat" motoru durdurur ("Baslat"
+rem uyandirir), o sekme kapaninca motor tamamen kapanir; tarayicida hicbir sayfasi acik degilken 10 dakika sonra da.
 node kopru.js --ana-sayfa --ac --gizli
 if errorlevel 1 goto hata
 exit /b 0

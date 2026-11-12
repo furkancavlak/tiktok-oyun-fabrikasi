@@ -48,8 +48,10 @@ Gerekenler: Node.js 18 veya üstü (https://nodejs.org, LTS sürümü).
      düğme yanar, basınca kendi canlı yayınına bağlanır. Köprü yayını yalnızca okur.
    - Açık oyun üstteki şeritte görünür: **Oyuna dön** ya da **Durdur**.
 4. Oyunların motoru arka planda, penceresiz çalışır. Çift tıklayınca bir an siyah bir pencere görünür; motor hazır
-   olunca kendiliğinden kapanır. Motoru kapatmak için ana sayfanın altındaki **Motoru kapat**'a bas. Tarayıcıda
-   oyun fabrikasının hiçbir sayfası açık değilse motor 10 dakika sonra kendiliğinden de kapanır. Motor
+   olunca kendiliğinden kapanır. Ana sayfanın altındaki **Motoru kapat** motoru durdurur; sayfa "Motor durdu."
+   der ve **Başlat** düğmesi çıkar, ona basınca salon aynı sekmede geri gelir. O sekmeyi kapatınca motor iki üç
+   dakika içinde tamamen kapanır. Tarayıcıda oyun fabrikasının hiçbir sayfası açık değilse motor 10 dakika sonra
+   kendiliğinden de kapanır. Motor
    açılamazsa siyah pencere kapanmaz, nedenini yazar. Oyundan ana sayfaya **← Oyunlar** bağlantısıyla dönülür.
 
 ### Mac / Linux
@@ -57,7 +59,7 @@ Gerekenler: Node.js 18 veya üstü (https://nodejs.org, LTS sürümü).
 Aynı ana sayfa Mac'te `BASLAT.command`, Linux'ta `BASLAT.sh` ile açılır (Node.js yine gerekli). Mac'te
 `BASLAT.command` dosyasına Finder'da çift tıkla; motorun penceresi Terminal penceresidir, açık kalsın. Linux'ta
 terminalde klasöre girip `sh BASLAT.sh` yaz. Mac ve Linux'ta motor görünür pencerede kalır: Terminal penceresini
-kapatmak ya da ana sayfadaki **Motoru kapat** onu kapatır. Bu iki başlatıcı henüz gerçek bir Mac ya da Linux masaüstünde
+kapatmak onu kapatır; ana sayfadaki **Motoru kapat** onu durdurur (**Başlat** yeniden açar, sekme kapanınca tamamen kapanır). Bu iki başlatıcı henüz gerçek bir Mac ya da Linux masaüstünde
 denenmedi; yalnız Windows'taki testlerden geçti.
 
 Mac'te ilk açılış: internetten inen bir betiği macOS ilk seferde engelleyebilir ("geliştiricisi doğrulanamadı"
@@ -154,6 +156,6 @@ olduğu gibi, lisans dosyalarıyla birlikte ver. Paketteki Node.js'in lisansı `
 
 TikTok Game Factory is a repo for vertical, interactive games played by viewers of a TikTok live stream. A comment puts a viewer into the game, likes raise a shared gauge, gifts trigger tiered effects, and the top gifter gets a special role. The repo contains a shared core (`cekirdek/`), an example game (a halay line dance, `oyunlar/halay/`), a game template (`sablon/`), a bridge (`kopru.js`) and tools (`araclar/`). Open the repo in Claude Code, describe a game in one sentence, and the agent builds it on the core.
 
-Quick try on Windows: double-click `BASLAT.bat`; a home page opens in the browser with every game, a live preview, a "try with fake viewers" button and a "connect to your live stream" button (the TikTok username is typed on the page). On Windows the engine then runs in the background without a window; stop it with "Motoru kapat" on the home page (it also stops by itself 10 minutes after the last page is closed). From a terminal: `npm install`, then `node kopru.js --ana-sayfa --ac`, or one game directly with `node kopru.js --deneme --oyun halay --ac`. Live: `node kopru.js <username> --oyun <name> --ac`. `node araclar/paket.js <name>` builds a double-click package for a non-programmer streamer.
+Quick try on Windows: double-click `BASLAT.bat`; a home page opens in the browser with every game, a live preview, a "try with fake viewers" button and a "connect to your live stream" button (the TikTok username is typed on the page). On Windows the engine then runs in the background without a window; "Motoru kapat" on the home page puts it to sleep with a "Başlat" button to wake it; it exits for good a couple of minutes after that tab is closed, and by itself 10 minutes after the last page is closed. From a terminal: `npm install`, then `node kopru.js --ana-sayfa --ac`, or one game directly with `node kopru.js --deneme --oyun halay --ac`. Live: `node kopru.js <username> --oyun <name> --ac`. `node araclar/paket.js <name>` builds a double-click package for a non-programmer streamer.
 
 Limits: the bridge reads streams through the unofficial `tiktok-live-connector` library, which depends on a third-party signing service (Euler Stream) that may limit or stop free use. TikTok offers no official public API for live comments and gifts. Streaming from a phone is not supported. No music files are shipped. Not affiliated with or endorsed by TikTok. Documentation is in Turkish. MIT licence.

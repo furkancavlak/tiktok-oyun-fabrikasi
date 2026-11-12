@@ -148,25 +148,31 @@ Ana sayfa kipinde (`node kopru.js --ana-sayfa`; `BASLAT.bat` bunu `--gizli` ile 
 | Adres | Yanıt |
 | --- | --- |
 | `GET /` | Ana sayfa (`cekirdek/ana-sayfa.html`; pakette köprünün yanında). Açılışta yükleme sahnesi. |
-| `GET /api/oyunlar` | `{ anaSayfa, paket, platform: "windows" \| "mac" \| "linux", motor, arkaPlan, oyunlar: [{ id, ad, aciklama }], aktif: { oyun, ad, kip, kullanici, calistirma, baglanti } \| null, durum, kutuphane: { durum: "hazir" \| "iniyor" \| "hata", sure, neden } }`. |
+| `GET /api/oyunlar` | `{ anaSayfa, paket, platform: "windows" \| "mac" \| "linux", motor, arkaPlan, uyku, oyunlar: [{ id, ad, aciklama }], aktif: { oyun, ad, kip, kullanici, calistirma, baglanti } \| null, durum, kutuphane: { durum: "hazir" \| "iniyor" \| "hata", sure, neden } }`. |
 | `GET /durum` | `{ durum, bagliSayfa, sayac, aktif }` JSON. |
 | `POST /api/baslat` | Gövde `{ oyun, kip: "deneme" \| "canli", kullanici }`. Çalışanı durdurur, seçileni yeni bir başlatma kimliğiyle (`calistirma`) başlatır; eski başlatmanın soketleri kapatılır. Aynı oyun aynı kipte ve aynı adla yeniden istenirse bağlantı koparılmaz; TikTok'a henüz bağlı değilse hemen yeniden denenir. Yanıt `{ tamam, adres }` ya da `{ tamam: false, hata, alan }`. Kütüphane inmeden canlı istenirse 409 (`alan: "kutuphane"`). Kullanıcı adı: harf, rakam, `_`, `.`; 2-24 karakter; noktayla bitmez. |
 | `POST /api/durdur` | Gövde `{}`. Çalışan oyunun sahte olaylarını ya da TikTok bağlantısını kapatır; motor boşta bekler. |
 | `POST /api/kutuphane` | Gövde `{}`. İndirme başarısız olduysa yeniden dener. |
-| `POST /kapat` | Gövde `{}` ve başlık `X-Fabrika: kapat`. Çalışan oyunu durdurur, açık oyun sayfalarına "Motor kapandı" der (sayfalar yeniden bağlanmayı bırakır), süren kurulumu keser, `{ tamam, ileti }` yanıtını yazıp motoru kapatır. Ana sayfadaki **Motoru kapat** ve başka bir klasörün başlatıcısı kullanır. |
+| `POST /kapat` | Başlık `X-Fabrika: kapat`. Gövde `{}` (ana sayfadaki **Motoru kapat**): motoru uyutur. Çalışan oyun ve TikTok bağlantısı durur, açık oyun sayfalarına "Motor durdu" denir (yeniden bağlanmayı bırakırlar), süren kurulum kesilir; süreç yaşar, yalnız dinler. Yanıt `{ tamam, uyku: true, … }` (ana sayfa durumu). Gövde `{ tam: true }` (yalnız başka klasörün başlatıcısı; sayfa yollamaz): `{ tamam, tam, ileti }` yazılır, motor tamamen kapanır. |
+| `POST /uyan` | Başlık `X-Fabrika: uyan`, gövde `{}`. Uyuyan motoru uyandırır ("Başlat" düğmesi, aynı klasörün başlatıcısı). Yanıt ana sayfa durumu. |
+| `POST /nabiz` | Başlık `X-Fabrika: nabiz`, gövde `{}`. "Motor durdu" ekranı açık: uyuyan motor yaşasın. Yanıt `{ tamam, uyku }`; `uyku: false` ise ekran salona döner. |
 | `GET /oyun/<id>/` | Çalışan oyunun sayfası, köprüye bağlı (`/olay/<id>/<calistirma>`), masada "← Oyunlar" bağlantısı ve başlatma bekçisi: aynı oyun yeniden başlatılınca sayfa kendini yeniler; başka oyun açılır ya da oyun durdurulursa "Bu oyun artık çalışmıyor" örtüsü gösterir. Çalışmayan oyun için ana sayfaya yönlendirir. |
 | `GET /oyun/<id>/muzik/<dosya>` | O oyunun isteğe bağlı hazır parçaları (`liste.js` yoksa boş betik). |
 | `GET /onizleme/<id>/` | Aynı oyun köprüsüz ve sessiz; ana sayfadaki kabinin önizlemesi (`#yayin` ile). |
 | WebSocket `/olay/<id>/<calistirma>` | Yalnız çalışan başlatmanın olayları. Kaynak yalnız köprünün kendi sayfası; başka yol, başka kaynak, kaynaksız istemci ve eski başlatmanın kimliği geri çevrilir. |
 
 POST istekleri yalnız köprünün kendi sayfasından kabul edilir (`Host`, `Origin`, varsa `Sec-Fetch-Site`, JSON gövde,
-en çok 4 KB). `POST /kapat` ayrıca `X-Fabrika: kapat` başlığını ister: tarayıcı başka bir sitenin bu başlıklı isteği için
+en çok 4 KB). `POST /kapat`, `/uyan` ve `/nabiz` ayrıca kendi `X-Fabrika` başlığını ister: tarayıcı başka bir sitenin bu başlıklı isteği için
 önce izin sorar, köprü izin vermez. `Origin` varsa köprünün kendi adresi olmalıdır; hiç yoksa istek tarayıcıdan değil
 (tarayıcı her POST'a `Origin` yazar), bu bilgisayardaki bir programdan, ör. başlatıcıdan gelmiştir ve kabul edilir.
 
 `motor` klasörün, sürümün (`SURUM.txt`) ve köprü kodunun kısa özetidir (klasörün yolu verilmez); `BASLAT.bat`'ın
 başlatıcısı (`--gizli`) kapıdaki motorun aynı klasörün aynı sürümü olup olmadığını buna bakarak anlar; değilse ona
-`POST /kapat` der, kapı boşalınca kendi motorunu açar. `arkaPlan: true` motorun penceresiz çalıştığını söyler; o motor
+`POST /kapat` `{ tam: true }` der, kapı boşalınca kendi motorunu açar; aynı klasörün motoru uykudaysa onu `POST /uyan` ile uyandırır.
+Uyku (`uyku: true`): oyun başlatılamaz (`POST /api/baslat` 409, `alan: "uyku"`), sıradan istekler motoru ne uyandırır ne
+yaşatır; yalnız `POST /nabiz` yaşatır. "Motor durdu" ekranı 20 sn'de bir nabız yollar (arka plan sekmesi dakikada bire
+kısılır); 150 sn nabız gelmezse motor tamamen kapanır (penceresiz ve görünür pencereli motorda aynı; `KOPRU_UYKU_MS`
+yalnız testler içindir). Uyku ekranını yoklamayla gören başka bir sekme yalnız görünürken nabız yollar. `arkaPlan: true` motorun penceresiz çalıştığını söyler; o motor
 hiçbir oyun sayfası soketle bağlı değilken 10 dakika boyunca istek almazsa kendiliğinden kapanır
 (`KOPRU_BOS_KAPANIS_MS` yalnız testler için süreyi kısaltır). Çıktısı köprünün klasöründeki `motor-gunlugu.txt`
 dosyasına yazılır (1 MB'ı geçince bir sonraki açılışta baştan başlar).
