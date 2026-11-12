@@ -28,6 +28,9 @@ const KULLANIM = `Kullanım: node araclar/test.js [<oyun>] [--yalniz <bölümler
                        B şeridi köprü → müzik → araçlar. Her bölümün çıktısı bölüm bitince bütün olarak
                        yazılır. Öntanım 1 şerit (hepsi sırayla). Bilgisayarda başka bir tarayıcı testi
                        çalışıyorsa 1 şerit kullan: iki şerit makineyi yorar, kare süresi ölçümleri kalabilir.
+  --hizli              düzenleme döngüsü için: çekirdek testlerindeki uzun dayanıklılık testi (9 × 10 sn)
+                       kısa sürümüyle (4 × 10 sn) çalışır; başka hiçbir şey atlanmaz (TEST_KADEME=hizli).
+                       Öntanım tam kademedir (TEST_KADEME=tam); sürümden önce bir kez --hizli olmadan çalıştır.
   --yardim             bu metin`;
 function kullanim(hata) {
   if (hata) console.error(hata + '\n');
@@ -36,7 +39,7 @@ function kullanim(hata) {
 }
 
 const args = process.argv.slice(2);
-let istenen = null, yalniz = null, serit = '1';
+let istenen = null, yalniz = null, serit = '1', hizli = false;
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
   if (a === '--yardim' || a === '--help' || a === '-h') { console.log(KULLANIM); process.exit(0); }
@@ -44,6 +47,7 @@ for (let i = 0; i < args.length; i++) {
   else if (a.startsWith('--yalniz=')) yalniz = a.slice('--yalniz='.length);
   else if (a === '--serit') serit = args[++i];
   else if (a.startsWith('--serit=')) serit = a.slice('--serit='.length);
+  else if (a === '--hizli') hizli = true;
   else if (a.startsWith('--')) kullanim('Bilinmeyen seçenek: ' + a);
   else if (istenen === null) istenen = a;
   else kullanim('Fazla bağımsız değişken: ' + a);
@@ -99,6 +103,9 @@ async function bosKapiBul() {
   return null;
 }
 const env = { ...process.env };
+if (hizli) env.TEST_KADEME = 'hizli';
+const kademe = env.TEST_KADEME || 'tam';
+if (kademe !== 'tam' && kademe !== 'hizli') kullanim('TEST_KADEME "tam" ya da "hizli" olur (verilen: ' + kademe + ').');
 
 const sn = ms => (ms / 1000).toFixed(1);
 const sonuc = [];
@@ -132,6 +139,7 @@ async function biriktirerek(is, klasor) {
 
 (async () => {
   const bas = Date.now();
+  console.log('Kademe: ' + (kademe === 'tam' ? 'tam (sürüm öncesi: uzun dayanıklılık testi dahil)' : 'hızlı (uzun dayanıklılık testi kısa; sürümden önce --hizli olmadan bir kez çalıştır)'));
   // Kapı yalnız köprü ve araç testlerine gerekir (müzik testi ve A şeridi kapı açmaz).
   if (isler.some(is => is.dosya === 'cekirdek/test/kopru.test.js' || is.dosya === 'cekirdek/test/araclar.test.js')) {
     if (env.KOPRU_TEST_PORT) console.log('Köprü test kapıları: KOPRU_TEST_PORT=' + env.KOPRU_TEST_PORT + ' (verildiği gibi)');
@@ -154,7 +162,7 @@ async function biriktirerek(is, klasor) {
     console.log(s.d, '|', s.ad, '|', sn(s.ms), 'sn');
   const kalan = sonuc.filter(s => s.d === 'KALDI').length;
   if (!sonuc.length) console.log('\nSeçilen bölümlerden çalışacak bir şey yok.');
-  console.log('Toplam süre: ' + sn(Date.now() - bas) + ' sn' + (serit === '2' ? ' (2 şerit)' : ''));
+  console.log('Toplam süre: ' + sn(Date.now() - bas) + ' sn' + (serit === '2' ? ' (2 şerit)' : '') + ', kademe ' + kademe);
   console.log(kalan ? '\n' + kalan + ' bölüm kaldı.' : '\nHepsi geçti.');
   process.exit(kalan ? 1 : 0);
 })();

@@ -4,7 +4,7 @@
 // Çalıştırma: node cekirdek/test/cekirdek.test.js <ad>   (ad verilmezse halay)
 'use strict';
 const fs = require('fs');
-const { OYUN_AD, OYUN_URL, CIKTI, tarayici, raporla, kontrolcu } = require('./ortak');
+const { OYUN_AD, OYUN_URL, CIKTI, KADEME, tarayici, raporla, kontrolcu } = require('./ortak');
 const { sonuc, kontrol } = kontrolcu();
 
 (async () => {
@@ -360,17 +360,27 @@ const { sonuc, kontrol } = kontrolcu();
   }
 
   // ---------- UZUN SÜRE ÇALIŞMA ----------
+  // Zamanla şişme ve yavaşlama sürüm öncesi aranır: "tam" kademede 9 × 10 sn, karşılaştırma 30. saniyeden sonuna.
+  // "hizli" kademede (düzenleme döngüsü) aynı kod yolu ve aynı kontroller 4 × 10 sn çalışır, karşılaştırma 30. ile 40.
+  // saniye arası. Isınma kısaltılmaz: sayfa öğeleri ilk saniyelerde dolar (halayda 8. saniyede 533, 16.'da 685,
+  // 30.'dan sonra ~683), daha erken bir ilk ölçüm dolmayı şişme sanır. Sınırlar aynı kalır: +25 MB ve +30 öğe büyüme
+  // hızı değil gürültü payıdır, kısa pencerede büyüme ancak daha az olur. Kısa sürüm yalnız hızlı sızıntıyı yakalar;
+  // yavaş sızıntı için tam kademe gerekir.
+  const UZUN = KADEME === 'tam' ? { tur: 9, ara: 10000, ilk: 2 } : { tur: 4, ara: 10000, ilk: 2 }, UZUN_SN = UZUN.tur * UZUN.ara / 1000;
+  if (KADEME !== 'tam')
+    console.log('HIZLI KADEME: uzun dayanıklılık testi (9 × 10 sn) atlandı, yerine kısa sürümü (' + UZUN.tur + ' × ' + UZUN.ara / 1000 + ' sn) çalışıyor.\n' +
+      '  Uzun hâli (sürümden önce): TEST_KADEME=tam node cekirdek/test/cekirdek.test.js ' + OYUN_AD + '  ya da --hizli olmadan node araclar/test.js');
   const u = await ac(1280, 800);
   await u.evaluate(() => { document.getElementById('hiz-2').click(); });
   const bellek = [];
-  for (let i = 0; i < 9; i++) {
-    await u.waitForTimeout(10000);
+  for (let i = 0; i < UZUN.tur; i++) {
+    await u.waitForTimeout(UZUN.ara);
     await u.evaluate(([i2, M]) => { CanliOyun.olay({ tip: 'hediye', kullanici: { id: 'uz' + (i2 % 3), ad: 'uzun_' + (i2 % 3) }, jeton: M[i2 % Math.min(3, M.length)] }); }, [i, MINLER]);
     bellek.push(await u.evaluate(() => ({ mb: +(performance.memory.usedJSHeapSize / 1048576).toFixed(1), dom: document.querySelectorAll('*').length, d: CanliOyun.durum(), oy: CanliOyun._test.D.oy.size })));
   }
-  const ilk = bellek[2], son = bellek[bellek.length - 1];
-  kontrol('90 sn çılgın kalabalık: bellek ve sayfa öğeleri şişmez', son.mb < ilk.mb + 25 && son.dom < ilk.dom + 30 && son.oy <= KAP + 24, { bellekMB: bellek.map(x => x.mb), oge: [ilk.dom, son.dom], karakter: son.oy });
-  kontrol('90 sn çılgın kalabalık: akıcılık korunur', bellek.every(x => x.d.kareMs < 33), bellek.map(x => +x.d.kareMs.toFixed(1)));
+  const ilk = bellek[UZUN.ilk], son = bellek[bellek.length - 1];
+  kontrol(UZUN_SN + ' sn çılgın kalabalık: bellek ve sayfa öğeleri şişmez', son.mb < ilk.mb + 25 && son.dom < ilk.dom + 30 && son.oy <= KAP + 24, { bellekMB: bellek.map(x => x.mb), oge: [ilk.dom, son.dom], karakter: son.oy });
+  kontrol(UZUN_SN + ' sn çılgın kalabalık: akıcılık korunur', bellek.every(x => x.d.kareMs < 33), bellek.map(x => +x.d.kareMs.toFixed(1)));
   await u.locator('#sahne').screenshot({ path: CIKTI + '/t-uzun.png' });
   // sekme arkaya gidip gelince
   const gizli = await u.evaluate(async () => { const v0 = CanliOyun.durum().vurus; Object.defineProperty(document, 'hidden', { value: true, configurable: true }); await new Promise(r => setTimeout(r, 2500)); Object.defineProperty(document, 'hidden', { value: false, configurable: true }); await new Promise(r => setTimeout(r, 800)); const v1 = CanliOyun.durum().vurus; return { v0, v1 }; });

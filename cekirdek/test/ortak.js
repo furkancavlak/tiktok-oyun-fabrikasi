@@ -15,6 +15,10 @@ const OYUN_URL = pathToFileURL(OYUN_HTML).href;
 const CIKTI = path.join(KOK, 'test', 'cikti', OYUN_AD); // ekran görüntüleri ve ses dosyası buraya yazılır (depoya girmez)
 fs.mkdirSync(CIKTI, { recursive: true });
 if (!fs.existsSync(OYUN_HTML)) { console.error(path.relative(KOK, OYUN_HTML) + ' yok. Önce derle: node araclar/derle.js ' + OYUN_AD); process.exit(2); }
+// Test kademesi (TEST_KADEME, node araclar/test.js --hizli bunu "hizli" yapar). "tam" (öntanım): sürüm öncesi her şey.
+// "hizli": düzenleme döngüsü için yalnız uzun dayanıklılık testi kısalır (aynı kod yolu, aynı kontroller); başka hiçbir şey atlanmaz.
+const KADEME = process.env.TEST_KADEME || 'tam';
+if (KADEME !== 'tam' && KADEME !== 'hizli') { console.error('TEST_KADEME "tam" ya da "hizli" olur (verilen: ' + KADEME + ')'); process.exit(2); }
 
 // CHROME_PATH verilirse o tarayıcı, verilmezse playwright'ın indirdiği Chromium kullanılır.
 const tarayici = (ek = []) => playwright.chromium.launch({
@@ -44,4 +48,4 @@ function kontrolcu() {
     ayrinti === undefined ? '' : typeof ayrinti === 'string' ? ayrinti : JSON.stringify(ayrinti, (x, v) => typeof v === 'bigint' ? v + 'n' : v)]);
   return { sonuc, kontrol };
 }
-module.exports = { KOK, OYUN_AD, OYUN_HTML, OYUN, OYUN_URL, CIKTI, tarayici: tarayiciAc, raporla, kontrolcu };
+module.exports = { KOK, OYUN_AD, OYUN_HTML, OYUN, OYUN_URL, CIKTI, KADEME, tarayici: tarayiciAc, raporla, kontrolcu };
