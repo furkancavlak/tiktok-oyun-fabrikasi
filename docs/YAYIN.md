@@ -39,8 +39,9 @@ Bu rehber, programcı olmayan bir yayıncı içindir. Elinde bir oyun paketi kla
 5. Yayına geçmek için masanın sol üstündeki **← Oyunlar** bağlantısıyla ana sayfaya dön. Sağ üstteki bilete TikTok
    kullanıcı adını yaz (başındaki `@` hazır durur) ve **Kaydet**'e ya da Enter'a bas. Bilet "Kayıtlı" yazar, kırmızı
    **Yayın** düğmesi yanar; ona bas. Ad bu bilgisayarda kayıtlı kalır, bir dahaki sefere yeniden yazman gerekmez.
-   Ana sayfadaki şeritte açık oyun ve motorun son durumu yazar ("şu an canlı yayında değil" gibi); **Durdur**
-   oyunu kapatır, **Oyuna dön** oyunun sayfasını açar. Sayfanın altındaki **Yayına nasıl alırım?** dört adımı gösterir.
+   Ana sayfadaki şeritte açık oyun ve motorun son durumu yazar ("şu an canlı yayında değil" gibi); **Oyunu kapat**
+   oyunu durdurur, **Oyuna dön** aynı oyunun sayfasını yeniden başlatmadan açar. Oyun sayfasından ana sayfaya dönmek
+   oyunu durdurmaz. Oyundan dönünce salon açılış ekranı olmadan hemen gelir. Sayfanın altındaki **Yayına nasıl alırım?** dört adımı gösterir.
 6. Oyun sayfasında solda sahne, sağda yayın masası (panel) vardır. Masanın en üstündeki şeritte **Bağlantı** kutusu
    ne olduğunu söyler:
    - **Canlı**: TikTok yayınına bağlanıldı; yorumlar, beğeniler ve hediyeler oyuna akıyor. Yanında kaç olay alındığı yazar.

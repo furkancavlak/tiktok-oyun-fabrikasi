@@ -1395,6 +1395,60 @@ else{console.error('npm ERR! network (taklit)');process.exit(1);}`);
         kontrol('BASLAT.bat (Windows): iki dalda da --gizli; komut istemi motor hazır olunca kendiliğinden biter (0), motor arka planda açık kalır', (batKaynak.match(/kopru\.js --ana-sayfa --ac --gizli\r\n/g) || []).length === 2 && bv.status === 0 && Date.now() - t8 < 30000 && pid7 > 0 && yasiyor(pid7) && !!d7 && d7.arkaPlan === true, { kod: bv.status, ms: Date.now() - t8, pid7, cikti: (bv.stdout + bv.stderr).slice(0, 300) });
         await tamKapat(); await oldu(pid7, 8000);
       }
+      // (11) Salona dönüş. Dört oyunlu salon 1366 genişliğe sığmaz (yana kayar): salonun ışık payı şeridin düğmelerini
+      // örtmemeli. Oyundan "Oyunlara dön" ve geri tuşuyla dönünce açılış sahnesi hiç görünmemeli (motor hazır); oyun
+      // sayfadan ayrılınca durmaz, şerit motorun söylediğini gösterir, düğmeleri dediğini yapar.
+      {
+        const kls = anaKur('salon-donus', ['a-oyun', 'b-oyun', 'c-oyun', 'd-oyun']); fs.writeFileSync(path.join(kls, 'kurulum-mod.txt'), 'tamam 0');
+        const ms = baslat(kls, ['--ana-sayfa', '--port', String(kp)]); acilanlar.add(ms.pid); await acik(kp);
+        await bekleKosul(async () => { const x = await durum(); return !!x && x.kutuphane.durum === 'hazir'; }, 10000);
+        // Her sayfada ilk 1 sn boyunca her karede açılış sahnesi görünüyor mu (gizli değil, görünür, saydam değil)
+        const kayit = () => { window.__sahne = []; const t0 = performance.now(); (function k() { const a = document.getElementById('acilis'); if (a) { const s = getComputedStyle(a); window.__sahne.push(!a.hidden && s.visibility !== 'hidden' && +s.opacity > 0.01); } if (performance.now() - t0 < 1000) requestAnimationFrame(k); })(); };
+        const sc2 = await b.newContext({ viewport: { width: 1366, height: 768 } }); await sc2.addInitScript(kayit);
+        const sp2 = await sayfaAc(sc2, A + '/');
+        await sp2.waitForFunction(() => document.getElementById('acilis').hidden, null, { timeout: 10000 }).catch(() => { });
+        await sp2.click('.kart[data-oyun="a-oyun"] .dene', { timeout: 5000 }).catch(() => { });
+        await sp2.waitForURL(/\/oyun\/a-oyun\/$/, { timeout: 10000 }).catch(() => { }); await bekle(1500);
+        const R = await sp2.evaluate(() => window.OYUN_CALISTIRMA && OYUN_CALISTIRMA.kimlik).catch(() => null);
+        await sp2.click('.ana-don', { timeout: 5000 }).catch(() => { });
+        await sp2.waitForURL(A + '/', { timeout: 10000 }).catch(() => { }); await bekle(1300);
+        const donus = await sp2.evaluate(() => { const ust = e => { const q = e.getBoundingClientRect(), u = document.elementFromPoint(q.left + q.width / 2, q.top + q.height / 2); return u === e || e.contains(u); }; return { kare: window.__sahne.length, gorundu: window.__sahne.filter(Boolean).length, serit: !document.getElementById('calisan').hidden, oyun: document.getElementById('cal-oyun').textContent, tasar: document.getElementById('salon').classList.contains('tasar'), donUst: ust(document.getElementById('cal-don')), kapatUst: ust(document.getElementById('cal-durdur')), kapatYazi: document.getElementById('cal-durdur').textContent }; }).catch(e => ({ hata: e.message }));
+        const dd = await durum();
+        kontrol('Salona dönüş: oyundan "Oyunlara dön" ile dönünce açılış sahnesi ilk 1 sn\'nin hiçbir karesinde görünmez (motor hazır); oyun durmaz (aynı başlatma)', !!R && donus.kare >= 10 && donus.gorundu === 0 && !!dd && !!dd.aktif && dd.aktif.calistirma === R, { R, ...donus, aktif: dd && dd.aktif });
+        kontrol('Salona dönüş: şerit motorun açık oyununu gösterir; salon yana kayarken de "Oyuna dön" ve "Oyunu kapat" düğmelerinin üstünde başka öğe yok', donus.serit && donus.oyun === 'a-oyun' && donus.tasar && donus.donUst && donus.kapatUst && donus.kapatYazi === 'Oyunu kapat', donus);
+        // Oyuna dön: aynı oyunun aynı başlatması
+        await sp2.click('#cal-don', { timeout: 3000 }).catch(() => { });
+        await sp2.waitForURL(/\/oyun\/a-oyun\/$/, { timeout: 8000 }).catch(() => { }); await bekle(800);
+        const R2 = await sp2.evaluate(() => window.OYUN_CALISTIRMA && OYUN_CALISTIRMA.kimlik).catch(() => null);
+        const dd2 = await durum();
+        kontrol('Şerit "Oyuna dön": aynı oyunun sayfasına aynı başlatmayla geçer (yeniden başlatmaz)', /\/oyun\/a-oyun\/$/.test(sp2.url()) && !!R && R2 === R && !!dd2 && !!dd2.aktif && dd2.aktif.calistirma === R, { url: sp2.url(), R, R2 });
+        // Tarayıcının geri tuşu: salon sahnesiz gelir, şerit yine doğru
+        await sp2.goBack({ timeout: 10000 }).catch(() => { }); await bekle(1300);
+        const geri = await sp2.evaluate(() => ({ url: location.pathname, kare: window.__sahne.length, gorundu: window.__sahne.filter(Boolean).length, serit: !document.getElementById('calisan').hidden })).catch(e => ({ hata: e.message }));
+        kontrol('Geri tuşuyla salona dönüş: açılış sahnesi ilk 1 sn\'de görünmez, şerit açık oyunu gösterir', geri.url === '/' && geri.kare >= 10 && geri.gorundu === 0 && geri.serit, geri);
+        // Oyunu kapat: basılıyken "Kapatılıyor…" (pasif); oyun durur, motor açık kalır, şerit kalkar, kabinlerin Dene'si tıklanır
+        await sp2.route('**/api/durdur', async r => { await bekle(700); await r.continue(); });
+        await sp2.click('#cal-durdur', { timeout: 3000 }).catch(() => { });
+        await bekle(150);
+        const basili = await sp2.evaluate(() => ({ yazi: document.getElementById('cal-durdur').textContent, pasif: document.getElementById('cal-durdur').disabled })).catch(e => ({ hata: e.message.slice(0, 80) }));
+        await sp2.waitForFunction(() => document.getElementById('calisan').hidden, null, { timeout: 5000 }).catch(() => { });
+        await sp2.unroute('**/api/durdur');
+        const kapali = await sp2.evaluate(() => { const d = document.querySelector('.kart[data-oyun="a-oyun"] .dene'); d.scrollIntoView({ block: 'center', inline: 'center' }); const q = d.getBoundingClientRect(), u = document.elementFromPoint(q.left + q.width / 2, q.top + q.height / 2); return { serit: !document.getElementById('calisan').hidden, deneTiklanir: !d.disabled && (u === d || d.contains(u)) }; }).catch(e => ({ serit: true, hata: e.message.slice(0, 80) }));
+        await bekle(500);
+        const dk = await durum();
+        kontrol('Şerit "Oyunu kapat": basılıyken "Kapatılıyor…" (pasif); oyun durur, motor açık kalır, şerit kalkar, kabinler yeniden kullanılır', basili.yazi === 'Kapatılıyor…' && basili.pasif && !!dk && dk.aktif === null && ms.exitCode === null && !kapali.serit && kapali.deneTiklanir, { basili, ...kapali, aktif: dk && dk.aktif });
+        // İkinci sekme (yeni oturum): motor hazırken o da sahnesiz açılır; başka yerden açılan / kapatılan oyunu şerit hemen gösterir
+        const sc3 = await b.newContext({ viewport: { width: 1366, height: 768 } }); await sc3.addInitScript(kayit);
+        const ik = await sayfaAc(sc3, A + '/'); await bekle(1300);
+        const ik1 = await ik.evaluate(() => ({ kare: window.__sahne.length, gorundu: window.__sahne.filter(Boolean).length, serit: !document.getElementById('calisan').hidden })).catch(e => ({ hata: e.message.slice(0, 80) }));
+        await gonder(kp, '/api/baslat', { oyun: 'b-oyun', kip: 'deneme' });
+        const acildi = await ik.waitForFunction(() => !document.getElementById('calisan').hidden && document.getElementById('cal-oyun').textContent === 'b-oyun', null, { timeout: 1500 }).then(() => true, () => false);
+        await gonder(kp, '/api/durdur', {});
+        const kapandi2 = await ik.waitForFunction(() => document.getElementById('calisan').hidden, null, { timeout: 1500 }).then(() => true, () => false);
+        kontrol('İkinci sekme: motor hazırken açılış sahnesi görünmez; başka yerden açılan ve kapatılan oyunu şerit 1,5 sn içinde gösterir', ik1.kare >= 10 && ik1.gorundu === 0 && !ik1.serit && acildi && kapandi2, { ...ik1, acildi, kapandi2 });
+        await sc3.close(); await sc2.close();
+        ms.kill(); await bekle(300);
+      }
       // Testin açtığı motorlardan yaşayan kaldıysa (bir kontrol kaldıysa) kendi numarasıyla kapatılır.
       for (const p of acilanlar) if (yasiyor(p)) { try { process.kill(p); } catch (e) { } }
       await bekle(300);

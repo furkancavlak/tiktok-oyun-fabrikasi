@@ -27,7 +27,7 @@ node araclar/kare-cek.js <ad>                 # sahne kareleri → test/cikti/<a
 node araclar/test.js <ad>                     # çekirdek testleri + oyunun kendi testi (+ köprü, müzik, araçlar)
 node araclar/test.js                          # bütün oyunlar + köprü testleri
 node araclar/test.js <ad> --yalniz cekirdek,oyun --hizli   # düzenlerken: yalnız seçilen bölümler ("Test döngüsü")
-node kopru.js --ana-sayfa --ac                # ana sayfa (oyun salonu): Dene / Yayın / Durdur / Motoru kapat
+node kopru.js --ana-sayfa --ac                # ana sayfa (oyun salonu): Dene / Yayın / Oyunu kapat / Motoru kapat
                                               # BASLAT.bat bunu --gizli ile penceresiz açar (günlük: motor-gunlugu.txt)
                                               # macOS: BASLAT.command, Linux: BASLAT.sh aynısını görünür Terminal penceresinde yapar
 node kopru.js --deneme --oyun <ad> --ac       # köprü + oyun, TikTok'suz, sahte olaylarla

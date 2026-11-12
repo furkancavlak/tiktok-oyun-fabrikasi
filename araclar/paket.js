@@ -138,7 +138,7 @@ const oku = [
   '  5. Yayında oynatmak için sağ üstteki bilete TikTok kullanıcı adını yaz ve "Kaydet"e',
   '     (ya da Enter\'a) bas. Kırmızı "Yayın" düğmesi yanar; ona bas. Oyun sayfasındaki',
   '     Bağlantı kutusu "Canlı" yazınca yorumlar akıyor; "Yayın yok" yazıyorsa TikTok\'ta',
-  '     yayın henüz açık değil. "Durdur" oyunu kapatır.',
+  '     yayın henüz açık değil. "Oyunu kapat" oyunu durdurur.',
   '     Oyundan ana sayfaya dönmek için masanın üstündeki "← Oyunlar" bağlantısına bas.',
   '',
   'Yayına alma',

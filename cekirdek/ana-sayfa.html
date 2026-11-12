@@ -12,7 +12,7 @@
 <!--
   Ana sayfa (oyun salonu): kopru.js --ana-sayfa ile açılınca / adresinde sunulur. Gece bir oyun salonu: tavanda ampul
   dizisi, ampullü tabela, sağ üstte yayıncı bileti (kullanıcı adı), her oyun bir kabin (renkli tabela, ekranda canlı
-  önizleme, iki yuvarlak düğme). Oyunları /api/oyunlar'dan okur; Dene / Yayın POST /api/baslat, Durdur POST /api/durdur.
+  önizleme, iki yuvarlak düğme). Oyunları /api/oyunlar'dan okur; Dene / Yayın POST /api/baslat, şeritteki Oyunu kapat POST /api/durdur.
   Önizleme /onizleme/<ad>/#yayin: motora bağlanmayan, sessiz, kendi sahte kalabalığıyla oynayan oyun sayfası.
   Sayfada köprü programına "motor" denir. Windows'ta BASLAT.bat motoru penceresiz açar (motor /api/oyunlar içinde
   arkaPlan: true der); Mac ve Linux'ta motor Terminal penceresidir. Alt satırdaki "Motoru kapat" POST /kapat ile motoru
@@ -58,7 +58,9 @@ a{color:var(--sari)}
   padding:30px max(36px,env(safe-area-inset-left,0px)) 12px}
 
 /* ---- baş: tabela + alt yazı (ya da şu an açık şeridi), sağda bilet ---- */
-.bas{display:flex;align-items:flex-start;justify-content:space-between;gap:18px 28px}
+/* Baş, salonun üstünde durur: kabinler sığmayınca salonun ışık payı (üstten 60px) şeridin düğmelerini örtüyordu
+   (Oyuna dön / Oyunu kapat tıklanmıyordu). Alt satır için aynısı aşağıda. */
+.bas{position:relative;z-index:2;display:flex;align-items:flex-start;justify-content:space-between;gap:18px 28px}
 .bas-sol{min-width:0;flex:1 1 auto;display:flex;flex-direction:column;gap:12px;align-items:flex-start}
 .tabela{position:relative;display:inline-block;padding:10px 24px 8px;border-radius:16px;background:linear-gradient(#3a1f58,#2a1644);
   border:3px solid var(--kenar);box-shadow:0 0 0 3px #5d3a86,0 9px 0 var(--kenar),0 0 46px rgba(255,180,80,.25)}
@@ -133,7 +135,11 @@ button.kocan .enter{font-size:10.5px;font-weight:700;letter-spacing:.02em;text-t
 .hap:active{transform:translateY(3px);box-shadow:0 1px 0 var(--kenar)}
 .hap.don{background:var(--sari);color:#2a1a05}
 .hap.dur{background:#3a1f2e;color:var(--krem);border-color:var(--kenar);box-shadow:0 4px 0 var(--kenar),inset 0 0 0 2px var(--kirmizi)}
-.hap[disabled]{opacity:.65;cursor:progress}
+.hap[disabled],.hap[aria-busy=true]{opacity:.65;cursor:progress}
+.hap[aria-busy=true]{transform:translateY(3px);box-shadow:0 1px 0 var(--kenar)}
+/* İlk bakış: motor hazır ve bu sekme salonu daha önce gösterdiyse (oyundan dönüş, geri tuşu, Başlat) açılış sahnesi hiç
+   görünmez, salon hazır gelir. Motorun ilk yanıtına (en çok 0,9 sn) kadar sahne de salon da gizli bekler. */
+body.ilk-bakis .acilis,body.ilk-bakis .sayfa{visibility:hidden!important}
 
 /* ---- salon: kabinler yan yana; sığmazsa yana kayar ---- */
 .salon-cerceve{position:relative;flex:none}
@@ -337,7 +343,7 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
 }
 </style>
 </head>
-<body>
+<body class="ilk-bakis">
 <div class="zemin" aria-hidden="true"></div>
 <div class="ampuller" aria-hidden="true"><svg viewBox="0 0 1400 54" preserveAspectRatio="none"><path id="ip" d="M0 6 Q175 44 350 14 T700 14 T1050 14 T1400 8" fill="none" stroke="#0d0818" stroke-width="2.5"/><g id="ampul-dizi"></g></svg></div>
 
@@ -381,7 +387,7 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
         </div>
         <div class="cal-eylem">
           <a class="hap don" id="cal-don" href="/">Oyuna dön</a>
-          <button type="button" class="hap dur" id="cal-durdur">Durdur</button>
+          <button type="button" class="hap dur" id="cal-durdur">Oyunu kapat</button>
         </div>
       </section>
     </div>
@@ -707,19 +713,27 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
   $('yardim-ac').addEventListener('click', panoAc);
 
   // ---- şu an açık şeridi ve alt satır
+  // Oyunu kapat: POST /api/durdur; basılıyken "Kapatılıyor…". Oyun sayfasından ayrılmak oyunu durdurmaz (motor açık tutar);
+  // yalnız bu düğme, başka oyun başlatmak ya da "Motoru kapat" durdurur.
   $('cal-durdur').addEventListener('click', function () {
     var d = $('cal-durdur');
-    d.disabled = true; d.textContent = 'Durduruluyor…';
+    d.disabled = true; d.textContent = 'Kapatılıyor…';
     var durduran = son && son.aktif ? son.aktif.oyun : null;
     istek('/api/durdur', {}).then(function (s) {
-      d.disabled = false; d.textContent = 'Durdur';
+      d.disabled = false; d.textContent = 'Oyunu kapat';
       if (s.ok && s.j.tamam) {
         son = s.j; durumYaz(s.j);
         // şerit kayboldu: odak, durdurulan oyunun sarı Dene düğmesine geçer (yoksa salona)
         var k = durduran && kartlar.get(durduran);
         if (k) k.dene.focus({ preventScroll: true }); else salon.focus({ preventScroll: true });
       }
-    }).catch(function () { d.disabled = false; d.textContent = 'Durdur'; motorYok(); });
+    }).catch(function () { d.disabled = false; d.textContent = 'Oyunu kapat'; motorYok(); });
+  });
+  // Oyuna dön: aynı oyunun aynı başlatmasına geçer (yeniden başlatmaz). Basılınca sayfa değişene dek "Açılıyor…".
+  $('cal-don').addEventListener('click', function (e) {
+    var a = $('cal-don');
+    if (a.getAttribute('aria-busy') === 'true') { e.preventDefault(); return; }
+    a.setAttribute('aria-busy', 'true'); a.textContent = 'Açılıyor…';
   });
   // ---- motoru kapat: önce satırın içinde onay, sonra POST /kapat (özel başlıkla). Motor uyur (süreç yaşar); sayfa
   // "Motor durdu" ekranına geçer: tek eylem "Başlat" (POST /uyan), altında "Bu sekmeyi kapatınca motor tamamen kapanır."
@@ -740,6 +754,7 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
     $('sayfa').setAttribute('inert', '');
     $('acilis-liste').hidden = true;
     $('beklemeden').hidden = $('yeniden').hidden = $('yalniz-dene').hidden = true;
+    ilkBakisBitti();
   }
   function uykuGoster(sahip) {
     if (sahip) uykuSahibi = true;
@@ -944,6 +959,7 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
   }
   function acilisYaz() {
     if (kapandi) return; // motor ana sayfadan kapatıldı: son hâl değişmez
+    ilkBakisBitti(); // sahne gerçekten gerekiyor (ilk açılış, kütüphane, motor yok): görünür
     if (!motorVar) {
       satir('a-motor', 'hata', 'Motor çalışmıyor. ' + P().ac, 'Motor açılınca bu sayfa kendiliğinden devam eder.');
       satir('a-kutu', 'bekliyor', 'TikTok kütüphanesi'); satir('a-oyun', 'bekliyor', 'Oyunlar');
@@ -994,16 +1010,28 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
     else if (dene) dene.focus({ preventScroll: true });
     else $('salon').focus({ preventScroll: true });
   }
-  function salonuAc() {
+  // hemen: açılış sahnesi solmadan kalkar (ilk bakışta hiç görünmemişti; oyundan dönüşte salon hazır gelir).
+  function salonuAc(hemen) {
     if (!acilisAcik) return;
     acilisAcik = false;
     $('sayfa').removeAttribute('inert');
     salonOdak();
     var a = $('acilis');
     a.classList.add('kalk');
-    setTimeout(function () { a.hidden = true; }, 520);
+    if (hemen === true) a.hidden = true; else setTimeout(function () { a.hidden = true; }, 520);
+    try { sessionStorage.setItem(SALON_GORULDU, '1'); } catch (e) { }
+    ilkBakisBitti();
     kutuNotYaz();
   }
+  // Açılış sahnesi yalnız ilk açılış içindir: motor henüz yanıt vermiyor ya da kütüphane iniyor. Motor yanıt verip
+  // kütüphane hazırsa (oyundan "Oyunlara dön", geri tuşu, ikinci sekme, "Başlat" sonrası yenileme) salon sahnesiz, hemen
+  // açılır. Kütüphane inemediyse sahne seçenekleri gösterir ("Yeniden dene" / "Şimdilik yalnız dene"); bu sekme o seçimi
+  // bir kez yaptıysa (salonu gördüyse) yeniden sorulmaz. Motorun ilk yanıtı gelene dek ikisi de gizli bekler
+  // (body.ilk-bakis); yanıt 0,9 sn'de gelmezse sahne görünür.
+  var SALON_GORULDU = 'fabrika-salon-goruldu';
+  function salonGoruldu() { try { return sessionStorage.getItem(SALON_GORULDU) === '1'; } catch (e) { return false; } }
+  function ilkBakisBitti() { document.body.classList.remove('ilk-bakis'); }
+  setTimeout(ilkBakisBitti, 900);
   function acilisiGoster() { // salondayken motor kaybolursa aynı sahne geri gelir
     acilisAcik = true;
     var a = $('acilis'); a.hidden = false; a.classList.remove('kalk');
@@ -1041,9 +1069,11 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
     motorVar = true; kopukSay = 0;
     if (!d.kutuphane) d.kutuphane = { durum: 'hazir' }; // kütüphane durumu bildirmeyen motor: eski davranış
     if (!salonKuruldu) {
+      var hemen = acilisAcik && (d.kutuphane.durum === 'hazir' || (d.kutuphane.durum === 'hata' && salonGoruldu()));
       salonKuruldu = true;
       kur(d);
       requestAnimationFrame(function () { requestAnimationFrame(onizlemeleriBekle); });
+      if (hemen) { salonuAc(true); return; }
     } else if (imza(d) !== imza(son)) kur(d);
     else { son = d; durumYaz(d); }
     if (acilisAcik) acilisYaz();
@@ -1056,7 +1086,8 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
   }
   yerelYaz(true);
   yokla();
-  // Saniyede bir: açılışta saniye sayacı ve kütüphane notu yerel olarak ilerler; iki saniyede bir motora sorulur.
+  // Saniyede bir: açılışta saniye sayacı ve kütüphane notu yerel olarak ilerler; motora da saniyede bir sorulur (şerit,
+  // başka sekmeden kapatılan ya da açılan oyunu bir saniye içinde gösterir).
   // Sekme arka plandayken de en az dakikada bir sorulur: penceresiz motor, hiçbir sayfa sesini duyurmayınca bir süre
   // sonra kendiliğinden kapanır; açık duran ana sayfa motoru yaşatır (tarayıcı arka plan sekmesini dakikada bire kısar).
   var tik = 0;
@@ -1065,7 +1096,7 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
     if (acilisAcik) acilisYaz(); else kutuNotYaz();
     if (document.hidden) { if (!mesgul && Date.now() - sonYokla > 50000) yokla(); return; }
     if (mesgul) return;
-    if (acilisAcik || tik % 2 === 0) yokla();
+    yokla();
   }, 1000);
   // Geri tuşuyla dönülünce (sayfa önbellekten gelir) düğmeler eski "Açılıyor…" hâlinde kalmasın.
   addEventListener('pageshow', function (e) { if (e.persisted) location.reload(); });

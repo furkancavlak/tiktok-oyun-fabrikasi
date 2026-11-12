@@ -46,7 +46,8 @@ Gerekenler: Node.js 18 veya üstü (https://nodejs.org, LTS sürümü).
    - Sarı **Dene**: oyun sahte izleyicilerle açılır, hiçbir hesaba bağlanmaz, ad gerekmez.
    - Kırmızı **Yayın**: önce sağ üstteki bilete TikTok kullanıcı adını yaz, **Kaydet**'e (ya da Enter'a) bas;
      düğme yanar, basınca kendi canlı yayınına bağlanır. Köprü yayını yalnızca okur.
-   - Açık oyun üstteki şeritte görünür: **Oyuna dön** ya da **Durdur**.
+   - Açık oyun üstteki şeritte görünür: **Oyuna dön** ya da **Oyunu kapat**. Oyun sayfasından ana sayfaya dönmek
+     oyunu durdurmaz; oyun **Oyunu kapat**'a ya da başka bir oyunu açana dek sürer.
 4. Oyunların motoru arka planda, penceresiz çalışır. Çift tıklayınca bir an siyah bir pencere görünür; motor hazır
    olunca kendiliğinden kapanır. Ana sayfanın altındaki **Motoru kapat** motoru durdurur; sayfa "Motor durdu."
    der ve **Başlat** düğmesi çıkar, ona basınca salon aynı sekmede geri gelir. O sekmeyi kapatınca motor iki üç
