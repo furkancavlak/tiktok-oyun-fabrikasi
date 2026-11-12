@@ -12,7 +12,9 @@
  *   11 karakterlik video kimliğini (ve varsa liste kimliğini) çıkarır, oynatıcıya yalnız bunlar verilir.
  * - Oynatıcı çerçevesi (iframe) yerinden hiç oynatılmaz (taşınan iframe yeniden yüklenir ve şarkı kesilir). Yalnız
  *   sahne görünümünde (#yayin) panel display:none olur; çerçeve sayfada kalır, tarayıcı içindeki şarkıyı çalmayı sürdürür.
- * - Son çalışan link (yalnız doğrulanmış kimliklerden kurulan biçimi) ve YouTube ses düzeyi oyun başına saklanır
+ * - Ses: ayrı kaydırıcı yok. Oynatıcının sesi Müzik kartının tek düzeyinden gelir, oyunun ses düğmesi şarkıyı da susturur
+ *   (sesUygula, muzik.dinle). Oyunun sesi kapalıyken "Çal" sesi açar.
+ * - Son çalışan link (yalnız doğrulanmış kimliklerden kurulan biçimi) oyun başına saklanır
  *   (localStorage "<oyun id>-youtube"). Sayfa açılınca hiçbir şey kendiliğinden çalmaz.
  * Dışarıya: CanliOyun.youtube = { kur(kutu), linkCoz(metin), cal(link), durdur(), don(), durum() }.
  */
@@ -78,10 +80,10 @@ const YT_MUZIK = (() => {
   function oku() {
     try {
       const v = JSON.parse(localStorage.getItem(SAKLA_AD) || '{}'), l = linkCoz(v && v.link);
-      return { link: l ? linkYaz(l) : '', ses: Number.isFinite(+v.ses) ? clamp(Math.round(+v.ses), 0, 100) : 80 };
+      return { link: l ? linkYaz(l) : '' };
     }
     catch (e) {
-      return { link: '', ses: 80 };
+      return { link: '' };
     }
   }
   function yaz(ek) {
@@ -92,6 +94,25 @@ const YT_MUZIK = (() => {
   }
 
   let kutu = null, el = null, apiSoz = null, oyuncu = null, nesil = 0, caliyor = false, donus = 0, basla = 0;
+
+  // Tek düzey, tek düğme: oynatıcının sesi Müzik kartının düzeyinden (muzik.duzey; 0–0,7 → 0–100) gelir, oyunun ses
+  // düğmesi kapalıysa (muzik.acik yanlış) oynatıcı da sessizdir. Kart düzeyi ya da sesi değiştirince muzik.dinle bildirir.
+  const oynaticiSesi = () => Math.round(clamp(muzik.duzey / 0.7, 0, 1) * 100);
+  function sesUygula(o) {
+    o = o || oyuncu;
+    if (!o)
+      return;
+    try {
+      if (muzik.acik) {
+        o.unMute();
+        o.setVolume(oynaticiSesi());
+      }
+      else
+        o.mute();
+    }
+    catch (e) { }
+  }
+  muzik.dinle(() => sesUygula());
 
   // API betiğini bir kez yükler. Başarısız olursa (internet yok, engelli, 15 sn'de hazır olmadı) bir sonraki "Çal"
   // yeniden dener.
@@ -214,6 +235,10 @@ const YT_MUZIK = (() => {
       ileti(YAZI.disk, 'hata');
       return false;
     }
+    // Oyunun sesi kapalıyken "Çal": ses açılır (şarkı da duyulsun, düğme "Sesi kapat" yazsın). Tıklamanın içinde,
+    // beklemeden çağrılır: tarayıcı sesi yalnız kullanıcı dokunuşunda açar.
+    if (!muzik.acik)
+      muzik.sesAc().catch(() => { });
     kapat();
     sesGeri();
     const n = nesil;
@@ -249,7 +274,7 @@ const YT_MUZIK = (() => {
             if (n !== nesil)
               return;
             try {
-              e.target.setVolume(+el.ses.value);
+              sesUygula(e.target);
               e.target.playVideo();
             }
             catch (x) { }
@@ -336,14 +361,6 @@ const YT_MUZIK = (() => {
     calD.id = 'yt-cal';
     durD.id = 'yt-durdur';
     satir.append(alan, calD, durD);
-    const sesS = yap('div', 'yt-satir yt-ses-satir'), sesL = yap('label', '', 'YouTube sesi'), ses = yap('input');
-    ses.type = 'range';
-    ses.id = 'yt-ses';
-    ses.min = '0';
-    ses.max = '100';
-    ses.value = String(s.ses);
-    sesL.htmlFor = 'yt-ses';
-    sesS.append(sesL, ses);
     const yer = yap('div', 'yt-oynatici');
     yer.id = 'yt-oynatici-yer';
     yer.hidden = true;
@@ -358,8 +375,8 @@ const YT_MUZIK = (() => {
     uy.id = 'yt-uyari';
     const donS = yap('div', 'yt-satir');
     donS.append(donD);
-    k.append(baslik, satir, sesS, yer, il, donS, uy);
-    el = { link, cal: calD, durdur: durD, ses, yer, ileti: il, don: donD };
+    k.append(baslik, satir, yer, il, donS, uy);
+    el = { link, cal: calD, durdur: durD, yer, ileti: il, don: donD };
     calD.onclick = () => { cal(); };
     durD.onclick = durdur;
     donD.onclick = don;
@@ -367,15 +384,6 @@ const YT_MUZIK = (() => {
       e.preventDefault();
       cal();
     } };
-    ses.oninput = () => {
-      const v = clamp(Math.round(+ses.value) || 0, 0, 100);
-      if (oyuncu)
-        try {
-          oyuncu.setVolume(v);
-        }
-        catch (e) { }
-      yaz({ ses: v });
-    };
     dugmeler();
     return true;
   }

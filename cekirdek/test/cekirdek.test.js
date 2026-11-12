@@ -834,6 +834,8 @@ const { sonuc, kontrol } = kontrolcu();
   Player.prototype.playVideo = function () { var s = this; S.cagri.push('play'); setTimeout(function () { s.durumYap(3); setTimeout(function () { s.durumYap(1); }, 40); }, 30); };
   Player.prototype.stopVideo = function () { S.cagri.push('stop'); this.durumYap(5); };
   Player.prototype.setVolume = function (v) { S.cagri.push('ses:' + v); };
+  Player.prototype.mute = function () { S.cagri.push('mute'); };
+  Player.prototype.unMute = function () { S.cagri.push('unmute'); };
   Player.prototype.getVideoData = function () { return { video_id: this.o.videoId, title: window.__ytBaslik === undefined ? '' : window.__ytBaslik }; };
   Player.prototype.destroy = function () { S.cagri.push('yok'); this.yok = true; this.d.remove(); };
   window.YT = { Player: Player };
@@ -913,13 +915,13 @@ addEventListener('message', e => { if (e.data === 'soru') parent.postMessage({ t
     const ilk = await yq.evaluate(() => {
       document.getElementById('yt-kutu').scrollIntoView({ block: 'nearest' }); // masada sekme yok: Müzik kartı hep yerinde
       const k = document.getElementById('yt-kutu'), u = document.getElementById('yt-uyari');
-      return { ogeler: ['yt-link', 'yt-cal', 'yt-durdur', 'yt-ses', 'yt-don', 'yt-ileti', 'yt-uyari', 'yt-oynatici-yer'].filter(id => k.contains(document.getElementById(id))).length,
+      return { ogeler: ['yt-link', 'yt-cal', 'yt-durdur', 'yt-don', 'yt-ileti', 'yt-uyari', 'yt-oynatici-yer'].filter(id => k.contains(document.getElementById(id))).length,
         uyari: u.textContent, gorunur: !!u.offsetParent && u.getBoundingClientRect().height > 0, betik: [...document.scripts].filter(s => s.src).map(s => s.src), cerceve: document.querySelectorAll('iframe').length,
         oynatici: document.getElementById('yt-oynatici-yer').hidden, link: document.getElementById('yt-link').value };
     });
     await yq.evaluate(() => document.getElementById('yt-kutu').scrollIntoView({ block: 'end' }));
     await yq.screenshot({ path: CIKTI + '/t-youtube-bos.png' });
-    kontrol('YouTube: kutu #yt-kutu içinde kurulur, telif uyarısı görünür; açılışta YouTube\'a hiç istek gitmez, çerçeve yok', ilk.ogeler === 8 && /^Telifli şarkı/.test(ilk.uyari) && ilk.gorunur && ilk.cerceve === 0 && ilk.oynatici && !ilk.betik.some(s => YT_ADRES.test(s)) && ytIstek.length === 0, Object.assign(ilk, { istek: ytIstek.slice() }));
+    kontrol('YouTube: kutu #yt-kutu içinde kurulur, telif uyarısı görünür; açılışta YouTube\'a hiç istek gitmez, çerçeve yok', ilk.ogeler === 7 && /^Telifli şarkı/.test(ilk.uyari) && ilk.gorunur && ilk.cerceve === 0 && ilk.oynatici && !ilk.betik.some(s => YT_ADRES.test(s)) && ytIstek.length === 0, Object.assign(ilk, { istek: ytIstek.slice() }));
     // 3. Yapıştırılan HTML yorumlanmaz, YouTube linki değilse istek gitmez
     const xss = await yq.evaluate(async () => {
       const r = [], l = document.getElementById('yt-link');
@@ -946,8 +948,9 @@ addEventListener('message', e => { if (e.data === 'soru') parent.postMessage({ t
     await bekle(yq, 'API yüklenemedi yazısı', () => /YouTube açılamadı/.test(document.getElementById('yt-ileti').textContent), undefined, 8000);
     const apiYok = await yq.evaluate(() => ({ ileti: document.getElementById('yt-ileti').textContent, sus: CanliOyun._test.muzik.disSessiz, durum: CanliOyun.youtube.durum() }));
     kontrol('YouTube: API yüklenemezse (internet yok) düz bir cümle yazar, oyunun müziği sürer; istenen tek şey API betiği', /^YouTube açılamadı: internet yok/.test(apiYok.ileti) && !apiYok.sus && !apiYok.durum.oynatici && ytIstek.length === 1 && ytIstek[0] === API, Object.assign(apiYok, { istek: ytIstek.slice() }));
-    // 6. Sahte YT ile çalma
+    // 6. Sahte YT ile çalma (önce kartın tek düzeyi 64: oynatıcı ilk açılışında bu düzeyle başlamalı)
     sahteVer = true;
+    await yq.evaluate(() => { const d = document.getElementById('ses-duzey'); d.value = '64'; d.dispatchEvent(new Event('input')); });
     await yq.click('#yt-cal');
     await bekle(yq, 'YouTube çalıyor (sahte YT)', () => CanliOyun.youtube.durum().caliyor, undefined, 8000);
     await yq.waitForTimeout(500);
@@ -965,6 +968,7 @@ addEventListener('message', e => { if (e.data === 'soru') parent.postMessage({ t
     const ay = cal.ayar || {}, pv = ay.playerVars || {};
     kontrol('YouTube: "Çal"dan sonra istenen tek şey API betiği (iki deneme, iki istek); oynatıcı youtube-nocookie.com, yalnız doğrulanmış kimlikler', ytIstek.length === 2 && ytIstek.every(u => u === API) && ay.host === 'https://www.youtube-nocookie.com' && ay.videoId === 'dQw4w9WgXcQ' && pv.list === 'PLx0sYbCqOb8TBPRdmBHs5Iftvv9TPboYG' && pv.listType === 'playlist' && pv.origin === 'http://oyun.test' && !/index|feature|share/.test(JSON.stringify(ay)), { istek: ytIstek.slice(), ayar: ay });
     kontrol('YouTube çalarken oyunun müzik yolu susar (ana düzey yerinde), vuruş saati oyunun kendi temposunda yürür', cal.sus && cal.acik && cal.kazanc < 0.02 && cal.ana > cal.duzey * 0.9 && cal.hiz > cal.beklenen * 0.7 && cal.hiz < cal.beklenen * 1.4 && cal.cagri.includes('play') && /^YouTube'dan çalıyor/.test(cal.ileti), { sus: cal.sus, kazanc: cal.kazanc, ana: cal.ana, vurusHizi: cal.hiz, beklenen: cal.beklenen, ileti: cal.ileti });
+    kontrol('Tek düzey: oynatıcı ilk açılışında kartın düzeyiyle (64) ve sesli başlar', cal.cagri.indexOf('ses:64') >= 0 && cal.cagri.indexOf('ses:64') < cal.cagri.indexOf('play') && cal.cagri.includes('unmute') && !cal.cagri.includes('mute'), cal.cagri);
     kontrol('YouTube: oynatıcı kutunun içinde, en az 200 × 200 px; çalışan link doğrulanmış biçimiyle saklanır', cal.cerceveYeri && cal.yer[0] >= 200 && cal.yer[1] >= 200 && cal.sakli && cal.sakli.link === 'https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLx0sYbCqOb8TBPRdmBHs5Iftvv9TPboYG', { yer: cal.yer, sakli: cal.sakli });
     // 7. Yalnız sahne görünümü (#yayin): panel gizlenir, oynatıcı yerinde kalır, çalma sürer
     const yayin = await yq.evaluate(async () => {
@@ -1018,8 +1022,9 @@ addEventListener('message', e => { if (e.data === 'soru') parent.postMessage({ t
     // 8. YouTube sesi, Durdur, YouTube'da duraklatma, Oyunun müziğine dön
     const dur = await yq.evaluate(async () => {
       const m = CanliOyun._test.muzik, T = window.__ytSahte, bekle = ms => new Promise(z => setTimeout(z, ms)), r = {};
-      const s = document.getElementById('yt-ses'); s.value = '30'; s.dispatchEvent(new Event('input'));
-      r.ses = T.cagri.includes('ses:30');
+      const s = document.getElementById('ses-duzey'); s.value = '30'; s.dispatchEvent(new Event('input'));
+      await bekle(400);
+      r.ses = { oynatici: T.cagri[T.cagri.length - 1], duzey: +m.duzey.toFixed(3), ana: +m.ses.son.gain.value.toFixed(3) };
       document.getElementById('yt-durdur').click();
       r.hemen = m.disSessiz;
       await bekle(400);
@@ -1039,7 +1044,7 @@ addEventListener('message', e => { if (e.data === 'soru') parent.postMessage({ t
       r.don = { sus: m.disSessiz, yok: T.cagri[T.cagri.length - 1] === 'yok', gizli: document.getElementById('yt-oynatici-yer').hidden, kazanc: +m.ses.muzikYol.gain.value.toFixed(3), oynatici: CanliOyun.youtube.durum().oynatici, ileti: document.getElementById('yt-ileti').textContent };
       return r;
     });
-    kontrol('YouTube sesi kaydırıcısı oynatıcının sesini ayarlar', dur.ses, dur.ses);
+    kontrol('Tek düzey: YouTube çalarken kartın düzeyi oynatıcının sesini ve oyunun ana düzeyini birlikte ayarlar', dur.ses.oynatici === 'ses:30' && Math.abs(dur.ses.duzey - 0.21) < 1e-3 && Math.abs(dur.ses.ana - 0.21) < 0.01, dur.ses);
     kontrol('YouTube: Durdur oyunun müziğini hemen geri getirir (kaldığı düzeyde)', !dur.hemen && dur.durdur.stop && dur.durdur.kazanc > 0.9 && !dur.durdur.caliyor && /^Durdu/.test(dur.durdur.ileti), { hemen: dur.hemen, durdur: dur.durdur });
     kontrol('YouTube: oynatıcıda duraklatınca oyunun müziği kısa beklemeyle döner (listede şarkı geçişinde araya girmez)', dur.yeniden && dur.duraklatHemen && !dur.duraklat.sus && /^Durdu/.test(dur.duraklat.ileti), { yeniden: dur.yeniden, hemen: dur.duraklatHemen, sonra: dur.duraklat });
     kontrol('YouTube: "Oyunun müziğine dön" oynatıcıyı kaldırır, oyunun müziği geri gelir', dur.tekrarCaliyor && !dur.don.sus && dur.don.yok && dur.don.gizli && !dur.don.oynatici && dur.don.kazanc > 0.9, dur.don);
@@ -1067,6 +1072,47 @@ addEventListener('message', e => { if (e.data === 'soru') parent.postMessage({ t
       return { ornek: o.length, geri, enDurmaSn: +enDurma.toFixed(2), sure: +((o[o.length - 1][0] - o[0][0]) / 1000).toFixed(1) };
     });
     kontrol('YouTube çalıp dururken vuruş saati hiç geri gitmez, donmaz', ytSaat.ornek > 100 && ytSaat.geri === 0 && ytSaat.enDurmaSn < 0.6, ytSaat);
+    // Tek düzey, tek düğme: kartta tek kaydırıcı; Sesi kapat / aç oynatıcıyı da kapsar; düzey Çal ve dönüşte taşınır;
+    // oyunun sesi kapalıyken Çal sesi açar (düğme doğru yazar).
+    const tek = await yq.evaluate(async () => {
+      const m = CanliOyun._test.muzik, T = window.__ytSahte, bekle = ms => new Promise(z => setTimeout(z, ms)), r = {};
+      const kaydir = v => { const d = document.getElementById('ses-duzey'); d.value = String(v); d.dispatchEvent(new Event('input')); };
+      const cal = async () => { const n = T.cagri.length; document.getElementById('yt-cal').click(); const t0 = performance.now(); while (!CanliOyun.youtube.durum().caliyor && performance.now() - t0 < 4000) await bekle(50); await bekle(300); return T.cagri.slice(n); };
+      const dugme = () => document.getElementById('ses-yazi').textContent;
+      r.kaydirici = document.getElementById('muzik-kart').querySelectorAll('input[type=range]').length;
+      r.ytSes = !!document.getElementById('yt-ses');
+      kaydir(55);
+      r.cal = await cal();
+      r.calDuzey = +m.duzey.toFixed(3);
+      kaydir(40);
+      await bekle(400);
+      r.kaydir = { son: T.cagri[T.cagri.length - 1], duzey: +m.duzey.toFixed(3), ana: +m.ses.son.gain.value.toFixed(3) };
+      let n = T.cagri.length;
+      document.getElementById('ses-dugme').click();
+      await bekle(400);
+      r.kapat = { cagri: T.cagri.slice(n), dugme: dugme(), acik: m.acik, caliyor: CanliOyun.youtube.durum().caliyor };
+      n = T.cagri.length;
+      document.getElementById('ses-dugme').click();
+      await bekle(400);
+      r.ac = { cagri: T.cagri.slice(n), dugme: dugme(), acik: m.acik };
+      document.getElementById('yt-don').click();
+      await bekle(400);
+      r.don = { duzey: +m.duzey.toFixed(3), ana: +m.ses.son.gain.value.toFixed(3), kaydirici: document.getElementById('ses-duzey').value };
+      // oyunun sesi kapalıyken Çal
+      document.getElementById('ses-dugme').click();
+      await bekle(400);
+      r.kapaliyken = { dugme: dugme(), acik: m.acik };
+      r.kapaliCal = await cal();
+      await bekle(300);
+      r.kapaliSonra = { dugme: dugme(), acik: m.acik, caliyor: CanliOyun.youtube.durum().caliyor, sonSes: T.cagri.filter(x => x === 'mute' || x === 'unmute').pop(), cagri: T.cagri.slice(-4) };
+      document.getElementById('yt-don').click();
+      await bekle(300);
+      return r;
+    });
+    kontrol('Tek düzey: Müzik kartında tek ses kaydırıcısı var (YouTube kutusunda ayrı kaydırıcı yok)', tek.kaydirici === 1 && !tek.ytSes, { kaydirici: tek.kaydirici, ytSes: tek.ytSes });
+    kontrol('Tek düzey: Çal o anki düzeyle (55) başlar; kaydırıcı oynatıcıyı ve ana düzeyi birlikte değiştirir; dönünce oyun aynı düzeyde', tek.cal.includes('ses:55') && Math.abs(tek.calDuzey - 0.385) < 2e-3 && tek.kaydir.son === 'ses:40' && Math.abs(tek.kaydir.duzey - 0.28) < 2e-3 && Math.abs(tek.kaydir.ana - 0.28) < 0.01 && Math.abs(tek.don.duzey - 0.28) < 2e-3 && Math.abs(tek.don.ana - 0.28) < 0.01 && tek.don.kaydirici === '40', { cal: tek.cal, calDuzey: tek.calDuzey, kaydir: tek.kaydir, don: tek.don });
+    kontrol('Tek düğme: Sesi kapat YouTube şarkısını da susturur, Sesi aç geri açar (aynı düzeyle); düğmenin yazısı doğru', tek.kapat.cagri.includes('mute') && tek.kapat.dugme === 'Sesi aç' && !tek.kapat.acik && tek.kapat.caliyor && tek.ac.cagri.includes('unmute') && tek.ac.cagri.includes('ses:40') && tek.ac.dugme === 'Sesi kapat' && tek.ac.acik, { kapat: tek.kapat, ac: tek.ac });
+    kontrol('Tek düğme: oyunun sesi kapalıyken Çal sesi açar; şarkı sesli çalar, düğme "Sesi kapat" yazar', tek.kapaliyken.dugme === 'Sesi aç' && !tek.kapaliyken.acik && tek.kapaliSonra.acik && tek.kapaliSonra.caliyor && tek.kapaliSonra.dugme === 'Sesi kapat' && tek.kapaliSonra.sonSes === 'unmute', { once: tek.kapaliyken, sonra: tek.kapaliSonra });
     // İki yol, sesi dosyaya yazan bağlamda (kesin): müzik yolu 0 iken müzik hiç duyulmaz, zil duyulur; zil yalnız efekt
     // yolundan geçer (efekt yolu 0 iken zil de duyulmaz).
     const yollar = await yq.evaluate(async () => {
@@ -1136,8 +1182,8 @@ addEventListener('message', e => { if (e.data === 'soru') parent.postMessage({ t
     await yq.reload();
     await hazirBekle(yq);
     await yq.waitForTimeout(800);
-    const yeniden = await yq.evaluate(() => ({ link: document.getElementById('yt-link').value, ses: document.getElementById('yt-ses').value, durum: CanliOyun.youtube.durum(), sus: CanliOyun._test.muzik.disSessiz, cerceve: document.querySelectorAll('iframe, .sahte-yt').length, yt: typeof window.YT }));
-    kontrol('YouTube: yeniden açılışta son çalışan link ve ses düzeyi kutuda, kendiliğinden çalmaz, YouTube\'a istek gitmez', yeniden.link === 'https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLx0sYbCqOb8TBPRdmBHs5Iftvv9TPboYG' && yeniden.ses === '30' && !yeniden.durum.oynatici && !yeniden.durum.caliyor && !yeniden.sus && yeniden.cerceve === 0 && yeniden.yt === 'undefined' && ytIstek.length === istekOnce, Object.assign(yeniden, { yeniIstek: ytIstek.length - istekOnce }));
+    const yeniden = await yq.evaluate(() => ({ link: document.getElementById('yt-link').value, durum: CanliOyun.youtube.durum(), sus: CanliOyun._test.muzik.disSessiz, cerceve: document.querySelectorAll('iframe, .sahte-yt').length, yt: typeof window.YT }));
+    kontrol('YouTube: yeniden açılışta son çalışan link kutuda, kendiliğinden çalmaz, YouTube\'a istek gitmez', yeniden.link === 'https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLx0sYbCqOb8TBPRdmBHs5Iftvv9TPboYG' && !yeniden.durum.oynatici && !yeniden.durum.caliyor && !yeniden.sus && yeniden.cerceve === 0 && yeniden.yt === 'undefined' && ytIstek.length === istekOnce, Object.assign(yeniden, { yeniIstek: ytIstek.length - istekOnce }));
     await yq.close();
     // 11. #yt-kutu yok: hata yok, hiçbir şey yapılmaz
     const kutusuz = asilHtml.replace('<div id="yt-kutu"></div>', '');

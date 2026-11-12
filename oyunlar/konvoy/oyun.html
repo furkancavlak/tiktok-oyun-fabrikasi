@@ -406,14 +406,12 @@ body:not(.yayin) .cik-yayin{display:none}
 .yt-kutu .yt-satir{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center}
 .yt-kutu .yt-satir > .alan{flex:1 1 100%}
 .yt-kutu .yt-satir > .dugme{flex:1 1 0;justify-content:center}
-.yt-ses-satir input[type=range]{flex:1 1 80px;width:auto}
 .yt-kutu input[type=text]{background:var(--murekkep);border:1px solid var(--cizgi);border-radius:9px;padding:8px 11px;min-width:0;width:100%;
   transition:border-color .15s}
 .yt-kutu input[type=text]:hover{border-color:var(--soluk)}
 .yt-kutu input::placeholder{color:var(--soluk);opacity:.7}
 .yt-kutu .dugme:disabled{opacity:.45;cursor:default;transform:none}
 .yt-kutu .dugme:disabled:hover{border-color:var(--cizgi)}
-.yt-ses-satir label{font-size:12px;color:var(--soluk);white-space:nowrap}
 .yt-oynatici{position:relative;width:100%;min-width:200px;min-height:200px;aspect-ratio:16/9;border-radius:10px;overflow:hidden;
   background:var(--murekkep);border:1px solid var(--cizgi)}
 .yt-oynatici > *{position:absolute;inset:0;width:100%;height:100%;border:0}
@@ -1371,6 +1369,9 @@ class Muzik {
     // yazılacak adı (temizlenmiş, kısaltılmış düz metin), yoksa null
     this.disSessiz = false;
     this.disAd = null;
+    // dinle(fn): ses açılınca / kapanınca ve düzey değişince fn(muzik) çağrılır (masanın Sesi aç / kapat yazısı,
+    // YouTube oynatıcısının sesi: tek düzey, tek düğme her şeyi yönetir)
+    this.dinleyiciler = [];
   }
   simdi() { return this.acik ? this.ctx.currentTime : performance.now() / 1000; }
   beatAt(t) {
@@ -1640,6 +1641,7 @@ class Muzik {
     this.ses.son.gain.setTargetAtTime(this.duzey, this.ctx.currentTime, 0.05);
     if (this.kaynak === 'hazir' && !this.hazirCal)
       this.hazirBaslat(this.hz ? this.hz.no : 0);
+    this.sesBildir();
     return true;
   }
   async sesKapat() {
@@ -1648,7 +1650,18 @@ class Muzik {
     this.sentezeDon();
     this.takim.sustur(this, this.ctx.currentTime, false);
     this.tabanDegistir(false);
+    this.sesBildir();
     await this.ctx.suspend();
+  }
+  dinle(fn) { this.dinleyiciler.push(fn); }
+  sesBildir() {
+    for (const fn of this.dinleyiciler)
+      try {
+        fn(this);
+      }
+      catch (e) {
+        console.error(e);
+      }
   }
   duzeyAyarla(v) {
     this.duzey = v;
@@ -1656,6 +1669,7 @@ class Muzik {
       this.calar.volume = clamp(v / 0.7, 0, 1);
     if (this.acik)
       this.ses.son.gain.setTargetAtTime(v, this.ctx.currentTime, 0.05);
+    this.sesBildir();
   }
   // Oyunun müziğini dışarıdan kısar / geri açar (12-youtube.js: YouTube'dan şarkı çalarken). Yalnız müzik yolu
   // (muzikYol) ve hazır parçanın ses öğesi susar; müzik sessiz akmaya devam eder. Efekt yolu (hediye zili) duyulmayı
@@ -1810,7 +1824,9 @@ const muzik = new Muzik();
  *   11 karakterlik video kimliğini (ve varsa liste kimliğini) çıkarır, oynatıcıya yalnız bunlar verilir.
  * - Oynatıcı çerçevesi (iframe) yerinden hiç oynatılmaz (taşınan iframe yeniden yüklenir ve şarkı kesilir). Yalnız
  *   sahne görünümünde (#yayin) panel display:none olur; çerçeve sayfada kalır, tarayıcı içindeki şarkıyı çalmayı sürdürür.
- * - Son çalışan link (yalnız doğrulanmış kimliklerden kurulan biçimi) ve YouTube ses düzeyi oyun başına saklanır
+ * - Ses: ayrı kaydırıcı yok. Oynatıcının sesi Müzik kartının tek düzeyinden gelir, oyunun ses düğmesi şarkıyı da susturur
+ *   (sesUygula, muzik.dinle). Oyunun sesi kapalıyken "Çal" sesi açar.
+ * - Son çalışan link (yalnız doğrulanmış kimliklerden kurulan biçimi) oyun başına saklanır
  *   (localStorage "<oyun id>-youtube"). Sayfa açılınca hiçbir şey kendiliğinden çalmaz.
  * Dışarıya: CanliOyun.youtube = { kur(kutu), linkCoz(metin), cal(link), durdur(), don(), durum() }.
  */
@@ -1876,10 +1892,10 @@ const YT_MUZIK = (() => {
   function oku() {
     try {
       const v = JSON.parse(localStorage.getItem(SAKLA_AD) || '{}'), l = linkCoz(v && v.link);
-      return { link: l ? linkYaz(l) : '', ses: Number.isFinite(+v.ses) ? clamp(Math.round(+v.ses), 0, 100) : 80 };
+      return { link: l ? linkYaz(l) : '' };
     }
     catch (e) {
-      return { link: '', ses: 80 };
+      return { link: '' };
     }
   }
   function yaz(ek) {
@@ -1890,6 +1906,25 @@ const YT_MUZIK = (() => {
   }
 
   let kutu = null, el = null, apiSoz = null, oyuncu = null, nesil = 0, caliyor = false, donus = 0, basla = 0;
+
+  // Tek düzey, tek düğme: oynatıcının sesi Müzik kartının düzeyinden (muzik.duzey; 0–0,7 → 0–100) gelir, oyunun ses
+  // düğmesi kapalıysa (muzik.acik yanlış) oynatıcı da sessizdir. Kart düzeyi ya da sesi değiştirince muzik.dinle bildirir.
+  const oynaticiSesi = () => Math.round(clamp(muzik.duzey / 0.7, 0, 1) * 100);
+  function sesUygula(o) {
+    o = o || oyuncu;
+    if (!o)
+      return;
+    try {
+      if (muzik.acik) {
+        o.unMute();
+        o.setVolume(oynaticiSesi());
+      }
+      else
+        o.mute();
+    }
+    catch (e) { }
+  }
+  muzik.dinle(() => sesUygula());
 
   // API betiğini bir kez yükler. Başarısız olursa (internet yok, engelli, 15 sn'de hazır olmadı) bir sonraki "Çal"
   // yeniden dener.
@@ -2012,6 +2047,10 @@ const YT_MUZIK = (() => {
       ileti(YAZI.disk, 'hata');
       return false;
     }
+    // Oyunun sesi kapalıyken "Çal": ses açılır (şarkı da duyulsun, düğme "Sesi kapat" yazsın). Tıklamanın içinde,
+    // beklemeden çağrılır: tarayıcı sesi yalnız kullanıcı dokunuşunda açar.
+    if (!muzik.acik)
+      muzik.sesAc().catch(() => { });
     kapat();
     sesGeri();
     const n = nesil;
@@ -2047,7 +2086,7 @@ const YT_MUZIK = (() => {
             if (n !== nesil)
               return;
             try {
-              e.target.setVolume(+el.ses.value);
+              sesUygula(e.target);
               e.target.playVideo();
             }
             catch (x) { }
@@ -2134,14 +2173,6 @@ const YT_MUZIK = (() => {
     calD.id = 'yt-cal';
     durD.id = 'yt-durdur';
     satir.append(alan, calD, durD);
-    const sesS = yap('div', 'yt-satir yt-ses-satir'), sesL = yap('label', '', 'YouTube sesi'), ses = yap('input');
-    ses.type = 'range';
-    ses.id = 'yt-ses';
-    ses.min = '0';
-    ses.max = '100';
-    ses.value = String(s.ses);
-    sesL.htmlFor = 'yt-ses';
-    sesS.append(sesL, ses);
     const yer = yap('div', 'yt-oynatici');
     yer.id = 'yt-oynatici-yer';
     yer.hidden = true;
@@ -2156,8 +2187,8 @@ const YT_MUZIK = (() => {
     uy.id = 'yt-uyari';
     const donS = yap('div', 'yt-satir');
     donS.append(donD);
-    k.append(baslik, satir, sesS, yer, il, donS, uy);
-    el = { link, cal: calD, durdur: durD, ses, yer, ileti: il, don: donD };
+    k.append(baslik, satir, yer, il, donS, uy);
+    el = { link, cal: calD, durdur: durD, yer, ileti: il, don: donD };
     calD.onclick = () => { cal(); };
     durD.onclick = durdur;
     donD.onclick = don;
@@ -2165,15 +2196,6 @@ const YT_MUZIK = (() => {
       e.preventDefault();
       cal();
     } };
-    ses.oninput = () => {
-      const v = clamp(Math.round(+ses.value) || 0, 0, 100);
-      if (oyuncu)
-        try {
-          oyuncu.setVolume(v);
-        }
-        catch (e) { }
-      yaz({ ses: v });
-    };
     dugmeler();
     return true;
   }
@@ -3971,10 +3993,15 @@ async function sesDegistir(ac) {
   }
   else
     await muzik.sesKapat();
+  sesYaz();
+}
+// Düğmenin yazısı sesin gerçek durumundan: ses başka yerden (YouTube kutusunun "Çal"ı) açılınca da doğru kalır.
+function sesYaz() {
   $('ses-yazi').textContent = muzik.acik ? 'Sesi kapat' : 'Sesi aç';
   $('ses-dugme').classList.toggle('ana', !muzik.acik);
   $('ses-cagri').hidden = muzik.acik;
 }
+muzik.dinle(sesYaz);
 // Masanın en az genişliği (px): pencere uzun ve darsa sahne biraz küçülür ki masa iki sütuna sığsın (stil.css).
 const MASA_EN_AZ = 560;
 function boyutla() {

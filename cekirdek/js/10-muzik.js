@@ -635,6 +635,9 @@ class Muzik {
     // yazılacak adı (temizlenmiş, kısaltılmış düz metin), yoksa null
     this.disSessiz = false;
     this.disAd = null;
+    // dinle(fn): ses açılınca / kapanınca ve düzey değişince fn(muzik) çağrılır (masanın Sesi aç / kapat yazısı,
+    // YouTube oynatıcısının sesi: tek düzey, tek düğme her şeyi yönetir)
+    this.dinleyiciler = [];
   }
   simdi() { return this.acik ? this.ctx.currentTime : performance.now() / 1000; }
   beatAt(t) {
@@ -904,6 +907,7 @@ class Muzik {
     this.ses.son.gain.setTargetAtTime(this.duzey, this.ctx.currentTime, 0.05);
     if (this.kaynak === 'hazir' && !this.hazirCal)
       this.hazirBaslat(this.hz ? this.hz.no : 0);
+    this.sesBildir();
     return true;
   }
   async sesKapat() {
@@ -912,7 +916,18 @@ class Muzik {
     this.sentezeDon();
     this.takim.sustur(this, this.ctx.currentTime, false);
     this.tabanDegistir(false);
+    this.sesBildir();
     await this.ctx.suspend();
+  }
+  dinle(fn) { this.dinleyiciler.push(fn); }
+  sesBildir() {
+    for (const fn of this.dinleyiciler)
+      try {
+        fn(this);
+      }
+      catch (e) {
+        console.error(e);
+      }
   }
   duzeyAyarla(v) {
     this.duzey = v;
@@ -920,6 +935,7 @@ class Muzik {
       this.calar.volume = clamp(v / 0.7, 0, 1);
     if (this.acik)
       this.ses.son.gain.setTargetAtTime(v, this.ctx.currentTime, 0.05);
+    this.sesBildir();
   }
   // Oyunun müziğini dışarıdan kısar / geri açar (12-youtube.js: YouTube'dan şarkı çalarken). Yalnız müzik yolu
   // (muzikYol) ve hazır parçanın ses öğesi susar; müzik sessiz akmaya devam eder. Efekt yolu (hediye zili) duyulmayı

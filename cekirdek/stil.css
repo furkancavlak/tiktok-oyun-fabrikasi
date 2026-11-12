@@ -396,14 +396,12 @@ body:not(.yayin) .cik-yayin{display:none}
 .yt-kutu .yt-satir{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center}
 .yt-kutu .yt-satir > .alan{flex:1 1 100%}
 .yt-kutu .yt-satir > .dugme{flex:1 1 0;justify-content:center}
-.yt-ses-satir input[type=range]{flex:1 1 80px;width:auto}
 .yt-kutu input[type=text]{background:var(--murekkep);border:1px solid var(--cizgi);border-radius:9px;padding:8px 11px;min-width:0;width:100%;
   transition:border-color .15s}
 .yt-kutu input[type=text]:hover{border-color:var(--soluk)}
 .yt-kutu input::placeholder{color:var(--soluk);opacity:.7}
 .yt-kutu .dugme:disabled{opacity:.45;cursor:default;transform:none}
 .yt-kutu .dugme:disabled:hover{border-color:var(--cizgi)}
-.yt-ses-satir label{font-size:12px;color:var(--soluk);white-space:nowrap}
 .yt-oynatici{position:relative;width:100%;min-width:200px;min-height:200px;aspect-ratio:16/9;border-radius:10px;overflow:hidden;
   background:var(--murekkep);border:1px solid var(--cizgi)}
 .yt-oynatici > *{position:absolute;inset:0;width:100%;height:100%;border:0}

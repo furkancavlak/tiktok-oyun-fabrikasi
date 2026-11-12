@@ -45,10 +45,15 @@ async function sesDegistir(ac) {
   }
   else
     await muzik.sesKapat();
+  sesYaz();
+}
+// Düğmenin yazısı sesin gerçek durumundan: ses başka yerden (YouTube kutusunun "Çal"ı) açılınca da doğru kalır.
+function sesYaz() {
   $('ses-yazi').textContent = muzik.acik ? 'Sesi kapat' : 'Sesi aç';
   $('ses-dugme').classList.toggle('ana', !muzik.acik);
   $('ses-cagri').hidden = muzik.acik;
 }
+muzik.dinle(sesYaz);
 // Masanın en az genişliği (px): pencere uzun ve darsa sahne biraz küçülür ki masa iki sütuna sığsın (stil.css).
 const MASA_EN_AZ = 560;
 function boyutla() {

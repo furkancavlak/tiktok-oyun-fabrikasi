@@ -222,8 +222,9 @@ Oyunun kendi müziği yerine kendi seçtiğin bir şarkıyı YouTube'dan çalabi
 3. Oynatıcı kutunun içinde görünür. Şarkı çalarken oyunun kendi müziği susar, sahnede havanın adı ve vuruş/dk
    yerine şarkının adı yazar. Hediye zili gibi efekt sesleri şarkının üstünde duyulmaya devam eder. **Durdur**'a
    basınca, şarkı bitince ya da **Oyunun müziğine dön**'e basınca oyunun müziği kaldığı yerden geri gelir.
-   "YouTube sesi" kaydırıcısı yalnız şarkının sesini ayarlar; oyunun ses düğmesi ve düzeyi oyunun bütün sesini
-   (müzik ve efektler) ayarlar.
+   Ses için ayrı bir kaydırıcı yok: Müzik kartının tek düzey kaydırıcısı şarkı çalarken şarkının sesini de ayarlar
+   (şarkı ve hediye zili birlikte açılıp kısılır); **Sesi kapat** şarkıyı da susturur. Oyunun sesi kapalıyken
+   **Çal**'a basarsan ses açılır. Seçtiğin düzey şarkı başlarken de, oyunun müziğine dönünce de aynı kalır.
 4. "Yalnızca sahneyi göster" görünümünde şarkı çalmaya devam eder.
 
 Bilmen gerekenler:
@@ -236,7 +237,7 @@ Bilmen gerekenler:
   silinmiş ya da gizliyse "Bu video bulunamadı…" yazar; oyunun müziği geri gelir, başka bir link dene. Plak
   şirketlerinin resmî kliplerinin çoğu başka sitelerde çalmaya kapalıdır. İnternet yoksa "YouTube açılamadı…" yazar.
 - YouTube bazen videonun önünde reklam gösterebilir; bu oyunun elinde değildir.
-- Son çalışan link ve YouTube ses düzeyi o oyun için hatırlanır (tarayıcının kendi deposunda). Sayfa açılınca hiçbir
+- Son çalışan link o oyun için hatırlanır (tarayıcının kendi deposunda). Sayfa açılınca hiçbir
   şey kendiliğinden çalmaz.
 - **İki yol.** Ses motorunda ana düzeyin (`muzik.ses.son`) altında iki yol vardır: `muzik.ses.muzikYol` (çalan müziğin
   hepsi: davul, ezgi, eşlik, yankı, davul şovu; takımların bağlandığı `ses.ana` buraya akar) ve `muzik.ses.efektYol`
@@ -259,4 +260,5 @@ Bilmen gerekenler:
 | `muzik.disSustur(evet, ad)`, `muzik.disSessiz` | Oyunun müziğini dışarıdan kısar / geri açar (YouTube çalarken): yalnız `muzikYol` ve hazır parçanın ses öğesi. Efektler, saat, hava, tempo, ses açık / kapalı, ana düzey aynı kalır |
 | `muzik.disAd` | Dışarıdan çalan şarkının sahnede yazılacak adı: temizlenmiş, en çok 36 karakter, düz metin (boşsa "YouTube'dan şarkı"); dış kaynak yokken `null`. Sahnedeki çalan satırı (`35-kare.js`) bunu okur |
 | `muzik.ses.muzikYol`, `muzik.ses.efektYol` | Ana düzeyin altındaki iki yol: müzik (takımların `ses.ana`'sı buraya akar) ve tek seferlik efektler (hediye zili) |
-| `CanliOyun.youtube` | YouTube kutusu (`12-youtube.js`): `kur(kutu)`, `linkCoz(metin)`, `cal(link)`, `durdur()`, `don()`, `durum()` |
+| `muzik.dinle(fn)` | Ses açılınca / kapanınca ve ana düzey değişince `fn(muzik)` çağrılır (`sesBildir`). Masanın Sesi aç / kapat yazısı ve YouTube oynatıcısının sesi (`muzik.duzey`, `muzik.acik`) buradan izler |
+| `CanliOyun.youtube` | YouTube kutusu (`12-youtube.js`): `kur(kutu)`, `linkCoz(metin)`, `cal(link)`, `durdur()`, `don()`, `durum()`. Kutunun içindeki kimlikler: `#yt-link`, `#yt-cal`, `#yt-durdur`, `#yt-oynatici-yer`, `#yt-ileti`, `#yt-don`, `#yt-uyari`. Ses kaydırıcısı yok: düzey kartın `#ses-duzey`'inden, susturma `#ses-dugme`'den |

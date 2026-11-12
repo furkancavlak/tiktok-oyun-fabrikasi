@@ -384,7 +384,10 @@ cekirdek }`:
 - `cekirdek`: kamera, etiket, insan takımı ve çizim işlevleri (testler sahne dışı deneme için çağırır).
 
 `CanliOyun.youtube` → Müzik bölümündeki YouTube kutusu (`12-youtube.js`, `docs/MUZIK.md`): `kur(kutu)`,
-`linkCoz(metin)`, `cal(link)`, `durdur()`, `don()`, `durum()`. Oyun kodu buna dokunmaz.
+`linkCoz(metin)`, `cal(link)`, `durdur()`, `don()`, `durum()`. Kutunun içindeki kimlikler: `#yt-link`, `#yt-cal`,
+`#yt-durdur`, `#yt-oynatici-yer`, `#yt-ileti`, `#yt-don`, `#yt-uyari`. Kutunun kendi ses kaydırıcısı yoktur: oynatıcının
+sesi kartın tek düzeyinden (`#ses-duzey` → `muzik.duzey`) gelir, `#ses-dugme` onu da susturur (`muzik.dinle`).
+Oyun kodu buna dokunmaz.
 
 ## Yayın masası
 
