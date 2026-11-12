@@ -278,7 +278,8 @@ input[type=range]{accent-color:var(--vurgu);width:100%;min-width:80px;margin:0}
 .hediyeler{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:4px}
 .hediyeler .dugme{flex-direction:column;align-items:flex-start;gap:0;padding:5px 5px 5px 7px;min-width:0;border-radius:9px}
 .hediyeler .h-esik{max-width:100%;font-size:12px;font-weight:700;letter-spacing:-.01em;color:var(--vurgu);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.hediyeler .h-ad{font-size:12px;color:var(--soluk);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* kademenin adı kesilmez, gerekirse ikinci satıra iner ("Davulcu coşar"); eşik ("1.000 jeton") tek satırda kalır */
+.hediyeler .h-ad{font-size:12px;line-height:1.25;color:var(--soluk);max-width:100%;overflow-wrap:break-word;hyphens:auto}
 .oto-satir{justify-content:space-between;gap:6px 10px}
 
 /* Kip ilk karede: köprü <html data-kip> yazar (kopru.js); betik çalışmadan da canlı yayında deneme izleyicisi kartı
@@ -397,11 +398,15 @@ body:not(.yayin) .cik-yayin{display:none}
 }
 
 /* ==== YouTube'dan şarkı (cekirdek/js/12-youtube.js) — başı ====
-   Kutu #yt-kutu içine kurulur (öğeleri modül yazar). Oynatıcı YouTube'un kuralı gereği en az 200 × 200 px görünür;
-   genişlik kutunun genişliğidir, yükseklik 16:9 ama 200 px'ten az değil. */
-.yt-kutu{display:flex;flex-direction:column;gap:9px;padding-top:14px;border-top:1px solid var(--acik-b)}
-.yt-kutu .yt-satir{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.yt-kutu .yt-satir > .alan{flex:1 1 180px}
+   Kutu #yt-kutu içine (masada Müzik kartının sonuna) kurulur; öğeleri modül yazar. Oynatıcı YouTube'un kuralı gereği en
+   az 200 × 200 px görünür: genişlik kartın iç genişliği, yükseklik 16:9 ama 200 px'ten az değil. Dar sütunda (1366×768'de
+   ~230 px) link alanı tam satır, düğmeler altında; oynatıcı link satırının altındadır, sütun kaydırılınca link hep yukarıda. */
+/* position: görünmez etiket (.gorunmez, mutlak konumlu) kaydırılan sütunun içinde kalsın, sayfayı uzatmasın */
+.yt-kutu{position:relative;display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid var(--acik-b)}
+.yt-kutu .yt-satir{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center}
+.yt-kutu .yt-satir > .alan{flex:1 1 100%}
+.yt-kutu .yt-satir > .dugme{flex:1 1 0;justify-content:center}
+.yt-ses-satir input[type=range]{flex:1 1 80px;width:auto}
 .yt-kutu input[type=text]{background:var(--murekkep);border:1px solid var(--cizgi);border-radius:9px;padding:8px 11px;min-width:0;width:100%;
   transition:border-color .15s}
 .yt-kutu input[type=text]:hover{border-color:var(--soluk)}
@@ -2124,7 +2129,7 @@ const YT_MUZIK = (() => {
     link.value = s.link;
     lb.htmlFor = 'yt-link';
     alan.append(lb, link);
-    const calD = yap('button', 'dugme ana', 'Çal'), durD = yap('button', 'dugme', 'Durdur');
+    const calD = yap('button', 'dugme ana kucuk', 'Çal'), durD = yap('button', 'dugme kucuk', 'Durdur');
     calD.type = durD.type = 'button';
     calD.id = 'yt-cal';
     durD.id = 'yt-durdur';
@@ -2144,7 +2149,7 @@ const YT_MUZIK = (() => {
     il.id = 'yt-ileti';
     il.setAttribute('role', 'status');
     il.setAttribute('aria-live', 'polite');
-    const donD = yap('button', 'dugme', 'Oyunun müziğine dön');
+    const donD = yap('button', 'dugme kucuk', 'Oyunun müziğine dön');
     donD.type = 'button';
     donD.id = 'yt-don';
     const uy = yap('p', 'aciklama yt-uyari', YAZI.uyari);
@@ -4150,8 +4155,9 @@ function masaYaz() {
   yaz('d-lider-jt', D.lider ? sayi(D.lider.jeton) : '');
   $('d-lider').title = D.lider ? D.lider.ad : '';
   // Gelişmiş: kare süresi, vuruş
-  yaz('d-bpm', Math.round(muzik.calanBpm()));
-  yaz('d-hava', muzik.calanAd());
+  // YouTube çalarken (muzik.disAd) şarkının adı yazılır, vuruş/dk yazılmaz: dans o şarkıyı izlemez.
+  yaz('d-bpm', muzik.disAd !== null ? '-' : Math.round(muzik.calanBpm()));
+  yaz('d-hava', muzik.disAd !== null ? muzik.disAd : muzik.calanAd());
   const ms = D.kareMs || 0;
   yaz('d-kare', ms ? ms.toFixed(1) : '-');
   $('d-kare-hucre').dataset.durum = ms > 33 ? 'kotu' : ms > 22 ? 'agir' : 'iyi';

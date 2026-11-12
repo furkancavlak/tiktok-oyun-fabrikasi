@@ -331,7 +331,7 @@ const YT_MUZIK = (() => {
     link.value = s.link;
     lb.htmlFor = 'yt-link';
     alan.append(lb, link);
-    const calD = yap('button', 'dugme ana', 'Çal'), durD = yap('button', 'dugme', 'Durdur');
+    const calD = yap('button', 'dugme ana kucuk', 'Çal'), durD = yap('button', 'dugme kucuk', 'Durdur');
     calD.type = durD.type = 'button';
     calD.id = 'yt-cal';
     durD.id = 'yt-durdur';
@@ -351,7 +351,7 @@ const YT_MUZIK = (() => {
     il.id = 'yt-ileti';
     il.setAttribute('role', 'status');
     il.setAttribute('aria-live', 'polite');
-    const donD = yap('button', 'dugme', 'Oyunun müziğine dön');
+    const donD = yap('button', 'dugme kucuk', 'Oyunun müziğine dön');
     donD.type = 'button';
     donD.id = 'yt-don';
     const uy = yap('p', 'aciklama yt-uyari', YAZI.uyari);

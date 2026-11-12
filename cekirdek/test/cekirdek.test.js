@@ -909,7 +909,7 @@ addEventListener('message', e => { if (e.data === 'soru') parent.postMessage({ t
     kontrol('YouTube linki: başka site, benzer ad (youtube.com.evil.example), javascript:/data:, yanlış uzunlukta kimlik, boş girdi reddedilir', tablo.yanlisR.length === 0 && tablo.ret >= 30, { ret: tablo.ret, gecen: tablo.yanlisR });
     // 2. Açılışta hiçbir şey istenmez; kutu yerinde, uyarı görünür
     const ilk = await yq.evaluate(() => {
-      document.getElementById('sekme-muzik').click();
+      document.getElementById('yt-kutu').scrollIntoView({ block: 'nearest' }); // masada sekme yok: Müzik kartı hep yerinde
       const k = document.getElementById('yt-kutu'), u = document.getElementById('yt-uyari');
       return { ogeler: ['yt-link', 'yt-cal', 'yt-durdur', 'yt-ses', 'yt-don', 'yt-ileti', 'yt-uyari', 'yt-oynatici-yer'].filter(id => k.contains(document.getElementById(id))).length,
         uyari: u.textContent, gorunur: !!u.offsetParent && u.getBoundingClientRect().height > 0, betik: [...document.scripts].filter(s => s.src).map(s => s.src), cerceve: document.querySelectorAll('iframe').length,
@@ -1093,8 +1093,10 @@ addEventListener('message', e => { if (e.data === 'soru') parent.postMessage({ t
     const sah = await yq.evaluate(async () => {
       const m = CanliOyun._test.muzik, bekle = ms => new Promise(z => setTimeout(z, ms)), satir = () => document.getElementById('cosku-bilgi').textContent, r = {};
       const cal = async () => { document.getElementById('yt-cal').click(); const t0 = performance.now(); while (!CanliOyun.youtube.durum().caliyor && performance.now() - t0 < 4000) await bekle(50); await bekle(300); };
+      const masa = () => document.getElementById('d-bpm').textContent + ' | ' + document.getElementById('d-hava').textContent;
       r.hava = m.calanAd();
       r.once = satir();
+      r.masaOnce = masa();
       window.__ytBaslik = '';
       await cal();
       r.bos = satir();
@@ -1104,6 +1106,8 @@ addEventListener('message', e => { if (e.data === 'soru') parent.postMessage({ t
       await cal();
       r.baslik = satir();
       r.disAd = m.disAd;
+      await bekle(300); // masa 250 ms'de bir yazılır
+      r.masa = masa();
       r.cocuk = document.getElementById('cosku-bilgi').childElementCount;
       r.img = document.querySelectorAll('img[src="x"]').length;
       r.xss = window.__xss;
@@ -1111,7 +1115,7 @@ addEventListener('message', e => { if (e.data === 'soru') parent.postMessage({ t
     });
     await yq.screenshot({ path: CIKTI + '/t-youtube-sahne-baslik.png' });
     await yq.locator('.cosku').screenshot({ path: CIKTI + '/t-youtube-sahne-satir.png' });
-    sah.sonra = await yq.evaluate(async () => { document.getElementById('yt-don').click(); await new Promise(z => setTimeout(z, 300)); return { satir: document.getElementById('cosku-bilgi').textContent, disAd: CanliOyun._test.muzik.disAd }; });
+    sah.sonra = await yq.evaluate(async () => { document.getElementById('yt-don').click(); await new Promise(z => setTimeout(z, 300)); await new Promise(z => setTimeout(z, 200)); return { satir: document.getElementById('cosku-bilgi').textContent, disAd: CanliOyun._test.muzik.disAd, masa: document.getElementById('d-bpm').textContent + ' | ' + document.getElementById('d-hava').textContent }; });
     // Gösterim karesi: sıradan bir şarkı adıyla sahne satırı (kontrol değil, göz için)
     await yq.evaluate(async () => {
       window.__ytBaslik = 'Örnek Sanatçı - Örnek Şarkı (Resmî Video)';
@@ -1122,6 +1126,7 @@ addEventListener('message', e => { if (e.data === 'soru') parent.postMessage({ t
     await yq.locator('#sahne').screenshot({ path: CIKTI + '/t-youtube-sahne-ornek.png' });
     await yq.evaluate(async () => { document.getElementById('yt-don').click(); await new Promise(z => setTimeout(z, 200)); });
     const ilkSatir = s => s.split('\n')[0];
+    kontrol('Masa (Gelişmiş, Vuruş / dk): YouTube çalarken şarkının adı, vuruş/dk yerine "-"; önce ve sonra havanın adı ve vuruş/dk', /^\d+ \| /.test(sah.masaOnce) && sah.masaOnce.endsWith(' | ' + sah.hava) && sah.masa === '- | ' + sah.disAd && /^\d+ \| /.test(sah.sonra.masa) && !sah.sonra.masa.includes('Halay'), { once: sah.masaOnce, calarken: sah.masa, sonra: sah.sonra.masa });
     kontrol('Sahne satırı: YouTube çalmıyorken hava ve vuruş/dk; ad yokken "YouTube\'dan şarkı" (vuruş/dk yok); dönünce eski satır', ilkSatir(sah.once) === sah.hava && /vuruş\/dk/.test(sah.once) && ilkSatir(sah.bos) === 'YouTube\'dan şarkı' && !/vuruş\/dk/.test(sah.bos) && ilkSatir(sah.sonra.satir) === sah.hava && /vuruş\/dk/.test(sah.sonra.satir) && sah.sonra.disAd === null, { once: sah.once, bos: sah.bos, sonra: sah.sonra });
     kontrol('Sahne satırı: şarkının adı düz metin (HTML çalışmaz), görünmez karakterler atılır, 36 karaktere kısalır; vuruş/dk yazmaz', ilkSatir(sah.baslik) === sah.disAd && sah.disAd.startsWith('<b>Halay</b> <img src=x') && Array.from(sah.disAd).length === 36 && sah.disAd.endsWith('…') && !/[\u0007‮]/.test(sah.disAd) && !/vuruş\/dk/.test(sah.baslik) && sah.cocuk === 0 && sah.img === 0 && sah.xss === undefined, { baslik: sah.baslik, disAd: sah.disAd, cocuk: sah.cocuk, img: sah.img });
     // 10. Yeniden açılış: link hatırlanır, hiçbir şey çalmaz, istek gitmez
@@ -1146,7 +1151,6 @@ addEventListener('message', e => { if (e.data === 'soru') parent.postMessage({ t
     const dq = await ytAc();
     await dq.goto(OYUN_URL);
     await hazirBekle(dq);
-    await dq.click('#sekme-muzik');
     await dq.fill('#yt-link', 'https://youtu.be/dQw4w9WgXcQ');
     await dq.click('#yt-cal');
     await dq.waitForTimeout(300);
