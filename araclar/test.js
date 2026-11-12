@@ -2,7 +2,7 @@
 /* Bütün testler: bir oyun için (node araclar/test.js <ad>) ya da oyunlar/ altındaki her oyun için.
  * Her oyunda sırayla: derleme güncel mi (derle.js --denetle), çekirdek testleri (cekirdek/test/cekirdek.test.js),
  * varsa oyunun kendi testi (oyunlar/<ad>/test.js). En sonda bir kez köprü testi (cekirdek/test/kopru.test.js; kapısı
- * KOPRU_TEST_PORT ile seçilir, öntanım 8791), müzik testi (cekirdek/test/muzik.test.js: bütün oyunların müziği düzgün ve
+ * KOPRU_TEST_PORT ile seçilir, verilmezse bu araç boş bir kapı bloğu bulup verir), müzik testi (cekirdek/test/muzik.test.js: bütün oyunların müziği düzgün ve
  * birbirinden farklı mı; dinleme önizlemesi yazar) ve araç testi (cekirdek/test/araclar.test.js: yeni-oyun, derle, kare-cek).
  * --yalniz ile bölümlerin yalnız bir kısmı çalışır, --serit 2 ile iki şerit aynı anda yürür (kullanım metni aşağıda).
  * Her bölümün süresi yazılır. Biri bile kalırsa 1 koduyla çıkar.
@@ -74,6 +74,32 @@ if (ister('kopru')) ekle('B', 'köprü testleri', 'cekirdek/test/kopru.test.js',
 if (ister('muzik')) ekle('B', 'müzik testleri (bütün oyunlar)', 'cekirdek/test/muzik.test.js');
 if (ister('araclar')) ekle('B', 'araç testleri', 'cekirdek/test/araclar.test.js');
 
+// Kapı: KOPRU_TEST_PORT verildiyse olduğu gibi geçer. Verilmediyse 127.0.0.1'de art arda 16 boş kapı aranır
+// (bağlanıp bırakılarak denenir) ve çocuklara verilir: aynı bilgisayarda iki koşu öntanım 8791'de çakışmaz.
+// Aralık 20000–39999: bilinen hizmetlerin (8787, 8801 gibi) ve işletim sisteminin geçici kapılarının dışında.
+// Başlangıç rastgele: aynı anda başlayan iki koşu aynı bloğu seçmesin.
+const KAPI_ADET = 16, KAPI_ALT = 20000, KAPI_UST = 40000;
+const kapiDene = p => new Promise(res => {
+  const s = require('net').createServer();
+  s.once('error', () => res(null));
+  s.listen({ port: p, host: '127.0.0.1', exclusive: true }, () => res(s));
+});
+async function bosKapiBul() {
+  const blok = Math.floor((KAPI_UST - KAPI_ALT) / KAPI_ADET), ilk = Math.floor(Math.random() * blok);
+  for (let i = 0; i < 200; i++) {
+    const p = KAPI_ALT + ((ilk + i) % blok) * KAPI_ADET, tutulan = [];
+    let tamam = true;
+    for (let k = 0; k < KAPI_ADET && tamam; k++) {
+      const s = await kapiDene(p + k);
+      if (s) tutulan.push(s); else tamam = false;
+    }
+    await Promise.all(tutulan.map(s => new Promise(r => s.close(r))));
+    if (tamam) return p;
+  }
+  return null;
+}
+const env = { ...process.env };
+
 const sn = ms => (ms / 1000).toFixed(1);
 const sonuc = [];
 const bitti = (is, kod, ms) => {
@@ -85,7 +111,7 @@ const bitti = (is, kod, ms) => {
 function sirayla(is) {
   console.log('\n==== ' + is.ad + ' ====');
   const t0 = Date.now();
-  const r = spawnSync(process.execPath, [path.join(KOK, is.dosya), ...is.argv], { cwd: KOK, stdio: 'inherit' });
+  const r = spawnSync(process.execPath, [path.join(KOK, is.dosya), ...is.argv], { cwd: KOK, stdio: 'inherit', env });
   process.stdout.write(bitti(is, r.status, Date.now() - t0));
 }
 // 2 şerit: bölümün çıktısı bir dosyada birikir (dosyaya yazım her işletim sisteminde eşzamanlıdır, çocuk
@@ -94,7 +120,7 @@ async function biriktirerek(is, klasor) {
   const dosya = path.join(klasor, is.no + '.txt'), fd = fs.openSync(dosya, 'w'), t0 = Date.now();
   console.log('» başladı (şerit ' + is.serit + '): ' + is.ad);
   const kod = await new Promise(res => {
-    const c = spawn(process.execPath, [path.join(KOK, is.dosya), ...is.argv], { cwd: KOK, stdio: ['ignore', fd, fd], windowsHide: true });
+    const c = spawn(process.execPath, [path.join(KOK, is.dosya), ...is.argv], { cwd: KOK, stdio: ['ignore', fd, fd], windowsHide: true, env });
     c.on('error', e => { fs.writeSync(fd, 'BAŞLATILAMADI: ' + e.message + '\n'); res(-1); });
     c.on('exit', k => res(k));
   });
@@ -106,6 +132,15 @@ async function biriktirerek(is, klasor) {
 
 (async () => {
   const bas = Date.now();
+  // Kapı yalnız köprü ve araç testlerine gerekir (müzik testi ve A şeridi kapı açmaz).
+  if (isler.some(is => is.dosya === 'cekirdek/test/kopru.test.js' || is.dosya === 'cekirdek/test/araclar.test.js')) {
+    if (env.KOPRU_TEST_PORT) console.log('Köprü test kapıları: KOPRU_TEST_PORT=' + env.KOPRU_TEST_PORT + ' (verildiği gibi)');
+    else {
+      const p = await bosKapiBul();
+      if (p) { env.KOPRU_TEST_PORT = String(p); console.log('Köprü test kapıları: ' + p + '–' + (p + KAPI_ADET - 1) + ' (boş bulundu; sabitlemek için KOPRU_TEST_PORT ver)'); }
+      else console.log('Köprü test kapıları: art arda ' + KAPI_ADET + ' boş kapı bulunamadı, testlerin öntanımı (8791) kullanılır.');
+    }
+  }
   if (serit === '1') for (const is of isler) sirayla(is);
   else {
     const klasor = fs.mkdtempSync(path.join(os.tmpdir(), 'test-serit-'));
