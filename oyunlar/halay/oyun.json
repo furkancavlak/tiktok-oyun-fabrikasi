@@ -1,1 +1,5 @@
-{ "ad": "Mendil Kimde?", "paket": "mendil-kimde" }
+{
+  "ad": "Mendil Kimde?",
+  "paket": "mendil-kimde",
+  "aciklama": "Yorum yazan halaya girer, beğeni tempoyu artırır, en çok hediye atan mendili alıp halayın başına geçer."
+}

@@ -9,11 +9,15 @@ dokunmaz; burada adı geçen kancaları doldurur.
 ```
 cekirdek/
   sayfa.html, stil.css      sayfa iskeleti (sahne + yayın masası paneli); metinler OYUN ayarından doldurulur
+  ana-sayfa.html            BASLAT.bat ile açılan ana sayfa (oyun salonu: her oyun bir kabin; kabin rengi oyun kimliğinden kendiliğinden seçilir); köprü sunar, derlemeye girmez
   js/NN-*.js                çekirdek parçaları (aşağıda)
   test/                     ortak.js, cekirdek.test.js (her oyuna uygulanır), muzik.test.js (bütün oyunlar),
                             kopru.test.js, araclar.test.js
 oyunlar/<ad>/
-  oyun.json                 { "ad": "Görünen Ad", "paket": "dosya-adi" }
+  oyun.json                 { "ad": "Görünen Ad", "paket": "dosya-adi", "aciklama": "Tek cümle." }
+                            aciklama: ana sayfadaki oyun kabininde görünen tek, düz cümle; kurallardan yazılır
+                            ("Yorum yazan halaya girer, beğeni tempoyu artırır, en çok hediye atan mendili alır.").
+                            İsteğe bağlı "vitrin": false oyunu ana sayfadan gizler (komut satırından yine açılır).
   js/00-ayar.js             const OYUN = { … }  (HER ZAMAN İLK birleştirilir)
   js/NN-*.js                oyunun kancaları ve kendi çizimi
   test.js                   (isteğe bağlı) oyuna özgü kontroller
@@ -51,7 +55,7 @@ Diğer komutlar: `node araclar/derle.js --hepsi` (ad verilmezse de böyle), `nod
 
 | Ad | Ne |
 | --- | --- |
-| `window.CanliOyun` | dışarıya açık arayüz: `olay`, `durum`, `baglan`, `kes`, `cevir`, `_test` |
+| `window.CanliOyun` | dışarıya açık arayüz: `olay`, `durum`, `baglan`, `kes`, `cevir`, `kopruBitti`, `_test` |
 | `window.OYUN_KOPRU` | köprünün sayfaya yazdığı WebSocket adresi |
 | `window.OYUN_MUZIK` | oyunun `muzik/liste.js` dosyasındaki hazır parça listesi (`oyunlar/<ad>/muzik/`) |
 | `window.OYUN_MUZIK_KAPALI` | doğruysa `muzik/` klasörü yok sayılır (testler kullanır) |
@@ -108,7 +112,7 @@ Takımların tarifi, nota ve davul yazımı, yeni takım ekleme ve ölçümler `
 çalar ve `derle.js` her seferinde uyarır; şablon `takim: 'SEC'` ile gelir, seçilmeden test geçmez. Oyunun kendi
 kayıtları (isteğe bağlı) yalnız `oyunlar/<ad>/muzik/` klasöründen çalar.
 
-`yazi` içinde ayrıca isteğe bağlı `bosalt` (paneldeki boşaltma düğmesi) vardır. Eksik `yazi` alanları genel
+`yazi` içinde ayrıca isteğe bağlı `bosalt` (masadaki boşaltma düğmesi; basınca önce onay sorar) vardır. Eksik `yazi` alanları genel
 karşılıklarıyla doldurulur. Kademeler çekirdekte büyükten küçüğe sıralanır ve en küçüğünün `min`'i 1'e çekilir.
 Sahte izleyici hediyeyi kademelerden seçer: en büyüğü %0,7, ikincisi %3,8, üçüncüsü %10,5, dördüncüsü %25,
 kalanı en küçüğü. `kamera.enYakin` verilmezse `F / 190`; `ustPay` (1.5) en arkadakinin ayağından adının üstüne,
@@ -139,7 +143,7 @@ panelRenk: {}            // panel koyu kalsın
 | `oyunBosalt()` | "boşalt" düğmesinde, oyuncular silindikten sonra | Oyunun kendi durumunu sıfırlar |
 | `oyunGiris(k)` | yeni izleyici katıldığında (`siraGuncelle` sonrası) | Giriş konumunu verir (`k.x`, `k.z`); sahneye dışarıdan gelsin |
 | `oyunYerlesim()` | sıra her değiştiğinde | `D.sira` içindeki herkesin hedef yerini hesaplar |
-| `oyunHediye(k, jeton, kademe)` | hediye sayıldıktan, sıra güncellenmeden önce | Kademenin sahnedeki etkisini başlatır |
+| `oyunHediye(k, jeton, kademe, hediye)` | hediye sayıldıktan, sıra güncellenmeden önce | Kademenin sahnedeki etkisini başlatır. `hediye` hangi hediye olduğu: `{ id, ad }` ya da bilinmiyorsa `null` ("Hediyenin kimliği") |
 | `oyunLiderDegisti(eski, yeni)` | `D.lider` değişince | Rol devri: pankart, konfeti, işaretin el değiştirmesi |
 | `oyunGuncelle(dt)` | her kare, müzik saatinden sonra | Hareket ettirir, süreleri ilerletir, eklemleri kurar |
 | `oyunKamera()` | her kare | Kadraja girmesi gereken yer noktalarını döndürür: `[[x, z], …]` ya da seçenekli nesne ("Kamera") |
@@ -182,6 +186,20 @@ Ayrıntılar:
 - `muzik.sov`'u çekirdek değiştirmez; oyun açıp kapatır (halay: `oyunHediye` ve `oyunGuncelle` içinde
   `muzik.sov = B < D.sovBit`).
 
+**Hediyenin kimliği.** `oyunHediye`'nin dördüncü bilgisi hangi hediyenin geldiğidir: `{ id, ad }` (biri eksik
+olabilir) ya da kimlik bilinmiyorsa `null` (eski köprü, elle `olay` çağrısı). Üç bilgiyle yazılmış kancalar
+değişmeden çalışır. `id` platformun hediye numarasıdır (metin), `ad` hediyenin adı (düz metin, en çok 40
+karakter). Ad yabancıdan gelir: sahnede göstereceksen yalnız `fillText`, sayfada yalnız `textContent`. Kurala
+numarayla bak; ad dile göre değişebilir. Gerçek numaraları bu depo doğrulamadı: önce gerçek yayında panelin olay
+akışına bak (jetonun yanında ad yazar). Deneme yolları `deneme-` önekli sahte kimlik yollar (docs/OLAYLAR.md).
+
+```js
+const GUL = ['deneme-gul', '5655'];           // 5655: örnek numara, canlı yayında doğrula
+function oyunHediye(k, jeton, kademe, hediye) {
+  D.ip += (hediye && GUL.includes(hediye.id) ? 1 : -1) * jeton;   // Gül sağa çeker, başka hediye sola
+}
+```
+
 ## Çekirdeğin oyuna sunduğu adlar
 
 **Durum**
@@ -206,7 +224,8 @@ Oyunun yazdığı bayraklar:
 
 **Olaylar ve yazılar:** `olay(o)`, `katil(id, ad, zorla)`, `cikar(k)`, `siraGuncelle()`, `bildir(ad, orta,
 vurgu)`, `pankart(satir1, satir2)`, `gunluk(tur, ad, metin, hediye, id)` (son ikisi isteğe bağlı: `hediye` satırı
-altın renkte yazar, `id` verilirse satırda yayıncının Gizle / Çıkar düğmeleri olur), `konfeti(adet, guc)`, `kalpAt(adet)`.
+vurgulu yazar (`true`; çekirdeğin hediye satırı `{ jeton, ad, adet, kademe }` verir), `id` verilirse satırdaki ada
+basınca yayıncının "Adını gizle" / "Sahneden çıkar" işlemleri açılır; "Yayın masası"), `konfeti(adet, guc)`, `kalpAt(adet)`.
 
 **Sahne:** `c` (2B çizim bağlamı, 720×1280 sanal ölçekte), `GW`, `GH`, `ALAN_UST`, `ALAN_ALT`, `kam`,
 `pr([x, y, z])` → `{ x, y, s, d, ok }`, `kap(pa, ra, pb, rb, renk, derinlik)` (iki ucu farklı yarıçaplı kapsül),
@@ -355,6 +374,75 @@ cekirdek }`:
   `[x, y, w, h]`), `kisiler` (`ad`, `lider`, `bas: { x, y, r }`, `etiket: [x, y, w, h]`).
 - `cekirdek`: kamera, etiket, insan takımı ve çizim işlevleri (testler sahne dışı deneme için çağırır).
 
+## Yayın masası
+
+Sahnenin sağındaki masa yalnız yayıncıya görünür (`#yayin` görünümünde yoktur). İskeleti her oyunda aynıdır
+(`cekirdek/sayfa.html`, `cekirdek/stil.css`, `cekirdek/js/60-panel.js`); oyun masaya yalnız şunları verir:
+
+| Masada | Oyunun verdiği |
+| --- | --- |
+| Üst çubukta oyunun adı | `OYUN.ad` |
+| Özet satırı: "Sahnede 9 / 36 kişi" | `OYUN.kapasite`, `OYUN.yazi.birim` |
+| Deneme izleyicisinin hediye düğmeleri, canlı yayında "Bu oyunda hediyeler" | `OYUN.kademe` (`min`, `ad`, `etki`) |
+| "Yorum yaz" ve "Takip et"in alt yazısı | `OYUN.yazi.giris` ("halaya girer") |
+| Müzik kartındaki havalar | `OYUN.muzik` |
+| Boşaltma düğmesi | `OYUN.yazi.bosalt` |
+| Akışta hediyenin tetiklediği | kademenin `ad`ı |
+
+**Kip.** Masa sayfanın nasıl açıldığına bakar, olay gelip gelmemesine değil. Köprü sayfayı sunarken kipi
+`<html data-kip="deneme" | "canli">`e yazar (docs/OLAYLAR.md); masa daha ilk karesinde ona göre çizilir. Diskten
+açılan sayfa deneme kipindedir. Betik aynı kipi `#panel[data-kip]`e ve kartların `hidden` özniteliğine de yazar. Canlı kipte
+"Deneme izleyicisi" kartı (`#deneme-kart`: sahte yorum, beğeni, takip, hediye, otomatik kalabalık) masada yoktur;
+yerinde "Bu oyunda hediyeler" (`#kademe-kart`) yazar. Elementler sayfada durur (testler ve araçlar `#oto`,
+`#hiz-2`, `#hediyeler`'e doğrudan basar), görünmez ve klavyeyle de ulaşılmaz.
+
+**Durum göstergesi** (`#d-bag-hucre[data-durum]`, yazısı `#d-bag`, alt satırı `#d-bag-alt`): bağlantıyı söyleyen
+tek yer. `deneme` Deneme · `baglaniyor` Bağlanıyor · `bekliyor` Yayın bekleniyor (hesap yayında değil) · `canli`
+Canlı (köprü TikTok'a bağlandığını bildirdiyse; alt satırda hesabın adı) · `koptu` Bağlantı koptu (sayfa motoru
+kaybetti, yeniden deniyor) · `durdu` Durdu · `hata` Bağlanamadı · `bagli` Bağlı (durum bildirmeyen eski köprü:
+"Canlı" denmez). Yayın bekleniyor, bağlanıyor, durdu ve bağlanamadıda motorun kendi cümlesi göstergenin altında
+(`#durum-cumle`) olduğu gibi yazar.
+
+**Bu oyunda.** Oyunun kendi denetimi (ör. "Gösteriyi başlat") yalnız `#bu-oyunda` içine girer; iskeletin başka
+yerine eklenmez. Kart içi boşken gizlidir, ilk düğme gelince kendiliğinden görünür. Düğmeyi `oyunBaslat` içinde
+kur; çekirdeğin sınıflarını kullan (`dugme`, `dugme kucuk`, aç / kapa için `anahtar` + `aria-pressed`). Yazı
+`textContent` ile girer. Bu kart iki kipte de görünür: sahte izleyici olayı yollayan bir düğme koyma.
+
+```js
+function oyunBaslat() {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'dugme kucuk';
+  b.textContent = 'Gösteriyi başlat';
+  b.onclick = () => { D.gosteri = zaman; };
+  $('bu-oyunda').append(b);
+}
+```
+
+**İkonlar.** Masanın ikon takımı sayfanın içindedir (`sayfa.html`, `#ikonlar`: `<symbol id="i-ad">`); dosya
+indirilmez. Kullanım `ikon(ad)` (60-panel.js; `aria-hidden` süs ikon döner, yanına yazı koy). Takımın kuralı:
+24 × 24, yuvarlak uçlu 2 px çizgi yazının renginde, her ikonda tek bir vurgu (hardal) ayrıntı; vurgu ayrıntısı
+satır içi `style="fill:var(--ik-v);stroke:none"` (dolgu) ya da `style="stroke:var(--ik-v)"` (çizgi) ile boyanır.
+Adlar: `canli`, `deneme`, `bekliyor`, `baglaniyor`, `koptu`, `durdu`, `hata`, `kisiler`, `jeton`, `tac`, `akis`,
+`hayalet`, `hediye`, `kalkan`, `davul`, `ses`, `ayar`, `yorum`, `kalp`, `takip`, `paylas`, `goz`, `cikar`, `sahne`,
+`oyunlar`, `supurge`.
+
+**Akış.** `gunluk(tur, ad, metin, hediye, id)` satırı kurar (25-yazilar.js): başına türün ikonu, hediye satırında
+hediyenin adı ve olayın taşıdığı adet · jeton · tetiklediği kademe ("Gül ×60 · 60 jeton · Çök"; adsız hediyede
+yalnız "60 jeton · Çök", adet olay taşımıyorsa yazılmaz), `id` varsa ad bir düğmedir (basınca "Adını gizle" ve
+"Sahneden çıkar" altında açılır). Oyun kendi türüyle (`gunluk('solo', ad, 'ortaya çıktı')`) yazarsa satır genel
+akış ikonuyla, türün adı önde yazılır. Süzgeç (Hepsi / Hediyeler / Yorumlar) her türün son 40 satırını tutar.
+
+**Masanın sabit adları** (testler ve araçlar okur; oyun okuyabilir, değiştirmez): `#panel`, `#d-bag`,
+`#d-bag-alt`, `#d-bag-hucre`, `#durum-cumle`, `#d-kisi`, `#d-kapasite`, `#d-birim`, `#d-jeton`, `#d-lider`,
+`#kisi-liste`, `#kisi-ara`, `#gunluk`, `#akis-suz`, `#deneme-kart`, `#sahte-ad`, `#s-yorum`, `#s-begeni`,
+`#s-takip`, `#hediyeler`, `#oto`, `#hiz-0…2`, `#kademe-kart`, `#bu-oyunda`, `#balon-dugme`, `#yasak`,
+`#mod-liste`, `#mod-ozet`, `#mod-temizle`, `#ses-dugme`, `#ses-duzey`, `#hava-sec` (`#hava-<id>`), `#sirayla`,
+`#hazir-kutu`, `#parca-sec`, `#yt-kutu`, `#gelismis` (içinde `#bag-adres`, `#bag-dugme`, `#bag-rozet`,
+`#bag-ileti`, `#d-kare`, `#d-bpm`, `#d-hava`), `#bosalt-sor`, `#bosalt` (onaydaki "Evet, boşalt"; işi yapan
+budur), `#bosalt-vazgec`, `#yayin-gor`. Ana sayfadan açılınca motor "Oyunlar" bağlantısını `.masa-ad`'ın başına
+ekler (kopru.js); masa onu "Oyunlara dön" düğmesi olarak yazar.
+
 ## Testler
 
 `node araclar/test.js [ad]`: verilen oyun (ya da `oyunlar/` altındaki her oyun) için `derle.js --denetle`,
@@ -363,8 +451,16 @@ cekirdek }`:
 Ortak parçalar `cekirdek/test/ortak.js`'te: oyun adı ilk bağımsız değişkenden (yoksa `halay`), sayfa
 `oyunlar/<ad>/oyun.html`, ekran görüntüleri `test/cikti/<ad>/`, `CHROME_PATH` desteklenir, her sayfada
 `window.OYUN_MUZIK_KAPALI = true`, Google Fonts istenmez (bağlantı yavaşsa sayfanın açılışını 30 sn bekletiyordu).
-- Köprü testi öntanımda 8791–8796 kapılarını kullanır. Bilgisayarda açık bir köprü varsa başka kapı ver:
-  `KOPRU_TEST_PORT=8911 node araclar/test.js` (ya da `node cekirdek/test/kopru.test.js --port 8911`).
+Sabit uyku yerine durum beklenir: `hazirBekle(p)` (oyun açıldı, kare döngüsü çiziyor), `bekle(p, ad, kosul, arg,
+sinir)` (koşul doğru olunca döner; süre dolarsa beklenen durumun adını yazar, ardından gelen kontrol kalır),
+`kareBekle(p, n)` (n kare daha çizildi). Ölçülen süreler (müzik saati, "bu arada bir şey olmadı" denetimleri,
+kontrolün süresini sınadığı canlandırmalar) sabit kalır.
+- Bölüm seçme (`--yalniz`), hızlı kademe (`--hizli`, `TEST_KADEME`) ve iki şerit (`--serit 2`): `AGENTS.md`,
+  "Test döngüsü".
+- Köprü testi P…P+11, araç testi P+12 kapısını kullanır. `node araclar/test.js` P'yi kendisi seçer: 127.0.0.1'de
+  art arda 16 boş kapı bulur ve çocuklara `KOPRU_TEST_PORT` olarak verir (aynı bilgisayardaki iki koşu çakışmaz).
+  Kapıyı sabitlemek için `KOPRU_TEST_PORT=8911 node araclar/test.js`; tek başına çalışan
+  `node cekirdek/test/kopru.test.js` öntanımda 8791 kullanır (`--port 8911` ile değişir).
 - `node araclar/kare-cek.js <ad>`: kareler (`kare-1/3/9/dolu/hediye.png`, `kare-hepsi.png`), hareket şeridi
   (`kare-hareket.png`: 9 kişi, `B` dondurulup çeyrek vuruş arayla 8 kare) ve her kare için ölçüm
   (`kare-<etiket>.json`: yüzlerin yarıçapı, ad kutuları, sahne yazılarının kutuları). Sıralama kutusuna giren ya
@@ -378,6 +474,7 @@ Ortak parçalar `cekirdek/test/ortak.js`'te: oyun adı ilk bağımsız değişke
 
 1. Dışarıdan gelen her şey `olay(o)` üzerinden girer; oyun `D`'yi başka girişten değiştirmez.
 2. İzleyici metni asla HTML olarak yazılmaz: sayfaya `textContent`, tuvale `fillText`.
+   Hediyenin adı (`hediye.ad`) da izleyici metnidir.
 3. Sahnenin `ALAN_UST`–`ALAN_ALT` şeridi oyuncularındır. Üstü sahne yazıları, altı (1024 ve sonrası)
    TikTok'un yorum alanıdır; oraya bir şey çizme.
 4. Hareket ve süreler vuruşla (`B`) ölçülür, saniyeyle değil. `B` geri gitmez.

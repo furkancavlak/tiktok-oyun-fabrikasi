@@ -4,7 +4,7 @@
 // Çalıştırma: node cekirdek/test/cekirdek.test.js <ad>   (ad verilmezse halay)
 'use strict';
 const fs = require('fs');
-const { OYUN_AD, OYUN_URL, CIKTI, tarayici, raporla, kontrolcu } = require('./ortak');
+const { OYUN_AD, OYUN_URL, CIKTI, KADEME, tarayici, raporla, kontrolcu, bekle, hazirBekle, kareBekle } = require('./ortak');
 const { sonuc, kontrol } = kontrolcu();
 
 (async () => {
@@ -15,7 +15,7 @@ const { sonuc, kontrol } = kontrolcu();
     p.on('console', m => { if (m.type() === 'error' && !/ERR_TUNNEL|Failed to load resource/.test(m.text())) hatalar.push(m.text()); });
     p.on('pageerror', e => hatalar.push('SAYFA HATASI: ' + e.message + '\n' + (e.stack || '').split('\n').slice(0, 3).join('\n')));
     await p.goto(OYUN_URL + (hash || ''));
-    await p.waitForTimeout(600);
+    await hazirBekle(p);
     return p;
   };
   const p = await ac(1280, 800);
@@ -23,14 +23,15 @@ const { sonuc, kontrol } = kontrolcu();
   const O = (o) => p.evaluate(o2 => CanliOyun.olay(o2), o);
   const durum = () => p.evaluate(() => CanliOyun.durum());
   // oyunun ayarı: kapasite, kademeler (büyükten küçüğe), boş sahne yazısı
-  const AYAR = await p.evaluate(() => { const T = CanliOyun._test; return { kapasite: T.OYUN.kapasite, bos: T.OYUN.yazi.bos, kademe: T.KADEME.map(x => ({ min: x.min, ad: x.ad })) }; });
+  const AYAR = await p.evaluate(() => { const T = CanliOyun._test; return { kapasite: T.OYUN.kapasite, bos: T.OYUN.yazi.bos, kademe: T.KADEME.map(x => ({ min: x.min, ad: x.ad })), birim: T.OYUN.yazi.birim, bosalt: T.OYUN.yazi.bosalt }; });
   const KAP = AYAR.kapasite, MINLER = AYAR.kademe.map(x => x.min);
   console.log('Oyun:', OYUN_AD, '· kapasite', KAP, '· kademeler', MINLER.join('/'));
 
   // ---------- KURALLAR ----------
   await bosalt();
   let d = await durum(); kontrol('Boşaltınca sahne boş', d.kisi === 0 && d.lider === null, d.kisi);
-  await p.waitForTimeout(120); kontrol('Boş sahnede sıra kutusu oyunun boş yazısını gösterir', (await p.textContent('#sira-liste')).includes(AYAR.bos), AYAR.bos);
+  await bekle(p, 'sıra kutusu boş yazısını gösteriyor', b2 => document.getElementById('sira-liste').textContent.includes(b2), AYAR.bos, 3000);
+  kontrol('Boş sahnede sıra kutusu oyunun boş yazısını gösterir', (await p.textContent('#sira-liste')).includes(AYAR.bos), AYAR.bos);
   await O({ tip: 'begeni', kullanici: { id: 'a', ad: 'Ali' }, adet: 10 });
   d = await durum(); kontrol('Beğeni oyuna sokmaz, coşkuyu artırır', d.kisi === 0 && d.cosku > 0.05, d.cosku.toFixed(3));
   await O({ tip: 'yorum', kullanici: { id: 'a', ad: 'Ali' }, metin: 'selam' });
@@ -71,7 +72,8 @@ const { sonuc, kontrol } = kontrolcu();
   // boşta kalan çıkar
   await bosalt();
   await p.evaluate(() => { for (let i = 0; i < 6; i++) CanliOyun.olay({ tip: 'yorum', kullanici: { id: 'b' + i, ad: 'bos' + i }, metin: 'x' }); CanliOyun.olay({ tip: 'hediye', kullanici: { id: 'b5', ad: 'bos5' }, jeton: 100 }); CanliOyun._test.zamanEkle(250); });
-  await p.waitForTimeout(5500);
+  // Kare döngüsü 45 karede bir en çok bir sessizi çıkarır: beş kişi ~4 sn (eskiden sabit 5,5 sn).
+  await bekle(p, 'sessiz kalanlar çıktı (1 kişi, lider bos5)', () => { const d2 = CanliOyun.durum(); return d2.kisi === 1 && d2.lider === 'bos5'; }, undefined, 15000);
   d = await durum(); kontrol('4 dakika sessiz kalan çıkar, hediye atan ve lider kalır', d.kisi === 1 && d.lider === 'bos5', d.sira);
 
   // ---------- KÖTÜ NİYETLİ / BOZUK GİRDİ ----------
@@ -129,12 +131,15 @@ const { sonuc, kontrol } = kontrolcu();
     CanliOyun.olay({ tip: 'yorum', kullanici: { id: 'm3', ad: 'kotu_ad' }, metin: 'yasak slogan' });
     CanliOyun.olay({ tip: 'hediye', kullanici: { id: 'm1', ad: 'Mert' }, jeton: 5 });
   });
-  await p.waitForTimeout(450);
-  const ms = await p.evaluate(() => { const t = id => document.getElementById(id).textContent; return { kisi: t('d-kisi'), jeton: t('d-jeton'), lider: t('d-lider'), bag: t('d-bag'), kare: t('d-kare'), satir: [...document.querySelectorAll('#kisi-liste li[data-id]')].map(li => li.dataset.id + ':' + li.querySelector('.ad').textContent), sekmeGizli: document.getElementById('bolum-deneme').hidden === false && document.getElementById('bolum-yayin').hidden === true }; });
-  kontrol('Durum şeridi: kişi sayısı, toplam jeton, lider ve bağlantı canlı yazar', ms.kisi === '3' && ms.jeton === '45' && ms.lider === 'Lale' && ms.bag === 'Deneme' && /\d/.test(ms.kare), ms);
+  // Yayın masası 250 ms'de bir yazılır (masaYaz).
+  await bekle(p, 'yayın masası yazıldı (3 kişi, 45 jeton, 3 satır)', () => document.getElementById('d-kisi').textContent === '3' && document.getElementById('d-jeton').textContent === '45' && document.querySelectorAll('#kisi-liste li[data-id]').length === 3, undefined, 3000);
+  const ms = await p.evaluate(() => { const t = id => document.getElementById(id).textContent; return { kisi: t('d-kisi'), jeton: t('d-jeton'), lider: t('d-lider'), bag: t('d-bag'), kare: t('d-kare'), satir: [...document.querySelectorAll('#kisi-liste li[data-id]')].map(li => li.dataset.id + ':' + li.querySelector('.ad').textContent), kapasite: t('d-kapasite'), birim: t('d-birim'), durum: document.getElementById('d-bag-hucre').dataset.durum, durumIkon: document.querySelector('#d-bag-hucre use').getAttribute('href'), kip: { panel: document.getElementById('panel').dataset.kip, deneme: !document.getElementById('deneme-kart').hidden && !!document.getElementById('s-yorum').offsetParent && !!document.getElementById('oto').offsetParent, kademeGizli: document.getElementById('kademe-kart').hidden, gelismisKapali: !document.getElementById('gelismis').open, buOyundaGizli: document.getElementById('bu-oyunda-kart').hidden } }; });
+  kontrol('Özet satırı: sahnedeki kişi / kapasite ve birim, toplam jeton, lider; durum göstergesi "Deneme" (ikonuyla); kare süresi Gelişmiş\'te', ms.kisi === '3' && ms.kapasite === String(KAP) && ms.birim === AYAR.birim && ms.jeton === '45' && ms.lider === 'Lale' && ms.bag === 'Deneme' && ms.durum === 'deneme' && ms.durumIkon === '#i-deneme' && /\d/.test(ms.kare), ms);
   kontrol('Sahnedekiler listesi jetona göre sıralı', ms.satir.join(',') === 'm2:Lale,m1:Mert,m3:kotu_ad', ms.satir);
   const mod = await p.evaluate(async () => {
     const T = CanliOyun._test, bekle = ms2 => new Promise(r => setTimeout(r, ms2)), satir = id => [...document.querySelectorAll('#kisi-liste li')].find(li => li.dataset.id === id);
+    // durum beklemesi: kosul doğru olunca ya da sinir dolunca döner (sonraki kontrol durumu kendisi sınar)
+    const durumBekle = (kosul, sinir) => new Promise(r => { const t0 = performance.now(); (function d() { if (kosul()) r(true); else if (performance.now() - t0 > sinir) r(false); else setTimeout(d, 25); })(); });
     const r = {};
     // adını gizle: sıralamadaki düğmeyle
     r.balonVardi = !!T.D.oy.get('m3').balon;
@@ -150,14 +155,15 @@ const { sonuc, kontrol } = kontrolcu();
     CanliOyun.olay({ tip: 'hediye', kullanici: { id: 'm2', ad: 'Lale' }, jeton: 500 });
     CanliOyun.olay({ tip: 'yorum', kullanici: { id: 'm2', ad: 'Lale' }, metin: 'geri geldim' });
     r.donmedi = CanliOyun.durum();
-    // olay akışından çıkar
-    await bekle(250);
+    // olay akışından çıkar (akış 6 karede bir yazılır; eskiden sabit 250 ms)
+    await durumBekle(() => [...document.getElementById('gunluk').children].some(li => li.dataset.id === 'm1'), 3000);
     const akis = [...document.getElementById('gunluk').children].find(li => li.dataset.id === 'm1');
     r.akisSatir = !!akis;
     if (akis) akis.querySelector('.g-cikar').click();
     await bekle(30);
     r.akistanCikti = CanliOyun.durum();
-    await bekle(300);
+    // çıkarılanlar listesi yayın masasıyla (250 ms'de bir) yazılır; eskiden sabit 300 ms
+    await durumBekle(() => document.getElementById('mod-liste').querySelectorAll('li[data-id]').length === 3 && /2 çıkarılan · 1 gizli/.test(document.getElementById('mod-ozet').textContent), 3000);
     r.modListe = document.getElementById('mod-liste').querySelectorAll('li[data-id]').length;
     r.ozet = document.getElementById('mod-ozet').textContent;
     // geri al: Yayın sekmesindeki listeden
@@ -185,7 +191,115 @@ const { sonuc, kontrol } = kontrolcu();
   kontrol('Olay akışındaki satırdan da çıkarılır; çıkarılanlar listesi ve özeti güncellenir', mod.akisSatir && !mod.akistanCikti.sira.some(x => x[0] === 'Mert') && mod.modListe === 3 && /2 çıkarılan · 1 gizli/.test(mod.ozet), { akis: mod.akisSatir, sira: mod.akistanCikti.sira, liste: mod.modListe, ozet: mod.ozet });
   kontrol('Geri al: çıkarılan yeniden girebilir, gizlenenin adı döner, liste boşalır', mod.geriGeldi && mod.adGeri === 'kotu_ad' && mod.temiz === 0, { geri: mod.geriGeldi, ad: mod.adGeri, kalan: mod.temiz });
   kontrol('Balonlar kapatılınca ekrandaki balon hemen silinir; B tuşu aç/kapa, yazı alanında çalışmaz', mod.balonOnce && !mod.balonSonra && mod.balonAyar === false && mod.tusla === true && mod.yazarken === true, { once: mod.balonOnce, sonra: mod.balonSonra, tus: mod.tusla, yazarken: mod.yazarken });
-  kontrol('Sekmeler: açılışta Deneme görünür, diğer sekmeler gizli', ms.sekmeGizli);
+  kontrol('Deneme kipi (diskten açılınca): deneme izleyicisi kartı görünür, "Bu oyunda hediyeler" gizli, Gelişmiş kapalı, boş "Bu oyunda" kartı gizli', ms.kip.panel === 'deneme' && ms.kip.deneme && ms.kip.kademeGizli && ms.kip.gelismisKapali && ms.kip.buOyundaGizli, ms.kip);
+
+  // ---------- YAYIN MASASI: ada basınca açılan işlemler, akış (ikon, hediye satırı, süzgeç), boşaltma onayı, Gelişmiş, ikonlar ----------
+  await bosalt();
+  await p.evaluate(() => {
+    const O = CanliOyun.olay;
+    O({ tip: 'yorum', kullanici: { id: 'i1', ad: 'Ilgaz' }, metin: 'selam' });
+    O({ tip: 'yorum', kullanici: { id: 'i2', ad: 'Irmak' }, metin: 'merhaba' });
+    O({ tip: 'hediye', kullanici: { id: 'i3', ad: 'Işık' }, jeton: 50, hediye: { id: '5655', ad: 'Rose' } });
+    O({ tip: 'begeni', kullanici: { id: 'i2', ad: 'Irmak' }, adet: 15 });
+  });
+  await bekle(p, 'masa ve akış yazıldı (3 satır, hediye ve yorum satırı)', () => document.querySelectorAll('#kisi-liste li[data-id]').length === 3 && !!document.querySelector('#gunluk li.t-h[data-id="i3"]') && !!document.querySelector('#gunluk li.t-y[data-id="i1"]') && !!document.querySelector('#gunluk li.t-b[data-id="i2"]'), undefined, 3000);
+  // Ada basınca (klavyeyle) altında iki işlem açılır; Tab ile ulaşılır, Esc kapatır ve odak ada döner. Kapalıyken işlem
+  // düğmeleri gizlidir: fare üstüne gelince beliren düğme yoktur.
+  const kapaliOnce = await p.evaluate(() => [...document.querySelectorAll('#kisi-liste .eylem')].every(e => e.hidden && !e.offsetParent));
+  await p.focus('#kisi-liste li[data-id="i1"] .kisi-dugme');
+  await p.keyboard.press('Enter');
+  const islem = await p.evaluate(() => { const li = document.querySelector('#kisi-liste li[data-id="i1"]'), e = li.querySelector('.eylem'); return { acik: li.querySelector('.kisi-dugme').getAttribute('aria-expanded'), gorunur: !!e.offsetParent, yazi: [...e.querySelectorAll('button')].map(x => x.textContent.trim()).join('|'), tek: document.querySelectorAll('#kisi-liste .eylem:not([hidden])').length }; });
+  await p.keyboard.press('Tab');
+  const sekmeyle = await p.evaluate(() => document.activeElement.classList.contains('k-gizle'));
+  await p.keyboard.press('Escape');
+  const kapandi = await p.evaluate(() => ({ gizli: document.querySelector('#kisi-liste li[data-id="i1"] .eylem').hidden, odak: document.activeElement.classList.contains('kisi-dugme') && document.activeElement.closest('li').dataset.id === 'i1' }));
+  kontrol('Sahnedekiler: ada basınca (klavyeyle de) altında "Adını gizle" ve "Sahneden çıkar" açılır, Tab ile ulaşılır, Esc kapatır; kapalıyken işlem düğmesi görünmez (üstüne gelmeyle açılan yok)', kapaliOnce && islem.acik === 'true' && islem.gorunur && islem.yazi === 'Adını gizle|Sahneden çıkar' && islem.tek === 1 && sekmeyle && kapandi.gizli && kapandi.odak, { kapaliOnce, islem, sekmeyle, kapandi });
+  const akis = await p.evaluate(async () => {
+    const g = document.getElementById('gunluk'), r = {}, bk = ms2 => new Promise(z => setTimeout(z, ms2));
+    if (document.activeElement) document.activeElement.blur();
+    await bk(100);
+    const hs = g.querySelector('li.t-h[data-id="i3"]');
+    r.hediye = { ikon: hs.firstElementChild.querySelector('use').getAttribute('href'), metin: hs.querySelector('.metin').textContent, jt: (hs.querySelector('.h-jt') || {}).textContent };
+    r.begeni = g.querySelector('li.t-b[data-id="i2"] .metin').textContent;
+    r.ikonlu = [...g.children].every(li => { const u = li.firstElementChild && li.firstElementChild.querySelector('use'); return !!(u && document.querySelector(u.getAttribute('href'))); });
+    // ada basınca işlemler satırın altında açılır (sahnedekilerle aynı); ikinci basış kapatır
+    const ys = g.querySelector('li.t-y[data-id="i1"]'), ad = ys.querySelector('button.ad');
+    ad.click();
+    r.akisAcik = { acik: ad.getAttribute('aria-expanded'), gorunur: !!ys.querySelector('.eylem').offsetParent, yazi: [...ys.querySelectorAll('.eylem button')].map(x => x.textContent.trim()).join('|') };
+    ad.click();
+    r.akisKapandi = ys.querySelector('.eylem').hidden;
+    // süzgeç: Hediyeler yalnız hediye, Yorumlar yalnız yorum satırı bırakır; Hepsi geri getirir
+    const say = () => g.children.length, hepsi = say(), suz = s2 => document.querySelector('#akis-suz [data-suz="' + s2 + '"]').click();
+    suz('hediye');
+    r.hediyeler = { n: say(), hepsiHediye: [...g.children].every(li => li.classList.contains('t-h')), basili: document.querySelector('#akis-suz [data-suz="hediye"]').getAttribute('aria-pressed') };
+    suz('yorum');
+    r.yorumlar = { n: say(), hepsiYorum: [...g.children].every(li => li.classList.contains('t-y')) };
+    suz('hepsi');
+    r.hepsi = { once: hepsi, sonra: say(), karisik: !!g.querySelector('li.t-h') && !!g.querySelector('li.t-y') };
+    // 60 yorumdan sonra hediye "Hepsi"nin 40 satırından düşer ama Hediyeler süzgecinde kalır
+    for (let i = 0; i < 60; i++) CanliOyun.olay({ tip: 'yorum', kullanici: { id: 'sel' + (i % 5), ad: 'sel' + (i % 5) }, metin: 'yorum ' + i });
+    await new Promise(z => { const t0 = Date.now(); (function k() { if (!g.querySelector('li.t-h[data-id="i3"]') || Date.now() - t0 > 3000) z(); else setTimeout(k, 50); })(); });
+    r.dustu = !g.querySelector('li.t-h[data-id="i3"]') && g.children.length <= 40;
+    suz('hediye');
+    r.kaldi = !!g.querySelector('li.t-h[data-id="i3"]');
+    suz('hepsi');
+    return r;
+  });
+  kontrol('Akış: her satırın başında türünün ikonu; hediye satırı hediyenin adını, jetonunu ve oyunda tetiklediğini yazar; beğeni "15 beğeni"', akis.ikonlu && akis.hediye.ikon === '#i-hediye' && /^Rose · 50 jeton · \S/.test(akis.hediye.metin) && akis.hediye.jt === '50 jeton' && akis.begeni === '15 beğeni', { hediye: akis.hediye, begeni: akis.begeni, ikonlu: akis.ikonlu });
+  kontrol('Akış: ada basınca altında aynı iki işlem açılır, ikinci basış kapatır', akis.akisAcik.acik === 'true' && akis.akisAcik.gorunur && akis.akisAcik.yazi === 'Adını gizle|Sahneden çıkar' && akis.akisKapandi, akis.akisAcik);
+  kontrol('Akış süzgeci: Hediyeler yalnız hediye, Yorumlar yalnız yorum bırakır, Hepsi geri getirir; yorum seli hediyeyi Hediyeler süzgecinden düşürmez', akis.hediyeler.n >= 1 && akis.hediyeler.hepsiHediye && akis.hediyeler.basili === 'true' && akis.yorumlar.n >= 2 && akis.yorumlar.hepsiYorum && akis.hepsi.sonra === akis.hepsi.once && akis.hepsi.karisik && akis.dustu && akis.kaldi, { hediyeler: akis.hediyeler, yorumlar: akis.yorumlar, hepsi: akis.hepsi, dustu: akis.dustu, kaldi: akis.kaldi });
+  const bo = await p.evaluate(() => {
+    const $ = id => document.getElementById(id), r = {}, kisi = () => CanliOyun.durum().kisi, k0 = kisi();
+    r.k0 = k0;
+    r.etiket = $('bosalt-ad').textContent;
+    $('bosalt-sor').click();
+    r.soru = { onay: !$('bosalt-onay').hidden, sor: $('bosalt-sor').hidden, kisi: kisi() === k0, odak: document.activeElement.id };
+    $('bosalt-vazgec').click();
+    r.vazgec = { onay: $('bosalt-onay').hidden, sor: !$('bosalt-sor').hidden, kisi: kisi() === k0 };
+    $('bosalt-sor').click();
+    $('bosalt').click();
+    r.evet = { kisi: kisi(), onay: $('bosalt-onay').hidden, sor: !$('bosalt-sor').hidden };
+    if (document.activeElement) document.activeElement.blur();
+    return r;
+  });
+  kontrol('Boşalt: önce sayfanın içinde onay sorar (Vazgeç hiçbir şeyi silmez, odak Vazgeç\'te); "Evet, boşalt" sahneyi boşaltır; düğmede oyunun kendi yazısı', bo.k0 > 0 && bo.etiket === AYAR.bosalt && bo.soru.onay && bo.soru.sor && bo.soru.kisi && bo.soru.odak === 'bosalt-vazgec' && bo.vazgec.onay && bo.vazgec.sor && bo.vazgec.kisi && bo.evet.kisi === 0 && bo.evet.onay && bo.evet.sor, bo);
+  const gel = await p.evaluate(() => {
+    const g = document.getElementById('gelismis'), r = { kapali: !g.open };
+    r.disarida = ['bag-adres', 'bag-dugme', 'bag-ileti', 'bag-rozet', 'd-kare', 'd-bpm'].filter(id => !g.contains(document.getElementById(id)));
+    r.bicim = !!g.querySelector('pre') && /"event":"gift"/.test(g.querySelector('pre').textContent);
+    r.api = /resmî bir açık API/.test(g.textContent);
+    r.kapaliyken = !document.getElementById('bag-adres').checkVisibility() && !document.getElementById('d-kare').checkVisibility();
+    // Gelişmiş dışındaki masa yazılarında teknik söz yok (izleyici adı ve oyunun kendi yazıları sayılmaz)
+    const disari = [...document.querySelectorAll('.masa-bas, .ozet, .kart-bas, .kart-ipucu, #deneme-kart .eylemler, #guvenlik-kart, #muzik-kart .kart-bas, .bosalt-kutu')].map(e => e.innerText).join(' ');
+    r.teknik = disari.match(/\bAPI\b|köprü|ws:\/\/|\bms\b|WebSocket/gi) || [];
+    g.open = true;
+    r.acilinca = document.getElementById('bag-adres').checkVisibility() && document.getElementById('d-kare').checkVisibility();
+    g.open = false;
+    return r;
+  });
+  kontrol('Gelişmiş: kapalı gelir; köprü adresi ve bağlan düğmesi, ileti biçimi, kare süresi, vuruş sayısı ve API açıklaması onun içinde; masanın geri kalanında teknik söz yok', gel.kapali && !gel.disarida.length && gel.bicim && gel.api && gel.kapaliyken && gel.acilinca && !gel.teknik.length, gel);
+  const ik = await p.evaluate(() => {
+    const kullanim = [...document.querySelectorAll('.panel use')].map(u => u.getAttribute('href'));
+    return {
+      sembol: document.querySelectorAll('#ikonlar symbol').length,
+      kirik: kullanim.filter(h => !/^#i-[a-z]+$/.test(h) || !document.querySelector(h)),
+      gizlenmemis: [...document.querySelectorAll('.panel svg.ik')].filter(s => s.getAttribute('aria-hidden') !== 'true').length,
+      yazisiz: [...document.querySelectorAll('.panel button, .panel summary, .panel a')].filter(x => !(x.getAttribute('aria-label') || x.textContent).trim()).map(x => x.id || x.className)
+    };
+  });
+  kontrol('İkonlar: takım sayfanın içinde (' + ik.sembol + ' çizim); her kullanım var olan bir çizime gider, süs ikonlar ekran okuyucudan gizli, yazısız düğme yok', ik.sembol >= 23 && !ik.kirik.length && !ik.gizlenmemis && !ik.yazisiz.length, ik);
+  {
+    // Durum göstergesi, bağlanılamayınca: "Bağlanamadı" ve hatanın kendi cümlesi (ayrı sayfa: başarısız soketin konsol
+    // satırı yukarıdaki "sayfada hata çıkmadı" sayımına girmesin).
+    const hp2 = await b.newPage({ viewport: { width: 1280, height: 800 } });
+    await hp2.goto(OYUN_URL);
+    await hazirBekle(hp2);
+    await hp2.evaluate(() => CanliOyun.baglan('ws://127.0.0.1:9/olay'));
+    await bekle(hp2, 'durum göstergesi "Bağlanamadı"', () => document.getElementById('d-bag').textContent === 'Bağlanamadı', undefined, 5000);
+    const hd = await hp2.evaluate(() => ({ ad: document.getElementById('d-bag').textContent, durum: document.getElementById('d-bag-hucre').dataset.durum, ikon: document.querySelector('#d-bag-hucre use').getAttribute('href'), cumle: document.getElementById('durum-cumle').hidden ? '' : document.getElementById('durum-cumle').textContent, ileti: document.getElementById('bag-ileti').textContent, kip: document.getElementById('panel').dataset.kip }));
+    kontrol('Durum göstergesi: bağlanılamayınca "Bağlanamadı" der, hatanın kendi cümlesi altında yazar; masa deneme kipinde kalır', hd.ad === 'Bağlanamadı' && hd.durum === 'hata' && hd.ikon === '#i-hata' && hd.cumle.length > 10 && hd.cumle === hd.ileti && hd.kip === 'deneme', hd);
+    await hp2.close();
+  }
 
   // köprü ileti çevirisi (sayfa tarafı)
   const cv = await p.evaluate(() => { const c = CanliOyun.cevir; return {
@@ -213,11 +327,13 @@ const { sonuc, kontrol } = kontrolcu();
       else CanliOyun.olay({ tip: 'hediye', kullanici: { id, ad: id }, jeton: M[i % M.length] }); }
     return { ms: performance.now() - t0, n, d: CanliOyun.durum(), gunluk: document.getElementById('gunluk').children.length, bildirim: document.getElementById('bildirim').children.length };
   }, MINLER);
-  await p.waitForTimeout(3000);
+  // Selden sonra kare döngüsü 90 kare daha çizmeli (eskiden sabit 3 sn ≈ 180 kare). kareMs 20 karelik kayan
+  // ortalamadır: 90 karede oturur, selin parçacıkları da daha sönmediği için ölçüm eskisinden gevşek değildir.
+  const selAkti = await kareBekle(p, 90, 10000);
   d = await durum();
   kontrol('20.000 olay tek seferde işlenir', sel.ms < 4000, Math.round(sel.ms) + ' ms');
   kontrol('Selde parçacık, günlük ve bildirim sınırlı kalır', sel.d.parca <= 460 && sel.gunluk <= 40 && sel.bildirim <= 3, { parca: sel.d.parca, gunluk: sel.gunluk, bildirim: sel.bildirim });
-  kontrol('Selden sonra oyun akmaya devam eder', d.kisi === KAP && d.kareMs < 40, { kisi: d.kisi, kareMs: +d.kareMs.toFixed(1) });
+  kontrol('Selden sonra oyun akmaya devam eder', selAkti && d.kisi === KAP && d.kareMs < 40, { kareAkti: selAkti, kisi: d.kisi, kareMs: +d.kareMs.toFixed(1) });
   await p.locator('#sahne').screenshot({ path: CIKTI + '/t-sel.png' });
 
   // ---------- MÜZİK SAATİ ----------
@@ -348,29 +464,51 @@ const { sonuc, kontrol } = kontrolcu();
   // ---------- YAYIN GÖRÜNÜMÜ, 1080×1920, BAŞARIM ----------
   const y = await ac(1080, 1920, '#yayin');
   await y.evaluate(n => { for (let i = 0; i < n; i++) CanliOyun.olay({ tip: 'hediye', kullanici: { id: 'y' + i, ad: 'izleyici_' + i }, jeton: 5 + i }); }, KAP);
-  await y.waitForTimeout(6000);
+  // Tam kalabalıkla 180 kare (eskiden sabit 6 sn): kareMs'nin 20 karelik ortalaması dolu sahnede oturur.
+  const yAkti = await kareBekle(y, 180, 20000);
   const yd = await y.evaluate(() => ({ w: document.getElementById('tuval').width, h: document.getElementById('tuval').height, panel: getComputedStyle(document.getElementById('panel')).display, sahne: document.getElementById('sahne').getBoundingClientRect().toJSON(), d: CanliOyun.durum() }));
   kontrol('Yayın görünümü: tuval 1080×1920, panel gizli', yd.w === 1080 && yd.h === 1920 && yd.panel === 'none' && Math.round(yd.sahne.width) === 1080, { tuval: yd.w + '×' + yd.h, panel: yd.panel });
-  kontrol('1080×1920, ' + yd.d.kisi + ' kişi: kare başına işlem süresi (yazılımsal çizimde)', yd.d.kisi === KAP && yd.d.kareMs < 33, +yd.d.kareMs.toFixed(1) + ' ms');
+  kontrol('1080×1920, ' + yd.d.kisi + ' kişi: kare başına işlem süresi (yazılımsal çizimde)', yAkti && yd.d.kisi === KAP && yd.d.kareMs < 33, +yd.d.kareMs.toFixed(1) + ' ms' + (yAkti ? '' : ' (kare döngüsü 180 kare çizmedi)'));
   await y.screenshot({ path: CIKTI + '/t-yayin-1080.png' });
   await y.close();
-  for (const [w, h] of [[1920, 1080], [900, 1600], [360, 640], [820, 700], [2560, 1440]]) {
+  for (const [w, h] of [[1920, 1080], [1366, 768], [1210, 1280], [900, 1600], [360, 640], [820, 700], [2560, 1440]]) {
     const q = await ac(w, h); const r = await q.evaluate(() => { const s = document.getElementById('sahne').getBoundingClientRect(); return { tasma: document.documentElement.scrollWidth - innerWidth, oran: s.width / s.height, sag: s.right, gen: innerWidth, alt: s.bottom, yuk: innerHeight }; });
-    kontrol('Pencere ' + w + '×' + h + ': yatay taşma yok, sahne 9:16', r.tasma <= 0 && Math.abs(r.oran - 9 / 16) < 0.005 && r.sag <= r.gen + 0.5, { oran: +r.oran.toFixed(4), tasma: r.tasma }); await q.close();
+    kontrol('Pencere ' + w + '×' + h + ': yatay taşma yok, sahne 9:16', r.tasma <= 0 && Math.abs(r.oran - 9 / 16) < 0.005 && r.sag <= r.gen + 0.5, { oran: +r.oran.toFixed(4), tasma: r.tasma });
+    if (w > 900) {
+      // Masa: sahne solda, masa sağda ve pencereye sığar; sayfa dikeyde kaymaz; hiçbir kart ve satır yana taşmaz.
+      const m = await q.evaluate(() => { const pr = document.getElementById('panel').getBoundingClientRect(), sr = document.getElementById('sahne').getBoundingClientRect(); return { dikey: document.documentElement.scrollHeight - innerHeight, solda: sr.right <= pr.left, sag: Math.round(pr.right), alt: Math.round(pr.bottom), gen: innerWidth, yuk: innerHeight, tasan: [...document.querySelectorAll('.panel .kart, .panel .kart li, .masa-bas, .ozet')].filter(e => e.scrollWidth > e.clientWidth + 1).map(e => e.id || e.className).slice(0, 5) }; });
+      kontrol('Pencere ' + w + '×' + h + ': masa sahnenin sağında, pencereye sığar (sayfa dikeyde de kaymaz), kartlar yana taşmaz', m.dikey <= 0 && m.solda && m.sag <= m.gen && m.alt <= m.yuk && !m.tasan.length, m);
+      if (w === 1366) {
+        // En yaygın dizüstü boyunda deneme kipinde: kartlar sütunu kaydırılmadan Yayın güvenliğinin başlığı ve balon anahtarı görünür.
+        const g = await q.evaluate(() => { const y = document.getElementById('masa-yan').getBoundingClientRect(), b = document.querySelector('#guvenlik-kart h2').getBoundingClientRect(), t = document.getElementById('balon-dugme').getBoundingClientRect(); return { kaydirma: document.getElementById('masa-yan').scrollTop, deneme: !document.getElementById('deneme-kart').hidden, baslik: Math.round(b.top), anahtar: Math.round(t.bottom), sutunAlt: Math.round(y.bottom), kesik: [...document.querySelectorAll('#hediyeler .h-esik')].filter(e => e.scrollWidth > e.clientWidth).map(e => e.textContent) }; });
+        kontrol('1366×768, deneme kipi: kartlar sütunu kaydırılmadan Yayın güvenliğinin başlığı ve balon anahtarı görünür; hediye düğmelerinin jetonu kesilmez', g.deneme && g.kaydirma === 0 && g.anahtar <= g.sutunAlt && !g.kesik.length, g);
+      }
+    }
+    await q.close();
   }
 
   // ---------- UZUN SÜRE ÇALIŞMA ----------
+  // Zamanla şişme ve yavaşlama sürüm öncesi aranır: "tam" kademede 9 × 10 sn, karşılaştırma 30. saniyeden sonuna.
+  // "hizli" kademede (düzenleme döngüsü) aynı kod yolu ve aynı kontroller 4 × 10 sn çalışır, karşılaştırma 30. ile 40.
+  // saniye arası. Isınma kısaltılmaz: sayfa öğeleri ilk saniyelerde dolar (halayda 8. saniyede 533, 16.'da 685,
+  // 30.'dan sonra ~683), daha erken bir ilk ölçüm dolmayı şişme sanır. Sınırlar aynı kalır: +25 MB ve +30 öğe büyüme
+  // hızı değil gürültü payıdır, kısa pencerede büyüme ancak daha az olur. Kısa sürüm yalnız hızlı sızıntıyı yakalar;
+  // yavaş sızıntı için tam kademe gerekir.
+  const UZUN = KADEME === 'tam' ? { tur: 9, ara: 10000, ilk: 2 } : { tur: 4, ara: 10000, ilk: 2 }, UZUN_SN = UZUN.tur * UZUN.ara / 1000;
+  if (KADEME !== 'tam')
+    console.log('HIZLI KADEME: uzun dayanıklılık testi (9 × 10 sn) atlandı, yerine kısa sürümü (' + UZUN.tur + ' × ' + UZUN.ara / 1000 + ' sn) çalışıyor.\n' +
+      '  Uzun hâli (sürümden önce): TEST_KADEME=tam node cekirdek/test/cekirdek.test.js ' + OYUN_AD + '  ya da --hizli olmadan node araclar/test.js');
   const u = await ac(1280, 800);
   await u.evaluate(() => { document.getElementById('hiz-2').click(); });
   const bellek = [];
-  for (let i = 0; i < 9; i++) {
-    await u.waitForTimeout(10000);
+  for (let i = 0; i < UZUN.tur; i++) {
+    await u.waitForTimeout(UZUN.ara);
     await u.evaluate(([i2, M]) => { CanliOyun.olay({ tip: 'hediye', kullanici: { id: 'uz' + (i2 % 3), ad: 'uzun_' + (i2 % 3) }, jeton: M[i2 % Math.min(3, M.length)] }); }, [i, MINLER]);
     bellek.push(await u.evaluate(() => ({ mb: +(performance.memory.usedJSHeapSize / 1048576).toFixed(1), dom: document.querySelectorAll('*').length, d: CanliOyun.durum(), oy: CanliOyun._test.D.oy.size })));
   }
-  const ilk = bellek[2], son = bellek[bellek.length - 1];
-  kontrol('90 sn çılgın kalabalık: bellek ve sayfa öğeleri şişmez', son.mb < ilk.mb + 25 && son.dom < ilk.dom + 30 && son.oy <= KAP + 24, { bellekMB: bellek.map(x => x.mb), oge: [ilk.dom, son.dom], karakter: son.oy });
-  kontrol('90 sn çılgın kalabalık: akıcılık korunur', bellek.every(x => x.d.kareMs < 33), bellek.map(x => +x.d.kareMs.toFixed(1)));
+  const ilk = bellek[UZUN.ilk], son = bellek[bellek.length - 1];
+  kontrol(UZUN_SN + ' sn çılgın kalabalık: bellek ve sayfa öğeleri şişmez', son.mb < ilk.mb + 25 && son.dom < ilk.dom + 30 && son.oy <= KAP + 24, { bellekMB: bellek.map(x => x.mb), oge: [ilk.dom, son.dom], karakter: son.oy });
+  kontrol(UZUN_SN + ' sn çılgın kalabalık: akıcılık korunur', bellek.every(x => x.d.kareMs < 33), bellek.map(x => +x.d.kareMs.toFixed(1)));
   await u.locator('#sahne').screenshot({ path: CIKTI + '/t-uzun.png' });
   // sekme arkaya gidip gelince
   const gizli = await u.evaluate(async () => { const v0 = CanliOyun.durum().vurus; Object.defineProperty(document, 'hidden', { value: true, configurable: true }); await new Promise(r => setTimeout(r, 2500)); Object.defineProperty(document, 'hidden', { value: false, configurable: true }); await new Promise(r => setTimeout(r, 800)); const v1 = CanliOyun.durum().vurus; return { v0, v1 }; });
@@ -596,12 +734,83 @@ const { sonuc, kontrol } = kontrolcu();
   kontrol('Müzik saati: 0,9 sn kilitten sonra vuruş saati donmaz, hemen eski hızında yürür', kilit.enDurmaSn < 0.2 && kilit.kilittenSonra1sn > kilit.onceHiz * 0.7 && !kilit.geri, kilit);
   await e.close();
 
+  // ==== HEDİYE KİMLİĞİ (hediye: { id, ad }) — başı ====
+  // Oyunun oyunHediye kancası sarılır (derlenmiş sayfanın geçici kopyasında): kancanın dördüncü bilgisi kaydedilir,
+  // oyunun kendi kancası değişmeden çalışır. Ayrı sayfa; oyunun kendisine dokunulmaz.
+  {
+    const os = require('os'), path = require('path'), { pathToFileURL } = require('url');
+    const asil = fs.readFileSync(require('./ortak').OYUN_HTML, 'utf8'), kac = asil.split('function oyunHediye(').length - 1;
+    const sarili = asil.replace('function oyunHediye(', 'function oyunHediye(...__h) { (window.__kanca = window.__kanca || []).push({ n: __h.length, jeton: __h[1], hediye: __h[3] === undefined ? \'yok\' : __h[3] }); return __oyunHediyeAsil(...__h); }\nfunction __oyunHediyeAsil(');
+    const gk = fs.mkdtempSync(path.join(os.tmpdir(), 'canli-hediye-')), gy = path.join(gk, 'oyun.html');
+    fs.writeFileSync(gy, sarili);
+    const hp = await b.newPage({ viewport: { width: 1280, height: 800 } });
+    hp.on('pageerror', e => hatalar.push('SAYFA HATASI (hediye): ' + e.message));
+    await hp.goto(pathToFileURL(gy).href); await hazirBekle(hp);
+    const hk = await hp.evaluate(async () => {
+      const O = CanliOyun.olay, T = CanliOyun._test, son = () => (window.__kanca || []).slice(-1)[0];
+      document.getElementById('bosalt').click(); window.__kanca = [];
+      const r = {};
+      O({ tip: 'hediye', kullanici: { id: 'h1', ad: 'Gülsüm' }, jeton: 1, adet: 3, hediye: { id: '5655', ad: 'Rose' } }); r.tam = son();
+      O({ tip: 'hediye', kullanici: { id: 'h2', ad: 'Hasan' }, jeton: 1, adet: 3 }); r.yok = son();
+      r.jetonAyni = T.D.oy.get('h1').jeton === 3 && T.D.oy.get('h2').jeton === 3;
+      O({ tip: 'hediye', kullanici: { id: 'h3', ad: 'Halil' }, jeton: 1, hediye: { id: 5655 } }); r.sayi = son();
+      O({ tip: 'hediye', kullanici: { id: 'h3', ad: 'Halil' }, jeton: 1, hediye: { ad: '  Gül\u0007  ' } }); r.adOnly = son();
+      O({ tip: 'hediye', kullanici: { id: 'h3', ad: 'Halil' }, jeton: 1, hediye: { id: '', ad: '   ' } }); r.bos = son();
+      O({ tip: 'hediye', kullanici: { id: 'h3', ad: 'Halil' }, jeton: 1, hediye: { id: { x: 1 }, ad: ['a'] } }); r.bozuk = son();
+      O({ tip: 'hediye', kullanici: { id: 'h3', ad: 'Halil' }, jeton: 1, hediye: '5655' }); r.metin = son();
+      O({ tip: 'hediye', kullanici: { id: 'h4', ad: 'Hüma' }, jeton: 2, hediye: { id: '9'.repeat(50), ad: '<img src=x onerror="window.__xss=1">' + 'ş'.repeat(60) } }); r.uzun = son();
+      O({ tip: 'hediye', kullanici: { id: 'h5', ad: 'Hilmi' }, jeton: 2, hediye: { id: '1', ad: '<b>x</b>' } });
+      await new Promise(z => setTimeout(z, 400)); await new Promise(z => { const t0 = Date.now(); (function k() { if (document.querySelectorAll('#gunluk li.t-h').length >= 6 || Date.now() - t0 > 4000) z(); else setTimeout(k, 100); })(); });
+      const g = document.getElementById('gunluk');
+      r.satir = [...g.querySelectorAll('li.t-h .metin')].map(x => x.textContent);
+      r.etiket = g.querySelectorAll('img, b, script').length + document.querySelectorAll('img[src="x"]').length;
+      r.xss = !!window.__xss;
+      // sayfa tarafındaki çeviri (köprü iletisi → olay)
+      const c = CanliOyun.cevir;
+      r.cv = {
+        kendi: c({ tip: 'hediye', kullanici: { id: 'a' }, jeton: 1, hediye: { id: '5655', ad: '  Rose  ', fazla: 'x' } }),
+        kendiBozuk: c({ tip: 'hediye', kullanici: { id: 'a' }, jeton: 1, hediye: { id: '' } }),
+        kendiYok: c({ tip: 'hediye', kullanici: { id: 'a' }, jeton: 1 }),
+        duz: c({ event: 'gift', data: { uniqueId: 'a', id: 'kullanici-no', name: 'kullanici-adi', giftId: 5655, giftName: 'Rose', diamondCount: 1, repeatCount: 3, giftType: 1, repeatEnd: true } }),
+        duzKimliksiz: c({ event: 'gift', data: { uniqueId: 'a', id: 'kullanici-no', name: 'kullanici-adi', diamondCount: 1, giftType: 2 } }),
+        ayrinti: c({ event: 'gift', data: { user: { uniqueId: 'a' }, giftId: 5655, giftDetails: { id: '5655', giftName: 'Rose', diamondCount: 1, giftType: 1 }, repeatCount: 3, repeatEnd: 1 } }),
+        yeni: c({ event: 'gift', data: { user: { uniqueId: 'a' }, giftId: '5655', gift: { id: '5655', name: 'Rose', diamondCount: 1, type: 1 }, repeatCount: 3, repeatEnd: 1 } }),
+        seri: c({ event: 'gift', data: { user: { uniqueId: 'a' }, giftId: '5655', gift: { id: '5655', name: 'Rose', diamondCount: 1, type: 1 }, repeatCount: 2, repeatEnd: 0 } })
+      };
+      // paneldeki Deneme düğmeleri sahte, "deneme-" önekli kimlik yollar: en küçük kademe Gül, sonraki Kalp
+      const dug = [...document.getElementById('hediyeler').children];
+      dug[0].click(); r.dugme0 = son();
+      if (dug[1]) { dug[1].click(); r.dugme1 = son(); }
+      r.dugmeSayi = dug.length; r.dugmeBaslik = dug[0].title;
+      return r;
+    });
+    await hp.close(); fs.rmSync(gk, { recursive: true, force: true });
+    const J = x => JSON.stringify(x);
+    kontrol('Hediye kimliği: oyunun kancası dördüncü bilgi olarak { id, ad } alır; kimliksiz hediyede null; jeton aynı sayılır', kac === 1 && hk.tam && hk.tam.n === 4 && J(hk.tam.hediye) === '{"id":"5655","ad":"Rose"}' && hk.tam.jeton === 3 && hk.yok && hk.yok.hediye === null && hk.jetonAyni, { kac, tam: hk.tam, yok: hk.yok, jetonAyni: hk.jetonAyni });
+    kontrol('Hediye kimliği: sayı id metne çevrilir, yalnız ad kırpılıp geçer; boş, bozuk türde ve nesne olmayan kimlik null olur', J(hk.sayi.hediye) === '{"id":"5655"}' && J(hk.adOnly.hediye) === '{"ad":"Gül"}' && hk.bos.hediye === null && hk.bozuk.hediye === null && hk.metin.hediye === null, { sayi: hk.sayi, ad: hk.adOnly, bos: hk.bos, bozuk: hk.bozuk, metin: hk.metin });
+    kontrol('Hediye kimliği: uzun ad 40, uzun id 32 karaktere kısalır; HTML ad düz metindir, akışta öğe olmaz, betik çalışmaz', hk.uzun && Array.from(hk.uzun.hediye.ad).length === 40 && hk.uzun.hediye.ad.startsWith('<img src=x') && hk.uzun.hediye.id.length === 32 && hk.etiket === 0 && !hk.xss && hk.satir.some(x => x.startsWith('<b>x</b> · 2 jeton · ')), { uzun: hk.uzun, etiket: hk.etiket, xss: hk.xss });
+    kontrol('Hediye kimliği: masanın akışında hediyenin adı ve olayın adedi jetonun yanında yazılır (Rose ×3 · 3 jeton · kademe); kimliksiz hediyede adet uydurulmaz, yalnız jeton ve kademe', hk.satir.some(x => /^Rose ×3 · 3 jeton · \S/.test(x)) && hk.satir.some(x => /^3 jeton · \S/.test(x)), hk.satir.slice(0, 8));
+    const cv2 = hk.cv, rose = o => o && J(o.hediye) === '{"id":"5655","ad":"Rose"}';
+    kontrol('Hediye kimliği, sayfa çevirisi: kendi biçim denetlenip geçer (bozuk alan düşer), düz / giftDetails / gift biçimleri okunur, düz veride kullanıcının id ve name alanı hediye sayılmaz, seri sürerken yok', rose(cv2.kendi) && J(Object.keys(cv2.kendi.hediye)) === '["id","ad"]' && cv2.kendiBozuk && !('hediye' in cv2.kendiBozuk) && cv2.kendiBozuk.jeton === 1 && !('hediye' in cv2.kendiYok) && rose(cv2.duz) && cv2.duzKimliksiz && !('hediye' in cv2.duzKimliksiz) && rose(cv2.ayrinti) && rose(cv2.yeni) && cv2.yeni.adet === 3 && cv2.seri === null, cv2);
+    kontrol('Hediye kimliği: Deneme düğmeleri sahte kimlik yollar (deneme-gul, sonra deneme-kalp), düğmenin açıklaması söyler', hk.dugme0 && J(hk.dugme0.hediye) === '{"id":"deneme-gul","ad":"Gül"}' && (hk.dugmeSayi < 2 || J(hk.dugme1.hediye) === '{"id":"deneme-kalp","ad":"Kalp"}') && /deneme hediyesi: Gül/.test(hk.dugmeBaslik), { d0: hk.dugme0, d1: hk.dugme1, baslik: hk.dugmeBaslik });
+    // N5 (denetim 3): görünmez / biçim karakterleri ve ANSI kaçışları sayfa tarafında da atılır; boş kalan ad düşer
+    const n5 = await p.evaluate(() => { const c = CanliOyun.cevir, h = ad => (c({ tip: 'hediye', kullanici: { id: 'n5' }, jeton: 1, hediye: { id: '7', ad } }) || {}).hediye;
+      return { arap: h('Ro\u061Cse\u2060'), dolgu: h('\u3164\u3164 \u115F\uFFA0'), ansi: h('\u001b[31mKırmızı\u001b[0m'), bom: h('\uFEFFGül\u2800'), izleyici: (() => { /* hediye: sahne doluyken de girer (yorumcu dolu sahneye giremez) */ CanliOyun.olay({ tip: 'hediye', jeton: 1, adet: 1, kullanici: { id: 'n5-ad', ad: '\u3164Ay\u2060şe' }, metin: 'x' }); const k = CanliOyun._test.D.oy.get('n5-ad'); return k && k.ad; })() }; });
+    kontrol('N5: sayfa da hediye adından ve izleyici adından U+061C, U+2060, U+FEFF, dolgu harflerini ve ANSI kaçışlarını atar; boş kalan hediye adı düşer', n5.arap.ad === 'Rose' && JSON.stringify(n5.dolgu) === '{"id":"7"}' && n5.ansi.ad === 'Kırmızı' && n5.bom.ad === 'Gül' && n5.izleyici === 'Ayşe', n5);
+    // Denetim 4 (7): emoji arasındaki U+200D kalır (izleyici adında da), başka yerdeki gider; OSC kaçışı metniyle; U+034F / U+17B4 / U+17B5 gider
+    const t7 = await p.evaluate(() => { const c = CanliOyun.cevir, h = ad => ((c({ tip: 'hediye', kullanici: { id: 't7' }, jeton: 1, hediye: { id: '7', ad } }) || {}).hediye || {}).ad;
+      CanliOyun.olay({ tip: 'hediye', kullanici: { id: 't7-ad', ad: 'Aile 👨\u200d👩\u200d👧' }, jeton: 1 }); /* hediye: sahne dolu olsa da girer */ const k = CanliOyun._test.D.oy.get('t7-ad');
+      return { aile: h('Aile 👨\u200d👩\u200d👧'), kodcu: h('👩\u200d💻'), yalniz: h('a\u200db'), osc: h('\u001b]0;title x\u0007Gül'), birlesik: h('x\u034fy\u17b4z\u17b5'), izleyici: k && k.ad }; });
+    kontrol('Denetim 4: sayfa temizleyicisi emoji birleşimlerini bölmez (hediye ve izleyici adında), harf arasındaki U+200D, OSC kaçışı (metniyle) ve U+034F / U+17B4 / U+17B5 atılır', t7.aile === 'Aile 👨\u200d👩\u200d👧' && t7.kodcu === '👩\u200d💻' && t7.yalniz === 'ab' && t7.osc === 'Gül' && t7.birlesik === 'xyz' && t7.izleyici === 'Aile 👨\u200d👩\u200d👧', t7);
+  }
+  // ==== HEDİYE KİMLİĞİ — sonu ====
+
   // Oyun kodunda hata: döngü donmaz, hata bir kez bildirilir (ayrı sayfa; bilerek çıkarılan hata yukarıdaki
   // "sayfada hata çıkmadı" sayımına girmesin).
   const hs = await b.newPage({ viewport: { width: 720, height: 800 } }), hsHata = [];
   hs.on('pageerror', e => hsHata.push(e.message));
   await hs.goto(OYUN_URL);
-  await hs.waitForTimeout(600);
+  await hazirBekle(hs);
   const kirik = await hs.evaluate(async () => {
     const D = CanliOyun._test.D, oy = D.oy;
     D.oy = null;

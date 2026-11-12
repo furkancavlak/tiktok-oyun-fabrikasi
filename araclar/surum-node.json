@@ -1,0 +1,9 @@
+{
+  "aciklama": "Windows hazır paketine (araclar/surum.js) giren Node.js. Tek, sabit bir sürüm: projenin test edildiği v24 LTS çizgisi. sha256 değeri o sürümün resmî https://nodejs.org/dist/v24.15.0/SHASUMS256.txt dosyasındaki node-v24.15.0-win-x64.zip satırıdır (11 Kasım 2026'da okundu). Sürüm değişirse üç alan birlikte değişir; cekirdek/node-yok.html ve BASLAT.bat içindeki .msi adresi de (araç testi denetler).",
+  "surum": "24.15.0",
+  "dosya": "node-v24.15.0-win-x64.zip",
+  "url": "https://nodejs.org/dist/v24.15.0/node-v24.15.0-win-x64.zip",
+  "sha256": "cc5149eabd53779ce1e7bdc5401643622d0c7e6800ade18928a767e940bb0e62",
+  "msi": "https://nodejs.org/dist/v24.15.0/node-v24.15.0-x64.msi",
+  "kaynak": "https://nodejs.org/dist/v24.15.0/SHASUMS256.txt"
+}

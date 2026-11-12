@@ -3,7 +3,7 @@
  * katil / cikar / siraGuncelle: sahnedeki sıra · olay(o): DIŞARIDAN GELEN HER ŞEYİN TEK GİRİŞ KAPISI
  * (sahte izleyici, köprü ve testler hep bunu çağırır). Olay biçimi docs/OLAYLAR.md'de.
  * Kullanıcı metni burada temizlenir; hiçbir yerde HTML olarak yazılmaz.
- * Oyuna sorulanlar: oyunGiris(k) giriş yeri · oyunYerlesim() herkesin hedef yeri · oyunHediye(k, jeton, kademe)
+ * Oyuna sorulanlar: oyunGiris(k) giriş yeri · oyunYerlesim() herkesin hedef yeri · oyunHediye(k, jeton, kademe, hediye)
  * hediyenin sahnedeki etkisi · oyunLiderDegisti(eski, yeni) rol devri. Ayrıntı: docs/KANCALAR.md.
  */
 // Eksik yazılar genel karşılıklarıyla doldurulur; oyun yalnız kendine özgü olanı yazar.
@@ -45,7 +45,10 @@ function karakterYap(id, ad) {
 }
 const calgi = { dumP: 0, tekP: 0, perde: 3 };
 
-const temiz = s => String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f​-‏‪-‮⁦-⁩]/g, ' ').replace(/\s+/g, ' ').trim();
+// Önce ANSI kaçışları (ESC [ … harf) ve Unicode biçim karakterleri (Cf: U+061C, U+2060, U+FEFF, yön işaretleri …; emoji
+// birleştiricisi U+200D yalnız iki emoji arasında kalır) ile görünmez dolgu ve birleşik harfler (U+034F, U+115F, U+1160,
+// U+17B4, U+17B5, U+180B–180D, U+3164, U+FFA0, U+2800) atılır; OSC / DCS kaçışları içindeki metinle birlikte gider.
+const temiz = s => String(s == null ? '' : s).replace(/\x1b[\]P_^X][\s\S]*?(?:\x07|\x1b\\|$)|[\x9d\x90\x9e\x9f][\s\S]*?(?:\x07|\x9c|$)/g, '').replace(/(?:\x1b\[|\x9b)[0-9;?]*[ -\/]*[@-~]/g, '').replace(/\x1b[@-_]?/g, '').replace(/(?!\u200d)[\p{Cf}\u034f\u115f\u1160\u17b4\u17b5\u180b-\u180d\u3164\uffa0\u2800]/gu, '').replace(/(?<![\p{Extended_Pictographic}\u{1F3FB}-\u{1F3FF}\uFE0F])\u200d|\u200d(?![\p{Extended_Pictographic}])/gu, '').replace(/[\u0000-\u001f\u007f-\u009f\u200b\u200c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, ' ').replace(/\s+/g, ' ').trim();
 // balon: konuşma balonları açık mı · yasak: gizlenecek kelimeler · gizli / cikan: yayıncının panelden adını
 // gizlediği ve sahneden çıkardığı izleyiciler ({ id, ad }). Hepsi tarayıcıda saklanır (ayarOku / ayarYaz).
 const ayar = { balon: true, yasak: [], gizli: [], cikan: [] };
@@ -57,6 +60,20 @@ function balonlariSil(f) { for (const k of D.oy.values())
 const yasakVar = m => { const k = m.toLocaleLowerCase('tr'); return ayar.yasak.some(y => k.includes(y)); };
 const balonMetni = m => yasakVar(m) ? '' : m.replace(/(https?:\/\/|www\.)\S+/gi, '…').replace(/\d[\d\s().+-]{6,}\d/g, '…');
 const kisalt = (s, n) => { const a = Array.from(s); return a.length > n ? a.slice(0, n - 1).join('') + '…' : s; };
+// Hediyenin kimliği (docs/OLAYLAR.md): { id, ad } ya da yoksa null. Ad da yabancıdan gelir: düz metindir, temizlenir,
+// 40 karaktere kısaltılır; hiçbir yerde HTML olarak yazılmaz. Kimlik platformun hediye numarasıdır (metin, en çok 32).
+// Yalnız metin ve sayı kabul edilir; boş kalan alan düşer, ikisi de boşsa null.
+const hediyeAlan = v => typeof v === 'string' || (typeof v === 'number' && Number.isFinite(v)) ? temiz(v) : '';
+function hediyeKimlik(h) {
+  if (!h || typeof h !== 'object')
+    return null;
+  const id = Array.from(hediyeAlan(h.id)).slice(0, 32).join(''), ad = kisalt(hediyeAlan(h.ad), 40), s = {};
+  if (id)
+    s.id = id;
+  if (ad)
+    s.ad = ad;
+  return id || ad ? s : null;
+}
 
 function katil(id, ad, zorla) {
   let k = D.oy.get(id);
@@ -145,8 +162,8 @@ function olay(o) {
     gunluk('geldi', ad, '', false, id);
   }
   else if (o.tip === 'hediye') {
-    const j = clamp(Math.round((+o.jeton || 1) * (+o.adet || 1)), 1, 1e7), onceki = D.lider;
-    const k = katil(id, ad, true);
+    const adet = clamp(Math.round(+o.adet) || 0, 0, 1e7), j = clamp(Math.round((+o.jeton || 1) * (+o.adet || 1)), 1, 1e7), onceki = D.lider;
+    const k = katil(id, ad, true), hd = hediyeKimlik(o.hediye);
     if (!k)
       return;
     k.jeton += j;
@@ -158,8 +175,10 @@ function olay(o) {
     k.zip1 = k.zip0 + 4;
     bildir(ad, j + ' jeton', kd.ad + '!');
     muzik.zil(Math.min(1, j / 200));
-    gunluk('hediye', ad, j + ' jeton → ' + kd.ad, true, id);
-    oyunHediye(k, j, kd);
+    // Akış satırı: hediyenin adı ve olayın taşıdığı adet (yoksa yazılmaz), jeton, tetiklenen kademe (25-yazilar.js).
+    gunluk('hediye', ad, '', { jeton: j, ad: hd && hd.ad || '', adet: adet > 1 ? adet : 0, kademe: kd.ad }, id);
+    // Dördüncü bilgi hediyenin kimliği ({ id, ad } ya da null); üç bilgiyle yazılmış kancalar eskisi gibi çalışır.
+    oyunHediye(k, j, kd, hd);
     siraGuncelle();
     if (onceki && D.lider !== onceki)
       oyunLiderDegisti(onceki, D.lider);

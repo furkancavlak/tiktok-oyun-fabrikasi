@@ -65,7 +65,10 @@ kanca iki dosyada tanımlı kalmasın.
 
 Sonra şu sırayla ilerle; her adımdan sonra derleyip kareye bak:
 
-1. `js/00-ayar.js`: yazılar, kademeler (`etki` metniyle), tohum kalabalık, sahte yorumlar, kapasite.
+1. `oyun.json` içindeki `aciklama`: ana sayfadaki oyun kabininde görünen tek, düz cümle. Kurallar belli olunca yaz;
+   şablondan gelen cümle geçicidir. Örnek: "Yorum yazan halaya girer, beğeni tempoyu artırır, en çok hediye atan
+   mendili alıp halayın başına geçer." Jargon yok; izleyici ne yapar, oyunda ne olur.
+   `js/00-ayar.js`: yazılar, kademeler (`etki` metniyle), tohum kalabalık, sahte yorumlar, kapasite.
    **Müzik de burada**: `muzik: { takim, havalar }`. Şablon `takim: 'SEC'` ile gelir; seçmeden bırakırsan derleme
    uyarır, sayfa konsola hata yazar, test kalır. En az iki **özgün** hava yaz (nota ve davul yazımı
    `docs/MUZIK.md`; örnekler `oyunlar/konvoy/js/00-ayar.js`, `oyunlar/vur-duzelsin/js/00-ayar.js`). Var olan
@@ -170,7 +173,8 @@ geçirme.
 Kullanıcıya kısa ve dürüst bir özet ver:
 
 - Oyun ne yapıyor (kurallar tablosu).
-- Nasıl açılır: `node kopru.js --deneme --oyun <ad> --ac`.
+- Nasıl açılır: `BASLAT.bat` dosyasına çift tıkla, ana sayfada oyunun kabininde sarı **Dene** (ya da
+  `node kopru.js --deneme --oyun <ad> --ac`). Kabinin cümlesi `oyun.json` içindeki `aciklama`; yazıldığından emin ol.
 - Kare dosyasının yeri ve müzik önizlemesi (`test/cikti/<ad>/muzik-onizleme.wav`): kullanıcı dinleyip karar verir.
 - Neyin testle, neyin gözle doğrulandığı; neyin **hiç** doğrulanmadığı (ses kulakla dinlenmedi, gerçek yayın
   denenmedi, hareket yalnız karelerden görüldü gibi).

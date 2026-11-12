@@ -27,8 +27,11 @@ function kopyala(nereden, nereye) {
 }
 kopyala(kaynak, hedef);
 
-// adları yaz: oyun.json ve 00-ayar.js içindeki ilk id / ad alanları
-fs.writeFileSync(path.join(hedef, 'oyun.json'), JSON.stringify({ ad: gorunen, paket: ad }, null, 2) + '\n');
+// adları yaz: oyun.json ve 00-ayar.js içindeki ilk id / ad alanları. aciklama, ana sayfadaki kartta görünen tek
+// cümledir; şablonunki geçicidir, oyunun kuralları belli olunca oyunun kendi cümlesiyle değiştirilir.
+let sablonBilgi = {};
+try { sablonBilgi = JSON.parse(fs.readFileSync(path.join(kaynak, 'oyun.json'), 'utf8').replace(/^﻿/, '')); } catch (e) { }
+fs.writeFileSync(path.join(hedef, 'oyun.json'), JSON.stringify({ ad: gorunen, paket: ad, aciklama: String(sablonBilgi.aciklama || '') }, null, 2) + '\n');
 const ayarYol = path.join(hedef, 'js', '00-ayar.js');
 if (fs.existsSync(ayarYol)) {
   const tirnak = s => "'" + s.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";
@@ -61,6 +64,7 @@ console.log('\noyunlar/' + ad + ' hazır. Sırada:');
 console.log('  1. oyunlar/' + ad + '/js/00-ayar.js   kurallar, yazılar, hediye kademeleri');
 console.log('     ve MÜZİK: OYUN.muzik içinde takımı seç, en az iki özgün hava yaz (docs/MUZIK.md).');
 console.log('     Her oyunun kendi müziği olur; seçmeden bırakırsan derleme uyarır, testler kalır.');
+console.log('     oyunlar/' + ad + '/oyun.json "aciklama": ana sayfadaki kartın tek cümlesi; kurallara göre yeniden yaz.');
 console.log('  2. oyunlar/' + ad + '/js/10-oyun.js   ŞABLONUN KOPYASI, SENİN DOSYAN: üstüne yaz ya da silip baştan yaz');
 console.log('     (kancalar docs/KANCALAR.md; sahne ve çizim için yeni dosyalar aç)');
 console.log('  3. node araclar/derle.js ' + ad + ' && node araclar/kare-cek.js ' + ad + '   kareye bak');

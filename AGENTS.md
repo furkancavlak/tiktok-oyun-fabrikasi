@@ -24,22 +24,49 @@ npm install                                   # bir kez
 node araclar/yeni-oyun.js <ad> "<Görünen Ad>" # şablondan yeni oyun
 node araclar/derle.js <ad>                    # oyunlar/<ad>/js + cekirdek → oyunlar/<ad>/oyun.html
 node araclar/kare-cek.js <ad>                 # sahne kareleri → test/cikti/<ad>/kare-hepsi.png
-node araclar/test.js <ad>                     # çekirdek testleri + oyunun kendi testi
+node araclar/test.js <ad>                     # çekirdek testleri + oyunun kendi testi (+ köprü, müzik, araçlar)
 node araclar/test.js                          # bütün oyunlar + köprü testleri
+node araclar/test.js <ad> --yalniz cekirdek,oyun --hizli   # düzenlerken: yalnız seçilen bölümler ("Test döngüsü")
+node kopru.js --ana-sayfa --ac                # ana sayfa (oyun salonu): Dene / Yayın / Durdur / Motoru kapat
+                                              # BASLAT.bat bunu --gizli ile penceresiz açar (günlük: motor-gunlugu.txt)
+                                              # macOS: BASLAT.command, Linux: BASLAT.sh aynısını görünür Terminal penceresinde yapar
 node kopru.js --deneme --oyun <ad> --ac       # köprü + oyun, TikTok'suz, sahte olaylarla
 node kopru.js <tiktok_adi> --oyun <ad> --ac   # gerçek yayın (yalnız okur)
 node araclar/paket.js <ad>                    # yayıncıya verilecek klasör → dist/<ad>/
+node araclar/surum.js                         # yalnız bakımcı: Windows hazır paketi (kendi Node'u + kütüphane) ve ZIP → dist/surum-…/
 ```
 
 Testler ve kareler bir tarayıcı ister. Kurulu Chrome'u göstermek en hızlısıdır:
 `CHROME_PATH="C:/Program Files/Google/Chrome/Application/chrome.exe" node araclar/test.js <ad>`
 (yoksa bir kez `npx playwright install chromium`).
 
+## Test döngüsü
+
+Bütün testler (`node araclar/test.js`) yaklaşık 18 dakika sürer. Her değişiklikte hepsi gerekmez: değiştirdiğin şeyi
+sınayan bölümü çalıştır. Bölümler: `derle`, `cekirdek`, `oyun` (her oyun için), `kopru`, `muzik`, `araclar` (bir kez).
+`--yalniz` bölümleri seçer, `--hizli` çekirdek testlerindeki uzun dayanıklılık testini (9 × 10 sn) kısa sürümüyle
+(4 × 10 sn) çalıştırır; başka hiçbir şeyi atlamaz. Her bölümün süresi sonda ÖZET'te yazar.
+
+| Ne değişti | Düzenlerken | Bitirmeden önce ekle |
+| --- | --- | --- |
+| (a) yalnız `kopru.js` | `node araclar/test.js halay --yalniz kopru --hizli` | `araclar` (paketin içinden motoru açar) |
+| (b) yalnız `cekirdek/ana-sayfa.html` | `node araclar/test.js halay --yalniz kopru --hizli` (ana sayfa testleri köprü testinin içinde) | `araclar` (pakete girdiğini denetler) |
+| (c) bir oyunun `oyunlar/<ad>/js/` dosyaları | `node araclar/derle.js <ad>`, sonra `node araclar/test.js <ad> --yalniz derle,cekirdek,oyun --hizli` | müziğe (`OYUN.muzik`) dokunduysan `muzik` |
+| (d) çekirdek `cekirdek/js/` | `node araclar/derle.js --hepsi`, sonra `node araclar/test.js --yalniz derle,cekirdek,oyun --hizli` (bütün oyunlar) | `node araclar/test.js --hizli` (köprü istemcisi, müzik, araçlar da çekirdeği kullanır) |
+
+Kural: düzenleme döngüsünde `--hizli` ve `--yalniz`. Sürümden (ve `araclar/surum.js`'ten) önce bir kez tam koşu:
+`node araclar/test.js` (`--hizli` olmadan). Bilgisayarda başka bir tarayıcı testi çalışmıyorsa `--serit 2` ekle:
+oyun bölümleri ile köprü → müzik → araçlar aynı anda yürür. Başka bir tarayıcı testi çalışıyorsa tek şeritte kal;
+iki şerit makineyi yorar, kare süresi ölçümleri kalabilir. Köprü test kapılarını araç kendisi boş bir bloktan seçer
+(sabitlemek için `KOPRU_TEST_PORT`), iki koşu birbirinin kapısına çarpmaz.
+
 ## Harita
 
 ```
 cekirdek/js/          çekirdek parçaları; başlarındaki yorum ne yaptıklarını söyler
 cekirdek/sayfa.html   sayfa iskeleti: solda 9:16 sahne, sağda deneme paneli
+cekirdek/ana-sayfa.html  BASLAT.bat'ın açtığı ana sayfa: açılış sahnesi (kütüphane orada iner), oyun salonu, bilet, Dene / Yayın
+cekirdek/node-yok.html   Node.js kurulu değilse BASLAT.bat'ın tarayıcıda açtığı yardım sayfası
 cekirdek/test/        her oyuna uygulanan testler ve köprü testleri
 oyunlar/halay/        tam örnek oyun: Mendil Kimde? (bütün kancaları kullanır)
 sablon/               en yalın oyun; yeni oyun bundan başlar
@@ -56,8 +83,12 @@ docs/YAYIN.md         yayıncı için: nasıl yayına verilir
 
 1. **İzleyici metni asla HTML olarak yazılmaz.** Ad ve yorum yabancıdan gelir: sayfaya `textContent`, tuvale
    `fillText`. `innerHTML`, `insertAdjacentHTML`, `document.write` yok.
+   Hediyenin adı (`hediye.ad`, `docs/OLAYLAR.md`) da yabancıdan gelir; aynı kural geçer.
 2. **Köprü salt okur.** Hesaba giriş, oturum bilgisi, çerez, yayına mesaj gönderme eklenmez; kolaylaştıran
-   seçenek de açılmaz. Köprü yalnız `127.0.0.1` dinler.
+   seçenek de açılmaz. Köprü yalnız `127.0.0.1` dinler, her istekte `Host`'a, soketlerde `Origin`'e bakar
+   (`docs/OLAYLAR.md`); başka bir site olay akışını ve yayıncının adını okuyamaz. Ana sayfa kipinde kütüphaneyi
+   kendisi indirir (sabit komut, `npm install --omit=dev`); testler bunun yerine `--kurulum-betigi <yol>` bayrağıyla taklidi kullanır (ortam değişkeni okunmaz).
+   Komut satırı kiplerinde olay akışı yalnız her açılışta yeni bir kimlikle açılır (`/olay/<kimlik>`).
 3. **Dışarıdan gelen her şey `olay(o)` üzerinden girer.** Sahte izleyici, köprü ve testler aynı kapıyı kullanır.
 4. **Gerçek yayında sahte ad görünmez.** Köprüden açılan sayfada otomatik kalabalık kapalıdır.
 5. **Ses ve görsel üretimdir.** Depoya ses dosyası ve görsel eklenmez; karakterler kodla çizilir. Tek istisna hazır
@@ -98,6 +129,7 @@ dosyasına kendi gözünle bak, gördüğün kusuru düzelt, yeniden bak.
   tutuyor.
 - En kalabalık hâlde, 1080×1920'de kare başına işlem 33 ms'nin altında (kare-cek yazar).
 - `node kopru.js --deneme --oyun <ad>` ile açılıp sahte olayların oyuna işlendiği görüldü.
+- `oyun.json` içinde oyunun kendi `aciklama` cümlesi var (ana sayfadaki kabin; şablonun cümlesi kalmadı).
 - Oyunun kendi müziği var (`OYUN.muzik`, derleme müzik uyarısı vermiyor); müzik testi geçti ve
   `test/cikti/<ad>/muzik-onizleme.wav` kullanıcıya dinlemesi için verildi.
 - Kullanıcıya neyin testle, neyin gözle doğrulandığı ve neyin hiç denenmediği söylendi (ses kulakla

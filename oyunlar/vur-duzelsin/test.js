@@ -4,7 +4,7 @@
 // Çekirdek testleri ayrıca çalışır. Çalıştırma: node oyunlar/vur-duzelsin/test.js vur-duzelsin
 'use strict';
 const path = require('path');
-const { OYUN_URL, CIKTI, tarayici, raporla, kontrolcu } = require(path.join(__dirname, '..', '..', 'cekirdek', 'test', 'ortak'));
+const { OYUN_URL, CIKTI, tarayici, raporla, kontrolcu, bekle: durumBekle, hazirBekle } = require(path.join(__dirname, '..', '..', 'cekirdek', 'test', 'ortak'));
 const { sonuc, kontrol } = kontrolcu();
 
 (async () => {
@@ -14,7 +14,7 @@ const { sonuc, kontrol } = kontrolcu();
   p.on('pageerror', e => hatalar.push('SAYFA HATASI: ' + e.message));
   p.on('console', m => { if (m.type() === 'error' && !/ERR_TUNNEL|Failed to load resource/.test(m.text())) hatalar.push(m.text()); });
   await p.goto(OYUN_URL);
-  await p.waitForTimeout(600);
+  await hazirBekle(p);
   await p.evaluate(() => { if (document.getElementById('oto').getAttribute('aria-pressed') === 'true') document.getElementById('oto').click(); });
   const bosalt = () => p.evaluate(() => { document.getElementById('bosalt').click(); });
   const O = o => p.evaluate(o2 => CanliOyun.olay(o2), o);
@@ -25,6 +25,8 @@ const { sonuc, kontrol } = kontrolcu();
   await bosalt();
   await O({ tip: 'yorum', kullanici: { id: 'a', ad: 'Ali' }, metin: 'selam' });
   for (const [id, ad] of [['b', 'Bora'], ['c', 'Cem'], ['e', 'Ece']]) await O({ tip: 'yorum', kullanici: { id, ad }, metin: 'x' });
+  // Sabit kalır: koşulla beklenince (y0 > 0,9 olur olmaz) Ali tırmanırken ölçülüyor, kontrol yuvarlanmış y0'a (0,90)
+  // takılıp kalıyordu. Kontrolün y0 > 0,9 sınırı tırmanışın sonuna (~0,91) çok yakın; 2,5 sn tırmanışın bittiği an.
   await p.waitForTimeout(2500);
   let d = await durum();
   const el = await p.evaluate(() => { const D = CanliOyun._test.D, k = D.lider, u = D.antenUc; return { y0: +k.y0.toFixed(2), el: u && Math.hypot(u[0] - k.j.haR[0], u[1] - k.j.haR[1], u[2] - k.j.haR[2]) }; });
@@ -60,14 +62,16 @@ const { sonuc, kontrol } = kontrolcu();
     if (tip === 'ucan') await p.locator('#sahne').screenshot({ path: CIKTI + '/v-ucan.png' });
     await bekle(() => !CanliOyun.durum().vuran, 4000);
   }
-  await p.waitForTimeout(1500);
+  // vuran kalabalıktaki yerine döner (eskiden sabit 1,5 sn)
+  await durumBekle(p, 'Bora işini bitirip yerine döndü', () => { const k = CanliOyun._test.D.oy.get('b'); return !!k && !k.is && Math.abs(k.x - k.hedefX) < 0.1 && Math.abs(k.z - k.hedefZ) < 0.1; }, undefined, 6000);
   const don = await p.evaluate(() => { const k = CanliOyun._test.D.oy.get('b'); return { is: k.is, x: +(k.x - k.hedefX).toFixed(2), z: +(k.z - k.hedefZ).toFixed(2) }; });
   kontrol('Vuran işi bitince kalabalıktaki yerine döner', !don.is && Math.abs(don.x) < 0.1 && Math.abs(don.z) < 0.1, don);
 
   // anten el değiştirir
   await bosalt();
   for (const [id, ad] of [['a', 'Ali'], ['b', 'Bora'], ['c', 'Cem']]) await O({ tip: 'yorum', kullanici: { id, ad }, metin: 'x' });
-  await p.waitForTimeout(2200);
+  // Ali anteni tutana dek (eskiden sabit 2,2 sn)
+  await durumBekle(p, 'Ali anteni tutuyor', () => CanliOyun.durum().antenTutan === 'Ali', undefined, 8000);
   await p.evaluate(() => { CanliOyun._test.D.netlik = 0.7; });
   await O({ tip: 'hediye', kullanici: { id: 'c', ad: 'Cem' }, jeton: 50 });
   const pk = await p.evaluate(() => ({ pankart: document.getElementById('pankart-yeri').textContent, netlik: CanliOyun._test.D.netlik }));
@@ -112,13 +116,15 @@ const { sonuc, kontrol } = kontrolcu();
   // usta işi: gönderen istasyona iner, dört vuruş, görüntü tam net, gol
   await bosalt();
   for (const [id, ad] of [['a', 'Ali'], ['b', 'Bora'], ['c', 'Cem']]) await O({ tip: 'yorum', kullanici: { id, ad }, metin: 'x' });
-  await p.waitForTimeout(2000);
+  // Ali anteni tutana dek (eskiden sabit 2 sn)
+  await durumBekle(p, 'Ali anteni tutuyor', () => CanliOyun.durum().antenTutan === 'Ali', undefined, 8000);
   await p.evaluate(() => { CanliOyun._test.D.netlik = 0.1; });
   const g0 = (await durum()).gol;
   await O({ tip: 'hediye', kullanici: { id: 'b', ad: 'Bora' }, jeton: 1000 });
   const ustaVar = await bekle(() => CanliOyun.durum().usta === 'Bora', 1500);
   const yildiz = await p.evaluate(() => CanliOyun._test.D.oy.get('b').yildiz);
-  await p.waitForTimeout(1200);
+  // usta gösteride büyür (eskiden sabit 1,2 sn)
+  await durumBekle(p, 'Bora 1,3 katına büyüdü', () => { const k = CanliOyun._test.D.oy.get('b'); return !!k && !!k.g && k.g.boy / k.asilBoy >= 1.3; }, undefined, 5000);
   const iri = await p.evaluate(() => { const k = CanliOyun._test.D.oy.get('b'); return +(k.g.boy / k.asilBoy).toFixed(2); });
   kontrol('Usta gösteride iri: boyu en az 1,3 katına çıkar', iri >= 1.3, iri);
   const golOldu = await bekle(() => CanliOyun.durum().gol > 0, 15000);
@@ -134,7 +140,7 @@ const { sonuc, kontrol } = kontrolcu();
     const q = await b.newPage({ viewport: { width: w, height: h } });
     q.on('pageerror', e => hatalar.push('SAYFA HATASI: ' + e.message));
     await q.goto(OYUN_URL + '#yayin');
-    await q.waitForTimeout(500);
+    await hazirBekle(q);
     await q.evaluate(() => {
       if (document.getElementById('oto').getAttribute('aria-pressed') === 'true') document.getElementById('oto').click();
       document.getElementById('bosalt').click();
@@ -186,7 +192,8 @@ const { sonuc, kontrol } = kontrolcu();
   await O({ tip: 'hediye', kullanici: { id: 'b', ad: 'Bora' }, jeton: 1 });
   await O({ tip: 'hediye', kullanici: { id: 'c', ad: 'Cem' }, jeton: 1 });
   await p.evaluate(() => { const D = CanliOyun._test.D; const k = D.oy.get('c'); k.son = -1e6; });
-  await p.waitForTimeout(2500);
+  // sessiz kalan Cem sahneden çıkar (eskiden sabit 2,5 sn)
+  await durumBekle(p, 'Cem sahneden çıktı', () => !CanliOyun.durum().sira.some(x => x[0] === 'Cem'), undefined, 8000);
   const cik = await p.evaluate(() => ({ kuyruk: CanliOyun._test.D.kuyruk.map(e => e.k.ad), sahnede: CanliOyun.durum().sira.map(x => x[0]) }));
   kontrol('Sessiz kalıp çıkanın bekleyen vuruşu sıradan düşer', !cik.kuyruk.includes('Cem'), cik);
 

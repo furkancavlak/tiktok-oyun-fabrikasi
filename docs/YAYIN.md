@@ -18,12 +18,42 @@ Bu rehber, programcı olmayan bir yayıncı içindir. Elinde bir oyun paketi kla
 
 ## Yayına başlama
 
-1. Paket klasöründeki `BASLAT.bat` dosyasına çift tıkla.
-2. İlk seferde gereken kütüphane iner. Bu bir kez olur, internet ister.
-3. Ekranda TikTok kullanıcı adın sorulur. Başında `@` olmadan yaz ve Enter'a bas.
-4. Oyun tarayıcıda açılır. Solda sahne, sağda yayın masası (panel) vardır. Masanın en üstündeki şeritte Bağlantı
-   kutusu **Canlı** yazıyorsa yorumlar, beğeniler ve hediyeler oyuna akıyor demektir. Yanında kaç olay alındığı yazar.
-5. Sayfada bir kez herhangi bir yere tıkla ya da başlat düğmesine bas. Tarayıcılar, kullanıcı tıklamadan ses çalmaya izin vermez.
+1. Paket klasöründeki `BASLAT.bat` dosyasına çift tıkla. Node.js kurulu değilse tarayıcıda kısa bir yardım sayfası
+   açılır (nodejs.org, LTS sürümü); kurduktan sonra yeniden çift tıkla.
+   Mac'te aynı işi `BASLAT.command` (Finder'da çift tıkla), Linux'ta `BASLAT.sh` (terminalde `sh BASLAT.sh`) yapar;
+   orada motor Terminal penceresinde çalışır, açık kalsın. macOS dosyayı ilk seferde engellerse Sistem Ayarları →
+   Gizlilik ve Güvenlik altında **Yine de Aç**'ı ara ya da Terminal'de klasöre girip `sh BASLAT.command` yaz
+   (Mac'te denenmedi).
+2. Tarayıcıda bir açılış ekranı gelir: motor çalışıyor mu, TikTok kütüphanesi kurulu mu, oyunlar hazır mı, satır satır
+   yazar. İlk seferde kütüphane orada iner (yaklaşık bir dakika, internet ister; bir kez olur). Beklerken
+   **Beklemeden dene** ile oyunu sahte izleyicilerle açabilirsin; kırmızı düğmeler kütüphane inince kendiliğinden yanar.
+   İnemezse ekran "İndirilemedi. İnternet bağlantını kontrol et." der: **Yeniden dene** ya da **Şimdilik yalnız dene**.
+3. Hazır olunca ana sayfa (oyun salonu) açılır. Çift tıklayınca bir an görünen siyah pencere motor hazır olunca
+   kendiliğinden kapanır: oyunun motoru arka planda, penceresiz çalışır. Motoru durdurmak için ana sayfanın altındaki
+   **Motoru kapat**'a bas, sonra **Evet, kapat**. Açık oyun durur, sayfa "Motor durdu." der ve **Başlat** düğmesini
+   gösterir; ona basınca salon aynı sekmede geri gelir. O sekmeyi kapatınca motor iki üç dakika içinde tamamen
+   kapanır (klasörü silebilir ya da taşıyabilirsin). Tarayıcıda oyun fabrikasının hiçbir sayfası açık değilse motor
+   10 dakika sonra kendiliğinden de kapanır; açık bir oyun sayfası (yayında yakalanan sekme) varken kapanmaz.
+   Motor açılamazsa siyah pencere kapanmaz ve nedenini yazar.
+4. Önce sarı **Dene** düğmesine bas: oyun TikTok'a bağlanmadan, sahte izleyicilerle açılır. Neye benzediğini gör.
+5. Yayına geçmek için masanın sol üstündeki **← Oyunlar** bağlantısıyla ana sayfaya dön. Sağ üstteki bilete TikTok
+   kullanıcı adını yaz (başındaki `@` hazır durur) ve **Kaydet**'e ya da Enter'a bas. Bilet "Kayıtlı" yazar, kırmızı
+   **Yayın** düğmesi yanar; ona bas. Ad bu bilgisayarda kayıtlı kalır, bir dahaki sefere yeniden yazman gerekmez.
+   Ana sayfadaki şeritte açık oyun ve motorun son durumu yazar ("şu an canlı yayında değil" gibi); **Durdur**
+   oyunu kapatır, **Oyuna dön** oyunun sayfasını açar. Sayfanın altındaki **Yayına nasıl alırım?** dört adımı gösterir.
+6. Oyun sayfasında solda sahne, sağda yayın masası (panel) vardır. Masanın en üstündeki şeritte **Bağlantı** kutusu
+   ne olduğunu söyler:
+   - **Canlı**: TikTok yayınına bağlanıldı; yorumlar, beğeniler ve hediyeler oyuna akıyor. Yanında kaç olay alındığı yazar.
+   - **Yayın yok** (altında "yayın henüz açık değil"): TikTok'ta yayın henüz açık değil. Yayını başlat; motor kendisi yeniden dener. Beklemek
+     istemezsen ana sayfada aynı oyunun **Yayın** düğmesine yeniden bas, hemen dener.
+   - **Bağlanıyor**: TikTok'a bağlanılıyor.
+   - **Deneme**: sahte izleyiciler; TikTok'a bağlanılmadı.
+   - **Durdu**: oyun ana sayfadan durduruldu.
+7. Sayfada bir kez herhangi bir yere tıkla ya da başlat düğmesine bas. Tarayıcılar, kullanıcı tıklamadan ses çalmaya izin vermez.
+
+Denemeden yayına geçince denemenin sahte izleyicileri sıralamadan silinir; gerçek yayında görünmezler. Başka bir
+sekmede açık kalmış eski oyun sayfası da yeni başlatmaya kendiliğinden geçer; oyun durdurulduysa ya da başka oyun
+açıldıysa "Bu oyun artık çalışmıyor" der.
 
 ## TikTok LIVE Studio'ya ekleme
 
@@ -47,11 +77,12 @@ Yakalama sırasında tarayıcı penceresi küçültülmemeli. Küçültülmüş 
   de çalışır. Önce oyun penceresine bir kez tıkla.
 - **Gizlenecek kelimeler:** virgülle ayırarak yaz. Bu kelimeleri içeren yorum balon olmaz, adında geçen izleyici
   `misafir` yazılır. Alandan çıkınca sahnede o an eşleşen ad ve balonlar da gizlenir.
-- **Sahnedekiler** listesinde ya da **Olay akışında** bir adın üstüne gel:
-  - **Gizle:** o izleyicinin adı hemen ve kalıcı olarak `misafir` olur.
-  - **Çıkar:** izleyici sahneden gider; geri alana kadar yorumu, hediyesi ve beğenisi oyuna işlenmez.
-  - Fare olay akışının üstündeyken akış durur, satırlar kaymaz. Kaç yeni olay beklediği başlıkta yazar.
-- Çıkardıkların ve adını gizlediklerin **Yayın** sekmesinde listelenir; oradan tek tek ya da hepsini geri alabilirsin.
+- **Sahnedekiler** listesinde ya da **Akış**ta bir ada tıkla; altında iki düğme açılır:
+  - **Adını gizle:** o izleyicinin adı hemen ve kalıcı olarak `misafir` olur.
+  - **Sahneden çıkar:** izleyici sahneden gider; geri alana kadar yorumu, hediyesi ve beğenisi oyuna işlenmez.
+  - Fare akışın üstündeyken akış durur, satırlar kaymaz. Kaç yeni olay beklediği başlıkta yazar.
+  - Akışın üstündeki **Hediyeler** düğmesi yalnız hediyeleri, **Yorumlar** yalnız yorumları bırakır.
+- Çıkardıkların ve adını gizlediklerin **Yayın güvenliği** kutusunda listelenir; oradan tek tek ya da hepsini geri alabilirsin.
   Liste bu bilgisayarda saklanır, sonraki yayında da geçerlidir.
 
 Ayarları yayına çıkmadan önce yap: yalnızca sahne görünümünde panel gizlidir, orada yalnız `B` tuşu çalışır.
@@ -62,13 +93,44 @@ buna izin verip vermediği denenmedi.
 
 | Belirti | Neden ve çözüm |
 | --- | --- |
-| "Node.js bulunamadı" | Node.js kurulu değil ya da kurulumdan sonra bilgisayar yeniden başlatılmadı. https://nodejs.org adresinden LTS sürümünü kur, `BASLAT.bat` dosyasını yeniden aç. |
+| "Node.js bulunamadı" (ve tarayıcıda yardım sayfası) | Node.js kurulu değil ya da kurulumdan sonra bilgisayar yeniden başlatılmadı. https://nodejs.org adresinden LTS sürümünü kur, `BASLAT.bat` dosyasını yeniden aç. |
+| Açılış ekranı "İndirilemedi. İnternet bağlantını kontrol et." | TikTok kütüphanesi inemedi. İnterneti kontrol edip **Yeniden dene**'ye bas. O zamana kadar **Dene** çalışır. |
+| Açılış ekranı "İndirme programı bulunamadı" | Node.js kurulumu eksik (npm yok). nodejs.org adresinden Node.js'i yeniden kur. |
+| Açılış ekranı "Bu klasöre yazılamıyor" | Paket klasörü yazılamayan bir yerde (salt okunur sürücü, korunan klasör). Klasörü Masaüstü ya da Belgeler gibi bir yere taşı. |
+| Açılış ekranı "İndirme bitti ama kütüphane klasörde görünmüyor" | **Yeniden dene**'ye bas; düzelmezse paketi baştan aç. |
+| Diskten açtığım `oyun.html` köprüye bağlanmıyor | Köprü her açılışta yeni bir olay adresi üretir. Köprüyü komut satırından açtığın pencerede yazan `Olay adresi: ws://127.0.0.1:…/olay/…` satırının tamamını Yayın sekmesindeki adres alanına yaz; yalnız `ws://127.0.0.1:8787` bağlanmaz. |
 | Köprü bağlanamıyor, 403 hatası | Kütüphane eski. Paket klasöründe bir komut satırı aç ve `npm install tiktok-live-connector@latest` yaz. Sonra `BASLAT.bat` dosyasını yeniden aç. |
 | "Yayın kapalı" ya da kullanıcı bulunamadı | Yayın açık değil ya da kullanıcı adı yanlış. Önce TikTok'ta yayını başlat, adı `@` olmadan yaz. |
-| Kapı dolu (port meşgul) | Köprü zaten başka bir pencerede açık olabilir; onu kapat. Olmazsa komut satırında `node kopru.js <kullanıcı_adı> --port 9000 --ac` çalıştır. |
+| İkinci çift tıklamada yeni motor açılmıyor | Motor zaten arka planda açık. Sorun değil: `BASLAT.bat` ana sayfayı yeniden açar, onu kullan. |
+| Siyah pencere "Oyun motoru açılamadı" deyip açık kalıyor | Motor açılırken durdu. Pencerede motorun son satırları yazar; o pencerenin ekran görüntüsünü gönder. Aynı satırlar paket klasöründeki `motor-gunlugu.txt` dosyasında da durur. |
+| Klasör silinmiyor ya da taşınmıyor ("dosya kullanımda") | Motor arka planda hâlâ açık. Ana sayfada **Motoru kapat**'a bas, sonra o sekmeyi kapatıp üç dakika bekle; ya da tarayıcıdaki bütün oyun sayfalarını kapatıp 10 dakika bekle. Sayfa açık değilse `BASLAT.bat` ile aç, sonra **Motoru kapat**. |
+| "Oyun motoru başka bir pencerede zaten açık" | Motor eski yoldan (komut satırından, tek oyunla) başka bir pencerede açık. O siyah pencereyi kapat, `BASLAT.bat` dosyasına yeniden çift tıkla. |
+| "Oyun fabrikasının eski bir motoru açık ve kendiliğinden kapanmıyor" | Eski bir sürümün motoru (görünür siyah pencereyle) açık. O siyah pencereyi kapat, `BASLAT.bat` dosyasına yeniden çift tıkla. Başka bir klasörün yeni motorunu ise `BASLAT.bat` kendisi kapatır. |
+| Kapı dolu (port meşgul) | Başka bir program aynı kapıyı tutuyor; onu kapat. Olmazsa komut satırında `node kopru.js --ana-sayfa --port 9000 --ac` çalıştır. |
+| Ana sayfa "Motor çalışmıyor" ya da "Motora ulaşılamıyor" diyor | Motor kapanmış (ana sayfadan kapatıldı ya da hiçbir sayfa açık değilken kendiliğinden kapandı). `BASLAT.bat` dosyasına yeniden çift tıkla; açık sayfa motor gelince kendiliğinden devam eder. |
+| Ana sayfa "Motor durdu." diyor | Motoru **Motoru kapat** ile durdurdun. **Başlat**'a bas; salon geri gelir. Oyun sayfası da "Motor durdu" der: ana sayfaya dön, **Başlat**'a bas. |
+| Ana sayfa "Motor tamamen kapandı. Yeniden açmak için BASLAT'a çift tıkla." diyor | Motor durmuştu ve "Motor durdu" sekmesi bir süre kapalı kaldı, motor da tamamen kapandı. `BASLAT.bat` dosyasına çift tıkla. |
+| Kullanıcı adı kabul edilmiyor | TikTok adında yalnız harf, rakam, alt çizgi ve nokta olur; en çok 24 karakter, noktayla bitmez. Ekrandaki adını değil, profil adresindeki `@` ile başlayan adı yaz. |
+| Bağlantı kutusu "Yayın yok" | TikTok'ta yayın henüz açık değil. Yayını başlat; motor kendisi dener ya da ana sayfada **Yayın**'a yeniden bas. |
 | Ses yok | Tarayıcılar tıklamadan ses açmaz. Sayfada başlat düğmesine bas. Pencere yakalama bilgisayar sesini ayrıca almıyorsa LIVE Studio'da ses kaynağını kontrol et. |
 | LIVE Studio'da oyun görünmüyor | Tarayıcı kaynağı yerine pencere yakalama kullan. Pencerenin küçültülmediğinden emin ol. |
-| Oyun açık ama yorumlar gelmiyor | Masanın üstündeki Bağlantı kutusuna bak; ayrıntı Yayın sekmesinde yazar. Yayın açıksa ve yorum yazılıyorsa kütüphaneyi güncelle (403 satırı). |
+| Oyun açık ama yorumlar gelmiyor | Masanın üstündeki durum yazısına bak ("Canlı", "Yayın bekleniyor", "Bağlanamadı"); ayrıntı hemen altında yazar. Yayın açıksa ve yorum yazılıyorsa kütüphaneyi güncelle (403 satırı). |
+
+## Bağlanamıyorsa
+
+**Yayın**'a basınca TikTok'a bağlanılamazsa motor nedeni düz bir cümleyle yazar: ana sayfadaki "Şu an açık" şeridinde
+ve oyunun masasında, durum yazısının altında aynı cümle görünür. Motor her durumda kendisi yeniden dener; yayın yok ve oda bulunamadı durumlarında en geç 30 saniyede bir. Beklemek istemezsen ana sayfada **Yayın**'a yeniden bas: hemen dener. Kütüphanenin İngilizce
+asıl iletisi motorun günlüğüne, paket klasöründeki `motor-gunlugu.txt` dosyasına ("TikTok bağlantı hatası (…)" satırı) yazılır
+(Mac ve Linux'ta Terminal penceresinde kalır); sorun sürerse o dosyayı ya da pencerenin ekran görüntüsünü gönder.
+
+| Ekranda | Ne demek, ne yapmalı |
+| --- | --- |
+| "@ad şu an canlı yayında değil … yayın açılınca kendiliğinden bağlanır" | Yayın açık değil. TikTok'ta yayını başlat; bir şey yapmana gerek yok. Bağlantı kutusu **Yayın yok** der. |
+| "Yayın odası bulunamadı" ya da "@ad adında bir TikTok hesabı bulunamadı" | En sık görülen durum. Ad yanlış yazılmış olabilir, hesap hiç yayın açmamış olabilir ya da TikTok bu ağa yanıt vermiyordur. Ekrandaki adını değil, profil adresindeki adı `@` olmadan yaz. Ad doğruysa yayın henüz açılmamıştır. |
+| "imza hizmeti şu an isteği geri çevirdi ya da yanıt vermiyor" | Kütüphane TikTok'a bağlanmak için başka bir şirketin imza hizmetini kullanır; o hizmet şu an yoğun ya da kapalı. Senin hatan değil. Birkaç dakika bekle; motor kendisi yeniden dener. |
+| "internet bağlantısı yok ya da çok yavaş" | İnterneti kontrol et (ad çözümleme hatası, zaman aşımı). Bağlantı gelince motor kendisi bağlanır. |
+| "doğrulama (captcha) istedi ya da bu ağdan / bölgeden engelledi" | TikTok bu ağdan gelen isteği durdurdu. Biraz sonra yeniden dene ya da başka bir ağdan (ör. telefonun interneti) bağlan. |
+| "TikTok'a bağlanılamadı (…)" | Yukarıdakilerden biri değil; parantezde kütüphanenin kısa nedeni yazar. `motor-gunlugu.txt` dosyasını (Mac ve Linux'ta Terminal penceresindeki satırın ekran görüntüsünü) gönder. |
 
 ## Doğrulama durumu (10 Kasım 2026)
 
@@ -77,7 +139,7 @@ Bu tablo neyin denendiğini dürüstçe gösterir. "Denenmedi" yazan adımların
 | Adım | Durum |
 | --- | --- |
 | Köprünün gerçek bir TikTok canlı yayınını okuması | `tiktok-live-connector` 2.5.0 ile bir kez denendi: yorum, beğeni, hediye ve takip olayları oyuna ulaştı. 1.x sürümü artık bağlanamıyor (imza isteği 403 dönüyor). |
-| `BASLAT.bat`, Windows 10, temiz kopya, Türkçe harfli klasör yolu | Denendi, çalışıyor |
+| `BASLAT.bat`, Windows 10, temiz kopya, Türkçe harfli klasör yolu | Soru soran eski sürümüyle denendi, çalışıyor. Ana sayfa açan yeni sürümü (11 Kasım 2026) ve penceresiz motoru (12 Kasım 2026) bir insan çift tıklayarak henüz denemedi; penceresiz motor otomatik testlerde BASLAT.bat'ın kopyasıyla açıldı (motor sürecinin penceresi ve konsolu yok, komut istemi kendiliğinden bitiyor); köprünün ana sayfa kipi otomatik testlerle ve görünmez tarayıcıyla denendi. |
 | Node.js kurulu olmayan bir bilgisayar; insanın çift tıklaması | Denenmedi |
 | TikTok LIVE Studio pencere yakalama | Denenmedi |
 

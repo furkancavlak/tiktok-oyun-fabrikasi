@@ -2,7 +2,7 @@
 // Çekirdek testleri ayrıca çalışır (cekirdek/test/cekirdek.test.js halay). Çalıştırma: node oyunlar/halay/test.js
 'use strict';
 const path = require('path');
-const { OYUN_URL, CIKTI, tarayici, raporla, kontrolcu } = require(path.join(__dirname, '..', '..', 'cekirdek', 'test', 'ortak'));
+const { OYUN_URL, CIKTI, tarayici, raporla, kontrolcu, bekle: durumBekle, hazirBekle } = require(path.join(__dirname, '..', '..', 'cekirdek', 'test', 'ortak'));
 const { sonuc, kontrol } = kontrolcu();
 
 (async () => {
@@ -12,7 +12,7 @@ const { sonuc, kontrol } = kontrolcu();
   p.on('pageerror', e => hatalar.push('SAYFA HATASI: ' + e.message));
   p.on('console', m => { if (m.type() === 'error' && !/ERR_TUNNEL|Failed to load resource/.test(m.text())) hatalar.push(m.text()); });
   await p.goto(OYUN_URL);
-  await p.waitForTimeout(600);
+  await hazirBekle(p);
   const bosalt = () => p.evaluate(() => { document.getElementById('bosalt').click(); });
   const O = o => p.evaluate(o2 => CanliOyun.olay(o2), o);
   const durum = () => p.evaluate(() => CanliOyun.durum());
@@ -50,7 +50,8 @@ const { sonuc, kontrol } = kontrolcu();
   kontrol('50–199 jeton: herkes çöker', bekle(50, 'cok', false, 0) && bekle(199, 'cok', false, 0), [kd[50], kd[199]]);
   kontrol('200–999 jeton: davul şovu başlar, omuz titrer', bekle(200, 'omuz', true, 0) && bekle(999, 'omuz', true, 0), [kd[200], kd[999]]);
   kontrol('1000+ jeton: gönderen solo kuyruğuna girer, davul şovu başlar', kd[1000].solo === 1 && kd[1000].sov && kd[50000].solo === 1, [kd[1000], kd[50000]]);
-  await p.waitForTimeout(2500);
+  // Solo bir sonraki vuruşta başlar (eskiden sabit 2,5 sn).
+  await durumBekle(p, 'solo kd1000 ile başladı', () => CanliOyun.durum().solo === 'kd1000', undefined, 8000);
   d = await durum();
   kontrol('Solo sırası gelen ortaya çıkar', d.solo === 'kd1000', d.solo);
   await p.locator('#sahne').screenshot({ path: CIKTI + '/h-solo.png' });

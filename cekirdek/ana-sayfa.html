@@ -1,0 +1,1075 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TikTok Oyun Fabrikası</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Yazı tipi sayfayı bekletmez: yanıt gelmese de (güvenlik duvarı, takılan ağ) sayfa yedek yazı tipiyle hemen açılır. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Paytone+One&family=Rubik:wght@400;500;700;800&display=swap" media="print" onload="this.media='all'">
+<!--
+  Ana sayfa (oyun salonu): kopru.js --ana-sayfa ile açılınca / adresinde sunulur. Gece bir oyun salonu: tavanda ampul
+  dizisi, ampullü tabela, sağ üstte yayıncı bileti (kullanıcı adı), her oyun bir kabin (renkli tabela, ekranda canlı
+  önizleme, iki yuvarlak düğme). Oyunları /api/oyunlar'dan okur; Dene / Yayın POST /api/baslat, Durdur POST /api/durdur.
+  Önizleme /onizleme/<ad>/#yayin: motora bağlanmayan, sessiz, kendi sahte kalabalığıyla oynayan oyun sayfası.
+  Sayfada köprü programına "motor" denir. Windows'ta BASLAT.bat motoru penceresiz açar (motor /api/oyunlar içinde
+  arkaPlan: true der); Mac ve Linux'ta motor Terminal penceresidir. Alt satırdaki "Motoru kapat" POST /kapat ile motoru
+  uyutur; "Motor durdu" ekranındaki "Başlat" POST /uyan ile uyandırır, ekran açıkken POST /nabiz motoru yaşatır. Dışarıdan gelen hiçbir metin HTML olarak yazılmaz: hepsi textContent / value.
+-->
+<style>
+:root{
+  color-scheme: dark;
+  --gece:#150d26; --gece2:#24153c; --kenar:#0d0818; --krem:#fff3d6; --ampul:#ffd36a; --kirmizi:#ef4a35; --sari:#ffc93c;
+  --cam:#27c3ae; --soluk:#b3a5d6; --yesil:#35e08f;
+  --baslik:'Paytone One','Rubik','Trebuchet MS',sans-serif;
+  --govde-yazi:'Rubik',system-ui,'Segoe UI',sans-serif;
+  /* kabin boyu: 1366×768'de kabinler düğmeleriyle, "şu an açık" şeridi görünürken de ekrana sığsın */
+  --kabin-h:clamp(440px, calc(100vh - 222px), 760px);
+  --kabin-w:clamp(272px, 22vw, 340px);
+}
+body.calisiyor{--kabin-h:clamp(420px, calc(100vh - 268px), 740px)}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{min-height:100%}
+body{margin:0;min-height:100vh;font-family:var(--govde-yazi);font-size:14px;line-height:1.45;color:var(--krem);position:relative;overflow-x:hidden;
+  background:
+    radial-gradient(560px 320px at 18% 60%,rgba(255,170,70,.18),transparent 70%),
+    radial-gradient(560px 320px at 50% 62%,rgba(239,74,53,.16),transparent 70%),
+    radial-gradient(560px 320px at 82% 60%,rgba(39,195,174,.13),transparent 70%),
+    linear-gradient(#1b1030 0,#150d26 55%,#0d0818 100%) fixed}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--ampul);outline-offset:3px}
+a{color:var(--sari)}
+.gorunmez{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+
+/* salonun zemini (karo yansıması) ve tavandaki ampul dizisi */
+.zemin{position:fixed;left:0;right:0;bottom:0;height:150px;pointer-events:none;z-index:0;
+  background:linear-gradient(rgba(13,8,24,0),#0b0614 85%),repeating-linear-gradient(90deg,rgba(255,211,106,.07) 0 2px,transparent 2px 86px);
+  transform-origin:bottom;transform:perspective(420px) rotateX(58deg) scaleX(1.6)}
+.ampuller{position:absolute;left:0;right:0;top:0;height:54px;pointer-events:none;z-index:0}
+.ampuller svg{width:100%;height:100%;overflow:visible}
+.ampuller circle{animation:pirpir 3.2s ease-in-out infinite;animation-delay:var(--g,0s)}
+@keyframes pirpir{0%,100%{opacity:1}50%{opacity:.55}}
+
+.sayfa{position:relative;z-index:1;max-width:1500px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;gap:14px;
+  padding:30px max(36px,env(safe-area-inset-left,0px)) 12px}
+
+/* ---- baş: tabela + alt yazı (ya da şu an açık şeridi), sağda bilet ---- */
+.bas{display:flex;align-items:flex-start;justify-content:space-between;gap:18px 28px}
+.bas-sol{min-width:0;flex:1 1 auto;display:flex;flex-direction:column;gap:12px;align-items:flex-start}
+.tabela{position:relative;display:inline-block;padding:10px 24px 8px;border-radius:16px;background:linear-gradient(#3a1f58,#2a1644);
+  border:3px solid var(--kenar);box-shadow:0 0 0 3px #5d3a86,0 9px 0 var(--kenar),0 0 46px rgba(255,180,80,.25)}
+.tabela::before{content:"";position:absolute;inset:5px;border-radius:11px;pointer-events:none;padding:9px;
+  background:radial-gradient(circle,var(--ampul) 0 2.6px,transparent 3.2px) 0 0/19px 19px;
+  -webkit-mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0);mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0);
+  filter:drop-shadow(0 0 4px rgba(255,211,106,.9));animation:nefes 4s ease-in-out infinite}
+@keyframes nefes{0%,100%{opacity:1}50%{opacity:.72}}
+h1{font-family:var(--baslik);font-weight:400;font-size:clamp(28px,3vw,42px);line-height:1;margin:0;padding:6px 8px 4px;color:var(--krem);
+  text-shadow:0 0 18px rgba(255,200,110,.55),0 3px 0 var(--kenar)}
+h1 b{font-weight:400;color:var(--sari)}
+.yol{margin:0 0 0 4px;font-size:15px;color:var(--soluk);display:flex;flex-wrap:wrap;gap:4px 18px}
+.yol-adim{display:inline-flex;align-items:flex-start;gap:8px}
+.yol-adim .no{margin-top:1px}
+.yol b{color:var(--krem);font-weight:700}
+.no{flex:none;display:inline-grid;place-items:center;width:21px;height:21px;border-radius:50%;background:var(--ampul);color:var(--kenar);
+  font:400 12.5px/1 var(--baslik);box-shadow:0 0 10px rgba(255,211,106,.5)}
+
+/* bilet: kullanıcı adı. Kayıtsız: alan + Kaydet koçanı; kayıtlı: ad, onay, KAYITLI, değiştir */
+.bilet{flex:0 0 auto;width:min(440px,100%);margin-top:8px;transform:rotate(1.6deg);transition:transform .2s}
+.bilet-ic{display:flex;align-items:stretch;background:var(--krem);color:#22143a;border-radius:12px;overflow:hidden;
+  box-shadow:0 8px 0 var(--kenar),0 0 30px rgba(255,211,106,.18)}
+.bilet .sol{flex:1;min-width:0;padding:9px 14px 9px 14px;display:flex;flex-direction:column;gap:3px}
+.bilet .et{display:flex;align-items:center;gap:7px;font-size:10.5px;font-weight:800;letter-spacing:.16em;color:#8a6d2e;text-transform:uppercase}
+.bilet .et .no{width:18px;height:18px;font-size:11px;box-shadow:none;background:#22143a;color:var(--krem)}
+.bilet .vazgec{margin-left:8px;border:0;background:none;padding:0 2px;color:#5d3a86;font-weight:800;font-size:11.5px;letter-spacing:.04em;text-transform:none;text-decoration:underline;cursor:pointer}
+.bilet .istege{margin-left:auto;letter-spacing:.06em;font-weight:700;color:#8a7aa8;text-transform:none;font-size:11px}
+.ad-satir{display:flex;align-items:center;gap:2px;border-bottom:2px dashed #b9a57a;padding-bottom:1px}
+.ad-satir .at{font-family:var(--baslik);font-size:22px;color:#8a6d2e;line-height:1.2}
+.ad-satir input{flex:1;min-width:0;background:none;border:0;padding:2px 2px;font-family:var(--baslik);font-size:22px;line-height:1.2;color:#22143a}
+.ad-satir input::placeholder{color:#22143a;opacity:.32}
+.ad-satir input:focus{outline:none}
+.ad-satir:focus-within{border-bottom-color:#22143a}
+.bilet .adi{font-family:var(--baslik);font-size:23px;line-height:1.15;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bilet .not{margin:0;font-size:11.5px;color:#5c4f7a;line-height:1.35}
+.bilet .not.hata{color:#b3261e;font-weight:700}
+.bilet .not.uyari{color:#8a4b00;font-weight:700}
+.bilet.notlu .guven{display:none}
+.kocan{flex:none;width:96px;display:grid;place-items:center;align-content:center;gap:3px;padding:8px 10px;border:0;border-left:3px dashed #22143a;
+  font-weight:800;font-size:11.5px;letter-spacing:.1em;text-align:center;text-transform:uppercase}
+button.kocan{background:var(--sari);color:#2a1a05;transition:filter .15s}
+button.kocan:hover{filter:brightness(1.07)}
+button.kocan:active{filter:brightness(.92)}
+button.kocan .kaydet-ok{font-family:var(--baslik);font-weight:400;font-size:18px;line-height:1;letter-spacing:.02em;text-transform:none}
+button.kocan .enter{font-size:10.5px;font-weight:700;letter-spacing:.02em;text-transform:none;opacity:.7}
+.kocan.kayitli{background:var(--cam);color:#06231f}
+.kocan .degistir{appearance:none;background:none;border:0;padding:2px 4px;font-weight:700;letter-spacing:0;font-size:12px;text-transform:none;text-decoration:underline;color:#06231f}
+/* Yayın'a adsız basılınca bilet sallanır ve parlar */
+.bilet.uyar{animation:salla .45s ease}
+.bilet.uyar .bilet-ic{box-shadow:0 8px 0 var(--kenar),0 0 0 4px var(--ampul),0 0 38px rgba(255,211,106,.65)}
+.bilet.eksik .ad-satir{border-bottom-color:#b3261e}
+@keyframes salla{0%,100%{transform:rotate(1.6deg)}25%{transform:rotate(-1.5deg) translateX(-4px)}50%{transform:rotate(3deg) translateX(4px)}75%{transform:rotate(0) translateX(-2px)}}
+
+/* ---- şu an açık şeridi (alt yazının yerine geçer) ---- */
+.calisan{display:flex;align-items:center;gap:8px 14px;flex-wrap:wrap;width:min(860px,100%);padding:8px 10px 8px 14px;border-radius:14px;
+  background:linear-gradient(100deg,rgba(39,195,174,.16),transparent 55%) var(--gece2);border:3px solid var(--kenar);
+  box-shadow:0 0 0 2px var(--cam),0 6px 0 var(--kenar),0 0 26px rgba(39,195,174,.25)}
+.calisan.canli{background:linear-gradient(100deg,rgba(239,74,53,.2),transparent 55%) var(--gece2);box-shadow:0 0 0 2px var(--kirmizi),0 6px 0 var(--kenar),0 0 26px rgba(239,74,53,.3)}
+.cal-sol{flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:1px}
+.cal-ust{display:flex;align-items:center;gap:6px 10px;flex-wrap:wrap}
+.cal-lamba{flex:none;width:10px;height:10px;border-radius:50%;background:var(--cam);box-shadow:0 0 10px var(--cam);animation:nefes 1.6s ease-in-out infinite}
+.calisan.canli .cal-lamba{background:var(--kirmizi);box-shadow:0 0 10px var(--kirmizi)}
+.cal-etiket{font-size:10.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--soluk)}
+.cal-oyun{font-family:var(--baslik);font-size:18px;line-height:1.15}
+.cal-kip{font-size:12px;font-weight:700;padding:2px 9px;border-radius:99px;background:var(--cam);color:#06231f;white-space:nowrap}
+.calisan.canli .cal-kip{background:var(--kirmizi);color:var(--krem)}
+.cal-durum{color:var(--soluk);font-size:12.5px;line-height:1.35;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-eylem{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.yazi-dugme{background:none;border:0;padding:4px 2px;color:var(--sari);font-weight:700;font-size:13px;text-decoration:underline;text-underline-offset:3px}
+.hap{display:inline-flex;align-items:center;border-radius:99px;padding:7px 15px;font-weight:800;font-size:13.5px;line-height:1.2;text-decoration:none;
+  border:3px solid var(--kenar);box-shadow:0 4px 0 var(--kenar);transition:transform .05s,box-shadow .05s}
+.hap:active{transform:translateY(3px);box-shadow:0 1px 0 var(--kenar)}
+.hap.don{background:var(--sari);color:#2a1a05}
+.hap.dur{background:#3a1f2e;color:var(--krem);border-color:var(--kenar);box-shadow:0 4px 0 var(--kenar),inset 0 0 0 2px var(--kirmizi)}
+.hap[disabled]{opacity:.65;cursor:progress}
+
+/* ---- salon: kabinler yan yana; sığmazsa yana kayar ---- */
+.salon-cerceve{position:relative;flex:none}
+/* Sığarken salon kırpmaz (kabinlerin ışığı kesilmesin); sığmayınca yana kayar, ışık için üstte ve altta pay bırakır. */
+.salon{overflow:visible;scroll-snap-type:x mandatory;scroll-behavior:smooth;scrollbar-width:none}
+.salon.tasar{overflow-x:auto;overflow-y:hidden;padding:60px 4px 60px;margin:-60px -4px -60px}
+.salon::-webkit-scrollbar{display:none}
+/* kabinler sığmayınca kenarlar yumuşakça kaybolur: devamı olduğu belli olsun */
+.salon.tasar{--sol:46px;--sag:46px;-webkit-mask:linear-gradient(90deg,transparent,#000 var(--sol),#000 calc(100% - var(--sag)),transparent);mask:linear-gradient(90deg,transparent,#000 var(--sol),#000 calc(100% - var(--sag)),transparent)}
+.salon.tasar.basta{--sol:0px}.salon.tasar.sonda{--sag:0px}
+.ray{display:flex;gap:24px;width:max-content;margin:0 auto;align-items:flex-end;padding:0 2px}
+.ok-dugme{position:absolute;top:50%;z-index:3;width:46px;height:46px;margin-top:-23px;border-radius:50%;border:3px solid var(--kenar);
+  background:var(--ampul);color:var(--kenar);display:grid;place-items:center;box-shadow:0 5px 0 var(--kenar),0 0 20px rgba(255,211,106,.45)}
+.ok-dugme:active{transform:translateY(3px);box-shadow:0 2px 0 var(--kenar)}
+.ok-dugme[disabled]{opacity:0;pointer-events:none}
+.ok-dugme svg{width:20px;height:20px}
+.ok-dugme.sol{left:-30px}.ok-dugme.sag{right:-30px}
+
+.kabin{position:relative;flex:none;scroll-snap-align:center;width:var(--kabin-w);height:var(--kabin-h);display:grid;
+  grid-template-rows:auto minmax(0,1fr) auto auto auto;border-radius:20px 20px 10px 10px;
+  background:linear-gradient(90deg,rgba(0,0,0,.35),transparent 12%,transparent 88%,rgba(0,0,0,.35)),var(--govde);
+  border:3px solid var(--kenar);box-shadow:0 12px 0 var(--kenar),0 0 60px var(--isik);transition:box-shadow .3s}
+.kabin.acik-oyun{box-shadow:0 12px 0 var(--kenar),0 0 0 3px var(--tabela2),0 0 90px var(--isik),0 0 140px var(--isik)}
+.kabin .ad{margin:10px 12px 8px;border-radius:11px;border:3px solid var(--kenar);background:linear-gradient(var(--tabela1),var(--tabela2));
+  font-family:var(--baslik);font-weight:400;font-size:clamp(18px,1.6vw,23px);line-height:1.15;text-align:center;padding:7px 6px 6px;color:#1a0f2a;
+  box-shadow:inset 0 3px 0 rgba(255,255,255,.45),0 0 22px var(--isik);animation:tabela-nefes 4.5s ease-in-out infinite;animation-delay:var(--gec,0s);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@keyframes tabela-nefes{0%,100%{box-shadow:inset 0 3px 0 rgba(255,255,255,.45),0 0 22px var(--isik)}50%{box-shadow:inset 0 3px 0 rgba(255,255,255,.45),0 0 8px var(--isik)}}
+.acik-rozet{position:absolute;top:-15px;left:50%;transform:translateX(-50%);z-index:2;padding:3px 12px 2px;border-radius:7px;border:3px solid var(--kenar);
+  background:var(--yesil);color:#05301b;font:800 11px/1.2 var(--govde-yazi);letter-spacing:.2em;text-transform:uppercase;box-shadow:0 0 16px var(--yesil),0 0 34px rgba(53,224,143,.5)}
+.ekran{position:relative;margin:0 12px;min-height:0;border-radius:12px;border:3px solid var(--kenar);overflow:hidden;
+  background:radial-gradient(closest-side,var(--isik),transparent 78%),repeating-linear-gradient(90deg,#0b0616 0 10px,#120a20 10px 20px);
+  box-shadow:inset 0 0 0 5px #201234,inset 0 0 26px #000}
+.ekran::after{content:"";position:absolute;inset:0;background:linear-gradient(115deg,rgba(255,255,255,.11) 0 16%,transparent 16% 100%);pointer-events:none;z-index:2}
+.sahne{position:absolute;top:8px;bottom:8px;left:50%;transform:translateX(-50%);aspect-ratio:9/16;max-width:calc(100% - 16px);
+  border-radius:9px;border:2px solid var(--kenar);overflow:hidden;background:#07040e;box-shadow:0 0 34px var(--isik)}
+.sahne iframe{position:absolute;left:0;top:0;width:270px;height:480px;border:0;transform-origin:0 0;pointer-events:none;background:#07040e}
+.bekle{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:8px;font-family:var(--baslik);font-size:15px;color:var(--krem);opacity:.4}
+.anlat{margin:9px 14px 0;font-size:12.5px;line-height:1.38;color:var(--krem);text-align:center;min-height:35px}
+.kart-ileti{margin:6px 12px 0;padding:5px 8px;border-radius:8px;background:rgba(13,8,24,.7);border:2px solid var(--kirmizi);font-size:12px;line-height:1.35;text-align:center}
+.kart-ileti:empty{display:none}
+.tabla{display:flex;justify-content:center;gap:26px;padding:11px 10px 10px;margin-top:9px;border-top:3px solid var(--kenar);
+  background:linear-gradient(rgba(255,255,255,.12),rgba(0,0,0,.25)),var(--govde2);border-radius:0 0 7px 7px}
+
+/* yuvarlak oyun salonu düğmeleri: basınca çöker */
+.tus{appearance:none;border:0;background:none;padding:0;color:var(--krem);display:grid;justify-items:center;gap:5px;min-width:86px;border-radius:12px}
+.tus i{display:block;width:50px;height:50px;border-radius:50%;border:3px solid var(--kenar);
+  background:radial-gradient(circle at 34% 28%,rgba(255,255,255,.75) 0 9%,transparent 10%),radial-gradient(circle at 50% 42%,var(--t1),var(--t2) 72%);
+  box-shadow:0 7px 0 var(--t3),0 7px 0 3px var(--kenar),0 14px 18px rgba(0,0,0,.5);transition:transform .06s,box-shadow .06s,filter .2s}
+.tus:hover i{filter:brightness(1.08)}
+.tus:active i,.tus.basliyor i{transform:translateY(6px);box-shadow:0 1px 0 var(--t3),0 1px 0 3px var(--kenar),0 4px 8px rgba(0,0,0,.5)}
+.tus.basliyor i{animation:yanip .7s steps(2) infinite}
+@keyframes yanip{50%{filter:brightness(1.45)}}
+.tus b{font-family:var(--baslik);font-weight:400;font-size:16px;line-height:1}
+.tus small{font-size:11px;color:var(--soluk);margin-top:-2px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tus[disabled]{cursor:progress}
+.tus.dene{--t1:#ffe07a;--t2:#f2b21d;--t3:#a8760a}
+.tus.bagla{--t1:#ff8a70;--t2:#e23b25;--t3:#8f1f10}
+/* ad kayıtlı değilken kırmızı düğme sönük */
+body:not(.kayitli) .tus.bagla i,body.kutuphane-yok .tus.bagla i{--t1:#7a5560;--t2:#4b2b36;--t3:#2b141c;background:radial-gradient(circle at 34% 28%,rgba(255,255,255,.18) 0 9%,transparent 10%),radial-gradient(circle at 50% 42%,var(--t1),var(--t2) 72%)}
+body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--soluk)}
+/* kütüphane inince kırmızı düğmeler yavaşça yanar */
+.tus.bagla i{transition:transform .06s,box-shadow .06s,filter .2s,background .6s}
+
+/* renk takımları: oyun kimliğinden seçilir (sayfanın betiğine bak) */
+.k1{--govde:#2c2f7a;--govde2:#23266a;--tabela1:#ffe08a;--tabela2:#f3b63a;--isik:rgba(255,196,90,.28)}
+.k2{--govde:#7a2f5c;--govde2:#69264e;--tabela1:#ffb08f;--tabela2:#f06a4a;--isik:rgba(240,106,74,.3)}
+.k3{--govde:#7c2a22;--govde2:#6a211a;--tabela1:#9ff0e2;--tabela2:#2fc7b2;--isik:rgba(47,199,178,.26)}
+.k4{--govde:#1f5a55;--govde2:#184a46;--tabela1:#ffc2d4;--tabela2:#f0729a;--isik:rgba(240,114,154,.26)}
+.k5{--govde:#4a2a7c;--govde2:#3d2268;--tabela1:#e4f79a;--tabela2:#a9d83a;--isik:rgba(169,216,58,.24)}
+.k6{--govde:#1d4677;--govde2:#173a63;--tabela1:#ffd2a0;--tabela2:#f39a3b;--isik:rgba(243,154,59,.28)}
+
+/* boş kabin: kendi oyununu yap */
+.kabin.bos{width:calc(var(--kabin-w) * .78);height:calc(var(--kabin-h) * .86);grid-template-rows:1fr;place-items:center;text-align:center;padding:18px;
+  background:rgba(255,243,214,.03);border:3px dashed rgba(255,243,214,.33);box-shadow:none}
+.kabin.bos .arti{position:relative;width:60px;height:60px;border-radius:50%;border:3px dashed rgba(255,243,214,.5);margin:0 auto 12px}
+.kabin.bos .arti::before,.kabin.bos .arti::after{content:"";position:absolute;left:50%;top:50%;width:22px;height:4px;border-radius:2px;background:rgba(255,243,214,.75);transform:translate(-50%,-50%)}
+.kabin.bos .arti::after{transform:translate(-50%,-50%) rotate(90deg)}
+.kabin.bos h2{font-family:var(--baslik);font-weight:400;font-size:21px;margin:0 0 8px}
+.kabin.bos p{margin:0;font-size:13px;line-height:1.5;color:var(--soluk)}
+.kabin.bos b{color:var(--krem);font-weight:700}
+
+/* tek oyunlu paket: tek, büyük kabin ortada */
+.ray.tek .kabin{width:calc(var(--kabin-w) * 1.22)}
+
+/* ---- alt satır ---- */
+/* alt satır salonun üstünde durur: kabinler sığmayınca salonun ışık payı (alttan 60px) alt satırın düğmelerini örtmesin */
+.alt{position:relative;z-index:2;margin-top:auto;display:flex;align-items:center;gap:6px 16px;flex-wrap:wrap;font-size:13px;color:var(--soluk);padding:10px 6px 0}
+.sinyal{flex:none;width:11px;height:11px;border-radius:50%;background:var(--yesil);box-shadow:0 0 0 3px rgba(53,224,143,.22),0 0 12px var(--yesil)}
+.alt.koptu .sinyal{background:var(--kirmizi);box-shadow:0 0 0 3px rgba(239,74,53,.25),0 0 12px var(--kirmizi)}
+.alt #lamba{color:var(--krem);font-weight:700}
+.alt .yazi-dugme{margin-left:auto}
+.alt .yazi-dugme.parla{padding:6px 14px;border-radius:99px;border:3px solid var(--kenar);background:var(--sari);color:#2a1a05;text-decoration:none;
+  box-shadow:0 4px 0 var(--kenar),0 0 22px rgba(255,201,60,.5);animation:nefes 2.4s ease-in-out infinite}
+/* motoru kapat: alt satırda, "Motor çalışıyor"un yanında küçük ve sönük; basınca satırın içinde onay sorar */
+.alt .motor-kapat{background:none;border:0;padding:2px 2px;color:var(--soluk);font-size:12.5px;font-weight:500;text-decoration:underline;text-underline-offset:3px}
+.alt .motor-kapat:hover{color:var(--krem)}
+.kapat-onay{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 6px 4px 12px;border-radius:99px;background:rgba(13,8,24,.6);
+  border:2px solid rgba(239,74,53,.6);color:var(--krem)}
+.kapat-onay button{border:2px solid var(--kenar);border-radius:99px;padding:3px 12px;font-weight:800;font-size:12.5px}
+.kapat-onay .evet{background:#3a1f2e;color:var(--krem);box-shadow:inset 0 0 0 2px var(--kirmizi)}
+.kapat-onay .hayir{background:var(--sari);color:#2a1a05}
+.kapat-onay button[disabled]{opacity:.65;cursor:progress}
+/* motor kapandıktan sonra açılış sahnesi sakin son hâlinde: ampuller söner, yalnız tabela ve tek cümle */
+.acilis.kapandi .acilis-ampul i{background:#3b2b4f;box-shadow:none}
+.acilis.kapandi .tabela::before{animation:none;opacity:.35}
+.acilis.kapandi .acilis-alt{color:var(--krem);font-family:var(--baslik);font-size:22px;line-height:1.25;text-wrap:balance}
+/* "Motor durdu" ekranının tek eylemi: büyük, sarı, basılan bir salon düğmesi; altında tek sessiz satır */
+.acilis-eylem .hap.buyuk{font-family:var(--baslik);font-weight:400;font-size:24px;letter-spacing:.02em;padding:12px 44px 11px;
+  border-width:3px;box-shadow:0 6px 0 var(--kenar),0 0 34px rgba(255,201,60,.45)}
+.acilis-eylem .hap.buyuk:active{box-shadow:0 2px 0 var(--kenar),0 0 34px rgba(255,201,60,.45)}
+.acilis-not{margin:-6px 0 0;color:var(--soluk);font-size:13px}
+.bos-raf{padding:28px;border:3px dashed rgba(255,243,214,.3);border-radius:16px;color:var(--soluk);max-width:520px}
+
+/* ---- yardım panosu ---- */
+.pano{width:min(560px,calc(100vw - 32px));padding:0;border:3px solid var(--kenar);border-radius:16px;background:var(--krem);color:#22143a;
+  box-shadow:0 10px 0 var(--kenar),0 0 0 3px #5d3a86,0 0 60px rgba(255,211,106,.35)}
+.pano::backdrop{background:rgba(8,4,16,.72)}
+.pano-ic{position:relative;padding:22px 24px 20px}
+.pano h2{margin:0 0 12px;font-family:var(--baslik);font-weight:400;font-size:24px;line-height:1.1}
+.pano ol{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px;counter-reset:p}
+.pano li{display:grid;grid-template-columns:26px minmax(0,1fr);gap:10px;font-size:14px;line-height:1.5;counter-increment:p}
+.pano li::before{content:counter(p);width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:#22143a;color:var(--krem);font:400 13px/1 var(--baslik);margin-top:1px}
+.pano li b{font-weight:800}
+.pano .kapat{margin-top:16px;border:3px solid var(--kenar);border-radius:99px;padding:7px 18px;background:var(--sari);color:#2a1a05;font-weight:800;box-shadow:0 4px 0 var(--kenar)}
+.pano .kapat:active{transform:translateY(3px);box-shadow:0 1px 0 var(--kenar)}
+.pano .x{position:absolute;right:12px;top:12px;width:34px;height:34px;border-radius:50%;border:2px solid #22143a;background:none;display:grid;place-items:center}
+.pano .x svg{width:14px;height:14px}
+
+/* ---- dar pencere: bilet üstte, salonda bir kabin, kaydırarak ---- */
+@media (max-width:760px){
+  .sayfa{padding:22px 16px 12px;gap:12px}
+  .bas{flex-direction:column;align-items:stretch}
+  .bas-sol{align-items:stretch}
+  .tabela{align-self:flex-start;padding:8px 16px 6px}
+  .bilet{width:100%;transform:rotate(.8deg);margin-top:0}
+  .yol{font-size:14px;margin-left:0}
+  .calisan{width:100%}
+  .cal-durum{white-space:normal}
+  :root{--kabin-w:min(330px,calc(100vw - 104px));--kabin-h:560px}
+  body.calisiyor{--kabin-h:560px}
+  .ray{gap:18px;padding:0 calc((100vw - 32px - var(--kabin-w)) / 2)}
+  .kabin.bos{height:calc(var(--kabin-h) * .7)}
+  .ok-dugme.sol{left:-8px}.ok-dugme.sag{right:-8px}
+  .ok-dugme{width:40px;height:40px;margin-top:-20px}
+  .alt .yazi-dugme{margin-left:0}
+  .ray.tek .kabin{width:var(--kabin-w)}
+}
+/* ---- kütüphane notu (alt satırda, sessiz) ---- */
+.kutu-not{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 6px 4px 12px;border-radius:99px;background:rgba(13,8,24,.6);
+  border:2px solid rgba(255,211,106,.4);color:var(--krem)}
+.kutu-not.hata{border-color:rgba(239,74,53,.7)}
+.kutu-not.tamam{border-color:rgba(53,224,143,.7)}
+.kutu-not .lmb{width:9px;height:9px;border-radius:50%;background:var(--ampul);box-shadow:0 0 8px var(--ampul);animation:nefes 1.2s ease-in-out infinite}
+.kutu-not.hata .lmb{background:var(--kirmizi);box-shadow:0 0 8px var(--kirmizi);animation:none}
+.kutu-not.tamam .lmb{background:var(--yesil);box-shadow:0 0 8px var(--yesil);animation:none}
+.kutu-not button{border:2px solid var(--kenar);border-radius:99px;padding:3px 12px;background:var(--sari);color:#2a1a05;font-weight:800;font-size:12.5px}
+
+/* ---- açılış: salon akşam açılıyor (tabela ve ampuller sırayla yanar), olan biten satır satır ---- */
+.acilis{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:60px 16px 24px;overflow:auto;
+  background:radial-gradient(600px 340px at 50% 72%,rgba(255,170,70,.14),transparent 70%),linear-gradient(#1b1030 0,#150d26 55%,#0d0818 100%);
+  transition:opacity .5s ease,transform .5s ease,visibility 0s linear .5s}
+.acilis.kalk{opacity:0;transform:scale(1.04);visibility:hidden}
+.acilis-ampul{position:absolute;left:0;right:0;top:0;height:44px;display:flex;justify-content:space-around;align-items:center;padding:0 12px;pointer-events:none}
+.acilis-ampul i{width:11px;height:11px;border-radius:50%;background:#3b2b4f;transition:background .3s,box-shadow .3s}
+.acilis-ampul i.yan{background:var(--r);box-shadow:0 0 10px var(--r),0 0 2px var(--r)}
+.acilis-ic{width:min(620px,100%);display:flex;flex-direction:column;align-items:center;gap:22px;text-align:center}
+.acilis .tabela{transform:scale(1.06)}
+.acilis .tabela::before{animation:yak 1.1s steps(14,end) both,nefes 4s ease-in-out 1.2s infinite}
+@keyframes yak{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+.acilis-h{display:block;font-family:var(--baslik);font-weight:400;font-size:clamp(28px,5.4vw,46px);line-height:1;padding:6px 8px 4px;color:var(--krem);
+  animation:neon 1.3s ease-out both}
+.acilis-h b{font-weight:400;color:var(--sari)}
+@keyframes neon{0%{opacity:.15;text-shadow:none}18%{opacity:.9}24%{opacity:.25}40%{opacity:1}52%{opacity:.5}100%{opacity:1;text-shadow:0 0 18px rgba(255,200,110,.55),0 3px 0 var(--kenar)}}
+.acilis-alt{margin:0;color:var(--soluk);font-size:15px}
+.kontrol{list-style:none;margin:0;padding:14px 16px;width:100%;display:flex;flex-direction:column;gap:10px;text-align:left;border-radius:16px;
+  background:rgba(13,8,24,.55);border:3px solid var(--kenar);box-shadow:0 0 0 2px #3a2558,0 8px 0 var(--kenar)}
+.kontrol li{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:12px;align-items:center;font-size:15px;line-height:1.4}
+.kontrol .lmb{width:14px;height:14px;border-radius:50%;background:#3b2b4f;border:2px solid var(--kenar)}
+.kontrol li[data-d=suruyor] .lmb{background:var(--ampul);box-shadow:0 0 10px var(--ampul);animation:nefes 1s ease-in-out infinite}
+.kontrol li[data-d=tamam] .lmb{background:var(--yesil);box-shadow:0 0 10px var(--yesil)}
+.kontrol li[data-d=hata] .lmb{background:var(--kirmizi);box-shadow:0 0 10px var(--kirmizi)}
+.kontrol li[data-d=bekliyor] .m{color:var(--soluk)}
+.kontrol .m small{display:block;color:var(--soluk);font-size:12.5px}
+.kontrol .s{font-variant-numeric:tabular-nums;color:var(--soluk);font-size:13px;white-space:nowrap}
+.kontrol li[data-d=hata] .m{color:#ffb4a8;font-weight:700}
+.acilis-eylem{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;min-height:48px}
+.acilis-eylem .hap{font-size:15px;padding:10px 20px}
+.hap.ikinci{background:#2a1a44;color:var(--krem)}
+@media (max-width:520px){
+  .acilis .tabela{transform:none;padding:8px 14px 6px}
+  .acilis-h{font-size:clamp(24px,7.4vw,34px)}
+  .kontrol{padding:12px}
+  .kontrol li{font-size:14px}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .ampuller circle,.tabela::before,.kabin .ad,.cal-lamba,.tus.basliyor i,.bilet.uyar,.alt .yazi-dugme.parla,.kutu-not .lmb,.acilis .tabela::before,.acilis-h,.kontrol .lmb{animation:none!important}
+  .acilis{transition:none}
+  .salon{scroll-behavior:auto}
+}
+</style>
+</head>
+<body>
+<div class="zemin" aria-hidden="true"></div>
+<div class="ampuller" aria-hidden="true"><svg viewBox="0 0 1400 54" preserveAspectRatio="none"><path id="ip" d="M0 6 Q175 44 350 14 T700 14 T1050 14 T1400 8" fill="none" stroke="#0d0818" stroke-width="2.5"/><g id="ampul-dizi"></g></svg></div>
+
+<div class="acilis" id="acilis" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="acilis-baslik" aria-describedby="acilis-alt">
+  <div class="acilis-ampul" id="acilis-ampul" aria-hidden="true"></div>
+  <div class="acilis-ic">
+    <div class="tabela"><span class="acilis-h" id="acilis-baslik">TikTok Oyun <b>Fabrikası</b></span></div>
+    <p class="acilis-alt" id="acilis-alt">Salon açılıyor…</p>
+    <ul class="kontrol" id="acilis-liste" aria-live="polite">
+      <li id="a-motor" data-d="suruyor"><span class="lmb" aria-hidden="true"></span><span class="m">Motor çalıştırılıyor</span><span class="s"></span></li>
+      <li id="a-kutu" data-d="bekliyor"><span class="lmb" aria-hidden="true"></span><span class="m">TikTok kütüphanesi</span><span class="s"></span></li>
+      <li id="a-oyun" data-d="bekliyor"><span class="lmb" aria-hidden="true"></span><span class="m">Oyunlar hazırlanıyor</span><span class="s"></span></li>
+    </ul>
+    <div class="acilis-eylem">
+      <button type="button" class="hap don" id="beklemeden" hidden>Beklemeden dene</button>
+      <button type="button" class="hap don" id="yeniden" hidden>Yeniden dene</button>
+      <button type="button" class="hap ikinci" id="yalniz-dene" hidden>Şimdilik yalnız dene</button>
+      <button type="button" class="hap don buyuk" id="uyan" hidden>Başlat</button>
+    </div>
+    <p class="acilis-not" id="uyku-not" hidden>Bu sekmeyi kapatınca motor tamamen kapanır.</p>
+  </div>
+</div>
+
+<div class="sayfa" id="sayfa" inert>
+  <header class="bas">
+    <div class="bas-sol">
+      <div class="tabela"><h1 id="baslik">TikTok Oyun <b>Fabrikası</b></h1></div>
+      <p class="yol" id="yol">
+        <span class="yol-adim"><span class="no" aria-hidden="true">1</span><span>Yayın için biletine adını kaydet (isteğe bağlı)</span></span>
+        <span class="yol-adim"><span class="no" aria-hidden="true">2</span><span id="yol-2">Bir kabin seç: <b>Dene</b> sahte izleyicilerle açar, ad gerekmez</span></span>
+      </p>
+      <section class="calisan" id="calisan" aria-label="Şu an açık oyun" hidden>
+        <div class="cal-sol">
+          <div class="cal-ust">
+            <span class="cal-lamba" aria-hidden="true"></span>
+            <span class="cal-etiket">Şu an açık</span>
+            <span class="cal-oyun" id="cal-oyun"></span>
+            <span class="cal-kip" id="cal-kip"></span>
+          </div>
+          <span class="cal-durum" id="cal-durum" aria-live="polite"></span>
+        </div>
+        <div class="cal-eylem">
+          <a class="hap don" id="cal-don" href="/">Oyuna dön</a>
+          <button type="button" class="hap dur" id="cal-durdur">Durdur</button>
+        </div>
+      </section>
+    </div>
+
+    <section class="bilet" id="hesap" aria-label="Yayıncı bileti">
+      <form class="bilet-ic" id="ad-form" novalidate>
+        <div class="sol">
+          <label class="et" for="kullanici"><span class="no" aria-hidden="true">1</span>Yayıncı bileti <span class="istege">yalnız yayın için</span><button type="button" class="vazgec" id="vazgec" hidden>Vazgeç</button></label>
+          <div class="ad-satir">
+            <span class="at" aria-hidden="true">@</span>
+            <input id="kullanici" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
+              placeholder="kullanici_adin" aria-describedby="ad-not guven-not" enterkeyhint="done">
+          </div>
+          <p class="not" id="ad-not" role="alert" hidden></p>
+          <p class="not guven" id="guven-not">Şifre istemez. Yayını yalnızca okur.</p>
+        </div>
+        <button type="submit" class="kocan" id="kaydet"><span class="kaydet-ok">Kaydet</span><small class="enter" aria-hidden="true">ya da Enter</small></button>
+      </form>
+      <div class="bilet-ic" id="kayitli-gor" hidden>
+        <div class="sol">
+          <span class="et"><span class="no" aria-hidden="true">1</span>Yayıncı bileti</span>
+          <span class="adi" id="kayitli-ad"></span>
+          <p class="not">Şifre istemez. Yayını yalnızca okur.</p>
+          <p class="not uyari" id="kayit-uyari" hidden>Ad bu tarayıcıda saklanamadı; sayfayı kapatınca yeniden yazman gerekir.</p>
+        </div>
+        <div class="kocan kayitli">
+          <svg width="22" height="22" viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10.5l4 4 8-9" fill="none" stroke="#06231f" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="kayit-etiket">Kayıtlı</span>
+          <button type="button" class="degistir" id="degistir">değiştir</button>
+        </div>
+      </div>
+    </section>
+  </header>
+
+  <div class="salon-cerceve">
+    <button type="button" class="ok-dugme sol" id="ok-sol" aria-label="Önceki kabinler" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 4L6.5 10l6 6" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <div class="salon" id="salon" role="region" aria-label="Oyunlar" tabindex="-1">
+      <div class="ray" id="raf" aria-busy="true"></div>
+    </div>
+    <button type="button" class="ok-dugme sag" id="ok-sag" aria-label="Sonraki kabinler" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 4l6 6-6 6" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+  </div>
+
+  <footer class="alt" id="alt">
+    <span class="sinyal" aria-hidden="true"></span>
+    <span id="lamba">Motor çalışıyor</span>
+    <button type="button" class="motor-kapat" id="motor-kapat">Motoru kapat</button>
+    <span class="kapat-onay" id="kapat-onay" role="group" aria-label="Motoru kapatmayı onayla" hidden><span id="kapat-soru">Motor kapansın mı? Açık oyun da durur.</span><button type="button" class="evet" id="kapat-evet">Evet, kapat</button><button type="button" class="hayir" id="kapat-hayir">Vazgeç</button></span>
+    <span id="yerel">Motor bu bilgisayarda çalışır. Yalnızca bu bilgisayar erişebilir.</span>
+    <span class="kutu-not" id="kutu-not" role="status" hidden><span class="lmb" aria-hidden="true"></span><span id="kutu-not-yazi"></span><button type="button" id="kutu-yeniden" hidden>Yeniden dene</button></span>
+    <button type="button" class="yazi-dugme" id="yardim-ac">Yayına nasıl alırım?</button>
+  </footer>
+</div>
+
+<dialog class="pano" id="yardim" aria-labelledby="yardim-baslik">
+  <div class="pano-ic">
+    <button type="button" class="x" id="yardim-x" aria-label="Kapat"><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M2 2l10 10M12 2L2 12" stroke="#22143a" stroke-width="2.6" stroke-linecap="round"/></svg></button>
+    <h2 id="yardim-baslik">Yayına nasıl alırım?</h2>
+    <ol>
+      <li><span>Biletine adını kaydet, oyunun kabininde kırmızı <b>Yayın</b> düğmesine bas. Oyun sayfasındaki masada Bağlantı kutusu <b>Canlı</b> yazınca TikTok'a bağlanılmış, yorumlar oyuna akıyor demektir. <b>Yayın yok</b> yazıyorsa TikTok'ta yayın henüz açık değil; yayını başlat, motor kendisi yeniden dener (beklemek istemezsen Yayın'a yeniden bas).</span></li>
+      <li><span>Ses için oyun sayfasında bir kez herhangi bir yere tıkla. Tarayıcılar tıklamadan ses açmaz.</span></li>
+      <li><span>Masanın sağ üstündeki <b>Yalnızca sahneyi göster</b>'e bas. Panel gizlenir, yalnız oyun kalır; panele dönmek için <b>Esc</b>.</span></li>
+      <li><span>TikTok LIVE Studio'da yeni kaynak ekle, <b>Pencere yakalama</b>'yı seç ve oyunun açık olduğu tarayıcı penceresini seç. Pencereyi küçültme; küçültülen pencere yakalanmaz.</span></li>
+    </ol>
+    <button type="button" class="kapat" id="yardim-kapat">Tamam</button>
+  </div>
+</dialog>
+
+<template id="kart-sablon">
+  <article class="kart kabin">
+    <span class="acik-rozet" hidden>Açık</span>
+    <h3 class="ad"></h3>
+    <div class="ekran" aria-hidden="true"><div class="sahne"><div class="bekle"></div></div></div>
+    <p class="anlat aciklama"></p>
+    <p class="kart-ileti" role="alert"></p>
+    <div class="tabla">
+      <button type="button" class="tus dene"><i aria-hidden="true"></i><b class="ust">Dene</b><small>sahte izleyici</small></button>
+      <button type="button" class="tus bagla"><i aria-hidden="true"></i><b class="ust">Yayın</b><small>önce adını kaydet</small></button>
+    </div>
+  </article>
+</template>
+
+<template id="yap-sablon">
+  <section class="kabin bos" id="yap" aria-labelledby="yap-baslik">
+    <div><span class="arti" aria-hidden="true"></span><h2 id="yap-baslik">Boş kabin</h2>
+      <p>Kendi oyununu yap: bu klasörü <b>Claude Code</b> ile aç, fikrini tek cümleyle yaz. Yeni oyun buraya yerleşir.</p></div>
+  </section>
+</template>
+
+<script>
+'use strict';
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var SAKLA = 'fabrika-kullanici';
+  var DESEN = /^(?!.*[.]$)[A-Za-z0-9_.]{2,24}$/; // TikTok adı: harf, rakam, _ ve nokta; 2-24; noktayla bitmez
+  var girdi = $('kullanici'), hesap = $('hesap'), adNot = $('ad-not'), raf = $('raf'), salon = $('salon');
+  var kartlar = new Map(); // oyun kimliği → kabin
+  var son = null, mesgul = false, kayitli = '';
+
+  // ---- tavandaki ampuller: ipin eğrisi boyunca dizilir, her biri kendi gecikmesiyle pırpır eder
+  (function () {
+    var g = $('ampul-dizi'), ip = $('ip'), ns = 'http://www.w3.org/2000/svg', renk = ['#ffd36a', '#ef4a35', '#27c3ae', '#ffd36a', '#ff8fb0'];
+    var boy = ip.getTotalLength(), adet = 36;
+    for (var i = 1; i < adet; i++) {
+      var p = ip.getPointAtLength(boy * i / adet), c = document.createElementNS(ns, 'circle');
+      c.setAttribute('cx', p.x); c.setAttribute('cy', p.y + 7); c.setAttribute('r', 5.2); c.setAttribute('fill', renk[i % renk.length]);
+      c.setAttribute('style', 'filter:drop-shadow(0 0 6px ' + renk[i % renk.length] + ');--g:' + ((i * 0.37) % 3.2).toFixed(2) + 's');
+      g.appendChild(c);
+    }
+  })();
+
+  // ---- kabin rengi: altı renk takımından biri, oyun kimliğinden. Bugünkü üç oyunun rengi elle sabit; yeni oyuna
+  // kimliğinden hesaplanan takım düşer, kimse renk seçmek zorunda kalmaz.
+  var SABIT = { 'halay': 1, 'mendil-kimde': 1, 'konvoy': 2, 'vur-duzelsin': 3 };
+  function takim(id) {
+    if (SABIT[id]) return SABIT[id];
+    var h = 0;
+    for (var i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+    return 1 + h % 6;
+  }
+
+  // ---- 1. adım: bilet. Yalnız Kaydet (ya da Enter) ile kaydedilir; kayıtlıyken ad, onay, KAYITLI ve değiştir görünür.
+  // Önce temizlenir (baştaki/sondaki boşluk ve @), sonra uzunluk ve biçim denetlenir; ad hiçbir zaman kısaltılmaz.
+  function temiz(v) { return String(v || '').trim().replace(/^@+/, '').trim(); }
+  var duzenle = false; // kayıtlı ad dururken değiştiriliyor mu
+  function notYaz(metin, tur) {
+    adNot.textContent = metin || '';
+    adNot.hidden = !metin;
+    adNot.className = 'not' + (tur ? ' ' + tur : '');
+    hesap.classList.toggle('notlu', !!metin);
+    hesap.classList.toggle('eksik', tur === 'hata');
+  }
+  function adDurumu(ad) {
+    kayitli = ad;
+    duzenle = false;
+    document.body.classList.toggle('kayitli', !!ad);
+    $('ad-form').hidden = !!ad;
+    $('kayitli-gor').hidden = !ad;
+    $('vazgec').hidden = true;
+    $('kayitli-ad').textContent = ad ? '@' + ad : '';
+    kartlar.forEach(function (k) { k.baglaAlt.textContent = baglaYazi(); });
+  }
+  function saklananAd() { try { var v = temiz(localStorage.getItem(SAKLA)); return DESEN.test(v) ? v : ''; } catch (e) { return ''; } }
+  adDurumu(saklananAd());
+  // Başka sekmede ad kaydedilir ya da değişirse bu sekme de onu gösterir (bu sekmede düzenleme sürmüyorsa).
+  addEventListener('storage', function (e) { if (e.key === SAKLA && !duzenle) { adDurumu(saklananAd()); $('kayit-uyari').hidden = true; } });
+  girdi.addEventListener('input', function () {
+    if (/^\s*@/.test(girdi.value)) girdi.value = girdi.value.replace(/^\s*@+/, '');
+    if (!adNot.hidden) notYaz('');
+    hesap.classList.remove('uyar');
+  });
+  $('ad-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var ad = temiz(girdi.value);
+    if (!ad) { notYaz('Önce TikTok kullanıcı adını yaz.', 'hata'); girdi.focus(); return; }
+    if (ad.length > 24) { notYaz('Bu ad çok uzun: TikTok adı en çok 24 karakterdir. Adını kontrol et.', 'hata'); girdi.focus(); return; }
+    if (!DESEN.test(ad)) { notYaz('Bu ad olmaz: yalnız harf, rakam, alt çizgi ve nokta olur (en az 2 karakter, noktayla bitmez).', 'hata'); girdi.focus(); return; }
+    var saklandi = true;
+    try { localStorage.setItem(SAKLA, ad); saklandi = localStorage.getItem(SAKLA) === ad; } catch (e2) { saklandi = false; }
+    notYaz('');
+    hesap.classList.remove('uyar');
+    adDurumu(ad);
+    $('kayit-uyari').hidden = saklandi; // tarayıcı saklamaya izin vermiyorsa söyle: ad yalnız bu açık sayfada geçerli
+    $('degistir').focus();
+  });
+  // Değiştir: kayıtlı ad, yenisi kaydedilene dek geçerli kalır; Vazgeç ya da Esc eski hâline döner.
+  $('degistir').addEventListener('click', function () {
+    duzenle = true;
+    girdi.value = kayitli;
+    $('ad-form').hidden = false;
+    $('kayitli-gor').hidden = true;
+    $('vazgec').hidden = false;
+    notYaz('');
+    girdi.focus();
+    girdi.select();
+  });
+  function vazgec() { if (!duzenle) return; adDurumu(kayitli); notYaz(''); $('degistir').focus(); }
+  $('vazgec').addEventListener('click', vazgec);
+  girdi.addEventListener('keydown', function (e) { if (e.key === 'Escape' && duzenle) { e.preventDefault(); vazgec(); } });
+  function adIste() { // Yayın'a adsız basıldı: bileti salla, ne yapılacağını söyle, odağı alana ver
+    hesap.classList.remove('uyar');
+    void hesap.offsetWidth; // animasyon yeniden başlasın
+    hesap.classList.add('uyar');
+    var yazili = temiz(girdi.value);
+    notYaz(yazili ? 'Adı yazdın; kaydetmek için Kaydet\'e ya da Enter\'a bas.' : 'Yayın için önce adını yaz ve Kaydet\'e bas.', 'uyari');
+    hesap.scrollIntoView({ block: 'nearest' });
+    girdi.focus({ preventScroll: true });
+  }
+
+  // ---- canlı önizleme: kabin görünürken yüklenir, görünmez olunca kaldırılır (salon yana kaysa da)
+  var gozcu = 'IntersectionObserver' in window ? new IntersectionObserver(function (g) {
+    g.forEach(function (x) { var k = x.target.__kart; if (x.isIntersecting) onizlemeAc(k); else onizlemeKapat(k); });
+  }, { rootMargin: '80px' }) : null;
+  var olcer = 'ResizeObserver' in window ? new ResizeObserver(function (g) { g.forEach(function (x) { olcekle(x.target.__kart); }); okYaz(); }) : null;
+  function olcekle(k) { if (k && k.iframe) k.iframe.style.transform = 'scale(' + ((k.sahne.clientWidth || 1) / 270) + ')'; }
+  function onizlemeAc(k) {
+    if (k.iframe) return;
+    var f = document.createElement('iframe');
+    f.title = k.ad + ' önizlemesi';
+    f.setAttribute('tabindex', '-1');
+    f.setAttribute('aria-hidden', 'true');
+    f.setAttribute('inert', '');
+    f.setAttribute('allow', "autoplay 'none'");
+    // Yüklenene dek görünmez; açılamazsa (motor yok, sayfa hatası) beyaz bir kutu yerine kabinin kendi yazısı kalır.
+    f.style.visibility = 'hidden';
+    f.addEventListener('load', function () {
+      var iyi = false;
+      try { iyi = !!(f.contentDocument && f.contentDocument.getElementById('tuval')); } catch (e) { iyi = false; }
+      f.style.visibility = iyi ? 'visible' : 'hidden';
+      k.sahne.querySelector('.bekle').textContent = iyi ? k.ad : 'Önizleme açılamadı';
+    });
+    f.src = '/onizleme/' + encodeURIComponent(k.id) + '/#yayin';
+    k.iframe = f;
+    k.sahne.appendChild(f);
+    olcekle(k);
+  }
+  function onizlemeKapat(k) { if (k.iframe) { k.iframe.remove(); k.iframe = null; } }
+
+  // ---- salonun okları: yalnız kabinler sığmayınca görünür
+  function okYaz() {
+    var tasar = salon.scrollWidth - salon.clientWidth > 4;
+    salon.classList.toggle('tasar', tasar);
+    salon.classList.toggle('basta', salon.scrollLeft < 4);
+    salon.classList.toggle('sonda', salon.scrollLeft > salon.scrollWidth - salon.clientWidth - 4);
+    $('ok-sol').disabled = !tasar || salon.scrollLeft < 4;
+    $('ok-sag').disabled = !tasar || salon.scrollLeft > salon.scrollWidth - salon.clientWidth - 4;
+  }
+  function kaydir(yon) {
+    var k = raf.querySelector('.kabin'), adim = k ? k.getBoundingClientRect().width + 24 : salon.clientWidth * 0.8;
+    salon.scrollBy({ left: yon * adim, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  }
+  $('ok-sol').addEventListener('click', function () { kaydir(-1); });
+  $('ok-sag').addEventListener('click', function () { kaydir(1); });
+  salon.addEventListener('scroll', okYaz, { passive: true });
+  addEventListener('resize', okYaz);
+  if (olcer) olcer.observe(salon);
+
+  // ---- 2. adım: kabinler
+  function kartKur(o, i) {
+    var el = $('kart-sablon').content.firstElementChild.cloneNode(true);
+    el.classList.add('k' + takim(o.id));
+    el.style.setProperty('--gec', (i * 0.6) + 's');
+    el.dataset.oyun = o.id;
+    var baslikId = 'oyun-' + o.id;
+    el.querySelector('h3').textContent = o.ad;
+    el.querySelector('h3').id = baslikId;
+    el.setAttribute('aria-labelledby', baslikId);
+    el.querySelector('.aciklama').textContent = o.aciklama || '';
+    el.querySelector('.bekle').textContent = o.ad;
+    var k = {
+      id: o.id, ad: o.ad, el: el, iframe: null,
+      sahne: el.querySelector('.sahne'), dene: el.querySelector('.dene'), bagla: el.querySelector('.bagla'),
+      baglaAlt: el.querySelector('.bagla small'), ileti: el.querySelector('.kart-ileti'), rozet: el.querySelector('.acik-rozet')
+    };
+    k.sahne.__kart = k;
+    k.dene.setAttribute('aria-describedby', baslikId);
+    k.bagla.setAttribute('aria-describedby', baslikId);
+    k.dene.setAttribute('aria-label', o.ad + ': Dene, sahte izleyicilerle aç');
+    k.dene.addEventListener('click', function () { baslat(k, 'deneme'); });
+    k.bagla.addEventListener('click', function () { baslat(k, 'canli'); });
+    kartlar.set(o.id, k);
+    raf.appendChild(el);
+    if (gozcu) gozcu.observe(k.sahne); else onizlemeAc(k);
+    if (olcer) olcer.observe(k.sahne);
+  }
+
+  // ---- başlat: motora sor, sonra oyunun sayfasına geç
+  function baslat(k, kip) {
+    if (mesgul) return;
+    k.ileti.textContent = '';
+    if (kip === 'canli' && !kutuHazir()) {
+      k.ileti.textContent = kutu.durum === 'iniyor' ? 'TikTok kütüphanesi hâlâ iniyor. Bitince bu düğme kendiliğinden yanar; o zamana kadar Dene çalışır.'
+        : 'TikTok kütüphanesi inmedi. Alttaki "Yeniden dene"ye bas; o zamana kadar Dene çalışır.';
+      return;
+    }
+    if (kip === 'canli' && !kayitli) { adIste(); return; }
+    var ad = kip === 'canli' ? kayitli : '';
+    var dugme = kip === 'canli' ? k.bagla : k.dene, ust = dugme.querySelector('.ust'), alt = dugme.querySelector('small');
+    var eskiUst = ust.textContent, eskiAlt = alt.textContent;
+    mesgul = true;
+    dugme.classList.add('basliyor');
+    k.dene.disabled = k.bagla.disabled = true;
+    k.el.setAttribute('aria-busy', 'true');
+    ust.textContent = 'Açılıyor…';
+    alt.textContent = kip === 'canli' ? '@' + ad : 'hazırlanıyor';
+    var geriAl = function (metin) {
+      mesgul = false;
+      dugme.classList.remove('basliyor');
+      k.dene.disabled = k.bagla.disabled = false;
+      k.el.removeAttribute('aria-busy');
+      ust.textContent = eskiUst; alt.textContent = eskiAlt;
+      k.ileti.textContent = metin;
+    };
+    istek('/api/baslat', { oyun: k.id, kip: kip, kullanici: ad }).then(function (s) {
+      if (!s.ok || !s.j.tamam) {
+        if (s.j.alan === 'kutuphane') { geriAl(s.j.hata); yokla(); return; }
+        if (s.j.alan === 'kullanici') { geriAl(''); adDurumu(''); girdi.value = ad; notYaz(s.j.hata, 'hata'); girdi.focus(); return; }
+        geriAl(s.j.hata || 'Motor bu isteği kabul etmedi. Sayfayı yenileyip yeniden dene.');
+        return;
+      }
+      location.href = s.j.adres || ('/oyun/' + encodeURIComponent(k.id) + '/');
+    }).catch(function () {
+      geriAl('Motora ulaşılamadı. ' + P().kapandiysa + P().yeniden);
+      durumYaz(null);
+    });
+  }
+  function istek(yol, govde) {
+    return fetch(yol, { method: 'POST', headers: { 'content-type': 'application/json' }, cache: 'no-store', body: JSON.stringify(govde) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); });
+  }
+
+  // ---- yardım panosu: Esc ve dışına tıklamak kapatır, odak açan düğmeye döner
+  var pano = $('yardim'), panoAcan = null;
+  function panoAc(e) {
+    panoAcan = e && e.currentTarget || document.activeElement;
+    if (pano.showModal) pano.showModal(); else pano.setAttribute('open', '');
+    $('yardim-kapat').focus();
+  }
+  function panoKapat() { if (pano.open) { if (pano.close) pano.close(); else pano.removeAttribute('open'); } }
+  pano.addEventListener('close', function () { if (panoAcan && panoAcan.focus) panoAcan.focus(); });
+  pano.addEventListener('click', function (e) { if (e.target === pano) panoKapat(); }); // pano dışı (perde)
+  $('yardim-kapat').addEventListener('click', panoKapat);
+  $('yardim-x').addEventListener('click', panoKapat);
+  $('yardim-ac').addEventListener('click', panoAc);
+
+  // ---- şu an açık şeridi ve alt satır
+  $('cal-durdur').addEventListener('click', function () {
+    var d = $('cal-durdur');
+    d.disabled = true; d.textContent = 'Durduruluyor…';
+    var durduran = son && son.aktif ? son.aktif.oyun : null;
+    istek('/api/durdur', {}).then(function (s) {
+      d.disabled = false; d.textContent = 'Durdur';
+      if (s.ok && s.j.tamam) {
+        son = s.j; durumYaz(s.j);
+        // şerit kayboldu: odak, durdurulan oyunun sarı Dene düğmesine geçer (yoksa salona)
+        var k = durduran && kartlar.get(durduran);
+        if (k) k.dene.focus({ preventScroll: true }); else salon.focus({ preventScroll: true });
+      }
+    }).catch(function () { d.disabled = false; d.textContent = 'Durdur'; motorYok(); });
+  });
+  // ---- motoru kapat: önce satırın içinde onay, sonra POST /kapat (özel başlıkla). Motor uyur (süreç yaşar); sayfa
+  // "Motor durdu" ekranına geçer: tek eylem "Başlat" (POST /uyan), altında "Bu sekmeyi kapatınca motor tamamen kapanır."
+  // Ekran açıkken sıradan yoklama durur; yerine 20 sn'de bir nabız (POST /nabiz) gider, uyuyan motoru yalnız o yaşatır.
+  // Kapatan sekme arka plana geçse de nabız atar (tarayıcı onu dakikada bire kısar; motor 150 sn bekler). Uykuyu yoklamayla
+  // fark eden başka bir sekme yalnız görünürken nabız atar: unutulmuş bir arka plan sekmesi motoru sonsuza dek tutmasın.
+  // kapandi: "Motor durdu" ya da "tamamen kapandı" ekranı açık (sıradan akış durur).
+  var kapandi = false, uykuSahibi = false, nabizSaat = null;
+  function sonEkran() {
+    kapandi = true;
+    clearInterval(saat);
+    motorVar = false;
+    acilisAcik = true;
+    kartlar.forEach(onizlemeKapat); // önizlemeler motordan gelir; boşa yüklenmesin
+    var a = $('acilis');
+    a.classList.add('kapandi');
+    a.hidden = false; a.classList.remove('kalk');
+    $('sayfa').setAttribute('inert', '');
+    $('acilis-liste').hidden = true;
+    $('beklemeden').hidden = $('yeniden').hidden = $('yalniz-dene').hidden = true;
+  }
+  function uykuGoster(sahip) {
+    if (sahip) uykuSahibi = true;
+    if (nabizSaat) return;
+    sonEkran();
+    $('acilis-alt').textContent = 'Motor durdu.';
+    $('uyan').hidden = false; $('uyan').disabled = false; $('uyan').textContent = 'Başlat';
+    $('uyku-not').hidden = false;
+    $('uyan').focus({ preventScroll: true });
+    nabizSaat = setInterval(nabizAt, 20000);
+    nabizAt();
+  }
+  function tamamenKapandi() { // motor süreci yok: sayfa onu başlatamaz, başlatıcıyı söyler
+    sonEkran();
+    clearInterval(nabizSaat); nabizSaat = -1; // -1: uyku ekranı bir daha kurulmaz
+    $('uyan').hidden = true; $('uyku-not').hidden = true;
+    $('acilis-alt').textContent = P().son;
+    $('acilis').focus({ preventScroll: true });
+  }
+  function nabizAt() {
+    if (!uykuSahibi && document.hidden) return;
+    fetch('/nabiz', { method: 'POST', headers: { 'content-type': 'application/json', 'x-fabrika': 'nabiz' }, cache: 'no-store', body: '{}' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { if (j && j.uyku === false) location.reload(); }) // başka yerden uyandırıldı: salon geri gelir
+      .catch(function () { tamamenKapandi(); });
+  }
+  document.addEventListener('visibilitychange', function () { if (nabizSaat > 0 && !document.hidden) nabizAt(); });
+  $('uyan').addEventListener('click', function () {
+    var b = $('uyan');
+    b.disabled = true; b.textContent = 'Başlatılıyor…';
+    fetch('/uyan', { method: 'POST', headers: { 'content-type': 'application/json', 'x-fabrika': 'uyan' }, cache: 'no-store', body: '{}' })
+      .then(function (r) {
+        if (r.ok) { location.reload(); return; } // salon açılış sahnesiyle geri gelir
+        b.disabled = false; b.textContent = 'Başlat';
+        $('acilis-alt').textContent = 'Motor başlatılamadı. Sayfayı yenileyip yeniden dene.';
+      })
+      .catch(function () { tamamenKapandi(); });
+  });
+  function kapatOnayKapat(odak) {
+    $('kapat-onay').hidden = true;
+    $('kapat-evet').disabled = $('kapat-hayir').disabled = false;
+    $('kapat-evet').textContent = 'Evet, kapat';
+    $('kapat-soru').textContent = 'Motor kapansın mı? Açık oyun da durur.';
+    $('motor-kapat').hidden = !motorVar;
+    if (odak && motorVar) $('motor-kapat').focus({ preventScroll: true });
+  }
+  $('motor-kapat').addEventListener('click', function () {
+    $('motor-kapat').hidden = true;
+    $('kapat-onay').hidden = false;
+    $('kapat-hayir').focus({ preventScroll: true }); // yanlışlıkla Enter'a basılırsa motor kapanmasın
+  });
+  $('kapat-hayir').addEventListener('click', function () { kapatOnayKapat(true); });
+  $('kapat-onay').addEventListener('keydown', function (e) { if (e.key === 'Escape') { e.preventDefault(); kapatOnayKapat(true); } });
+  $('kapat-evet').addEventListener('click', function () {
+    $('kapat-evet').disabled = $('kapat-hayir').disabled = true;
+    $('kapat-evet').textContent = 'Kapatılıyor…';
+    fetch('/kapat', { method: 'POST', headers: { 'content-type': 'application/json', 'x-fabrika': 'kapat' }, cache: 'no-store', body: '{}' })
+      .then(function (r) {
+        if (r.ok) { uykuGoster(true); return; }
+        $('kapat-evet').disabled = $('kapat-hayir').disabled = false;
+        $('kapat-evet').textContent = 'Evet, kapat';
+        $('kapat-soru').textContent = 'Motor kapatılamadı. Sayfayı yenileyip yeniden dene.';
+      })
+      .catch(function () { tamamenKapandi(); }); // motora ulaşılamıyorsa zaten kapalıdır
+  });
+  function durumYaz(d) {
+    if (d && d.kutuphane) kutuYaz(d.kutuphane);
+    // motor geri geldiyse kabinlerde kalmış "Motora ulaşılamadı" iletisi silinir
+    if (d) kartlar.forEach(function (k) { if (/Motora ulaşılamadı/.test(k.ileti.textContent)) k.ileti.textContent = ''; });
+    $('alt').classList.toggle('koptu', !d);
+    $('lamba').textContent = d ? 'Motor çalışıyor' : 'Motora ulaşılamıyor';
+    if (!d) kapatOnayKapat(false);
+    $('motor-kapat').hidden = !d || !$('kapat-onay').hidden;
+    yerelYaz(d);
+    var a = d && d.aktif;
+    kartlar.forEach(function (k) {
+      var bu = !!a && a.oyun === k.id;
+      k.el.classList.toggle('acik-oyun', bu);
+      k.rozet.hidden = !bu;
+    });
+    document.body.classList.toggle('calisiyor', !!a);
+    $('yardim-ac').classList.toggle('parla', !!a && a.kip === 'canli'); // canlıya geçince "Yayına nasıl alırım?" öne çıkar
+    $('calisan').hidden = !a;
+    $('yol').hidden = !!a; // şerit, alt yazının yerine geçer: kabinler ekrana sığmaya devam etsin
+    if (!a) return;
+    $('calisan').classList.toggle('canli', a.kip === 'canli');
+    $('cal-oyun').textContent = a.ad;
+    $('cal-kip').textContent = a.kip === 'canli' ? '@' + a.kullanici + ' yayını' : 'deneme';
+    $('cal-durum').textContent = d.durum || '';
+    $('cal-durum').title = d.durum || '';
+    $('cal-don').setAttribute('href', '/oyun/' + encodeURIComponent(a.oyun) + '/');
+  }
+  function oku() {
+    return fetch('/api/oyunlar', { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); });
+  }
+  function kur(d) {
+    son = d;
+    // Liste yeniden kurulurken eski kabinlerin gözcüleri bırakılır (sızıntı olmasın), odaktaki düğme sonra geri verilir.
+    var odak = document.activeElement, odakOyun = null, odakTus = null;
+    if (odak && raf.contains(odak)) { var ok = odak.closest('.kart'); odakOyun = ok && ok.dataset.oyun; odakTus = odak.classList.contains('bagla') ? 'bagla' : 'dene'; }
+    kartlar.forEach(function (k) { if (gozcu) gozcu.unobserve(k.sahne); if (olcer) olcer.unobserve(k.sahne); onizlemeKapat(k); });
+    raf.textContent = '';
+    kartlar.clear();
+    var liste = Array.isArray(d.oyunlar) ? d.oyunlar : [];
+    var tek = !!d.paket && liste.length === 1;
+    raf.classList.toggle('tek', tek);
+    if (tek) { // paket: başlık oyunun adı, alt yazıda yalnız bu oyun
+      var h = $('baslik'); h.textContent = liste[0].ad;
+      document.title = liste[0].ad;
+      var s2 = $('yol-2'), b = document.createElement('b'); b.textContent = 'Dene';
+      s2.textContent = '';
+      s2.append(b, ' sahte izleyicilerle açar, ad gerekmez');
+    }
+    if (!liste.length) {
+      var bos = document.createElement('p');
+      bos.className = 'bos-raf';
+      bos.textContent = 'Henüz derlenmiş oyun yok. Claude Code ile bir oyun yap ya da node araclar/derle.js <ad> çalıştır.';
+      raf.appendChild(bos);
+    }
+    liste.forEach(kartKur);
+    if (!d.paket) raf.appendChild($('yap-sablon').content.firstElementChild.cloneNode(true)); // pakette depo yok: boş kabin de yok
+    raf.removeAttribute('aria-busy');
+    kartlar.forEach(function (k) { k.baglaAlt.textContent = baglaYazi(); }); // bilet düzenleniyorsa ona dokunmadan
+    durumYaz(d);
+    if (odakOyun && kartlar.get(odakOyun)) kartlar.get(odakOyun)[odakTus].focus({ preventScroll: true });
+    requestAnimationFrame(okYaz);
+  }
+  function imza(d) { return JSON.stringify((d.oyunlar || []).map(function (o) { return [o.id, o.ad, o.aciklama]; })) + d.paket; }
+
+  // ---- TikTok kütüphanesi: hazır değilken kırmızı düğmeler sönük, altta sessiz bir not; inince kendiliğinden yanar
+  // Başlatıcının ve motor penceresinin adı platforma göre. Motor /api/oyunlar içinde platformu söyler; motora ulaşılamazken
+  // tarayıcının ipucu kullanılır (bilinmezse Windows). Testler window.FABRIKA_PLATFORM ile ipucunu ezer.
+  // Windows'ta BASLAT.bat motoru penceresiz açar: motor yokken "pencere" denmez, motorun kendisi kapalı denir. Motor
+  // penceresiz değilse (komut satırından elle açıldı) motor bunu arkaPlan: false ile söyler, o zaman pencereden söz edilir.
+  // Mac ve Linux'ta motor her zaman Terminal penceresidir.
+  var PLATFORM_METIN = {
+    windows: { dosya: 'BASLAT.bat', pencere: 'Siyah pencere', kapali: 'Motor kapalı görünüyor.', kapandiysa: 'Motor kapandıysa ', yeniden: 'BASLAT.bat dosyasına yeniden çift tıkla.', ac: 'BASLAT.bat dosyasına çift tıkla.', son: 'Motor tamamen kapandı. Yeniden açmak için BASLAT\'a çift tıkla.' },
+    mac: { dosya: 'BASLAT.command', pencere: 'Terminal penceresi', kapali: 'Terminal penceresi kapalı görünüyor.', kapandiysa: 'Terminal penceresi kapandıysa ', yeniden: 'BASLAT.command dosyasına yeniden çift tıkla; açılmazsa Terminal\'de klasöre girip sh BASLAT.command yaz.', ac: 'BASLAT.command dosyasına çift tıkla; açılmazsa Terminal\'de klasöre girip sh BASLAT.command yaz.', son: 'Motor tamamen kapandı. Yeniden açmak için BASLAT\'a çift tıkla.' },
+    linux: { dosya: 'BASLAT.sh', pencere: 'Terminal penceresi', kapali: 'Terminal penceresi kapalı görünüyor.', kapandiysa: 'Terminal penceresi kapandıysa ', yeniden: 'BASLAT.sh dosyasını yeniden çalıştır.', ac: 'BASLAT.sh dosyasını çalıştır.', son: 'Motor tamamen kapandı. Yeniden açmak için BASLAT.sh dosyasını çalıştır.' }
+  };
+  var platform = (function () {
+    var p = String(window.FABRIKA_PLATFORM || (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '');
+    return /mac/i.test(p) ? 'mac' : /linux|x11/i.test(p) && !/android/i.test(p) ? 'linux' : 'windows';
+  })();
+  function P() { return PLATFORM_METIN[platform] || PLATFORM_METIN.windows; }
+  function yerelYaz(d) {
+    $('yerel').textContent = !d ? P().kapali + ' ' + P().yeniden
+      : d.arkaPlan ? 'Motor arka planda çalışıyor, penceresi yok. Yalnızca bu bilgisayar erişebilir.'
+      : d.platform ? P().pencere + ' oyunların motorudur; açık kalsın. Yalnızca bu bilgisayar erişebilir.'
+      : 'Motor bu bilgisayarda çalışır. Yalnızca bu bilgisayar erişebilir.';
+  }
+  var kutu = { durum: 'bilinmiyor', sure: 0, t: 0, neden: '' }, kutuSonDurum = '', tamamZaman = null;
+  function kutuHazir() { return kutu.durum === 'hazir'; }
+  function kutuSure() { return kutu.durum === 'iniyor' ? kutu.sure + Math.floor((Date.now() - kutu.t) / 1000) : 0; }
+  function baglaYazi() {
+    if (!kutuHazir()) return kutu.durum === 'iniyor' ? 'kütüphane iniyor' : kutu.durum === 'hata' ? 'kütüphane inmedi' : 'hazırlanıyor';
+    return kayitli ? '@' + kayitli : 'önce adını kaydet';
+  }
+  function kutuYaz(k) {
+    var once = kutu.durum;
+    kutu = { durum: k.durum, sure: k.sure || 0, t: Date.now(), neden: k.neden || '' };
+    document.body.classList.toggle('kutuphane-yok', !kutuHazir());
+    kartlar.forEach(function (x) { x.baglaAlt.textContent = baglaYazi(); if (kutuHazir() && /kütüphane/.test(x.ileti.textContent)) x.ileti.textContent = ''; });
+    if (once !== kutu.durum && kutu.durum === 'hazir' && (once === 'iniyor' || once === 'hata') && !acilisAcik) {
+      tamamZaman = Date.now(); // salondayken indi: kısa bir süre "indi" notu
+    }
+    kutuNotYaz();
+    if (acilisAcik) acilisYaz();
+  }
+  function kutuNotYaz() {
+    var n = $('kutu-not'), y = $('kutu-not-yazi'), goster = true;
+    n.classList.remove('hata', 'tamam');
+    $('kutu-yeniden').hidden = kutu.durum !== 'hata';
+    if (kutu.durum === 'iniyor') y.textContent = 'TikTok kütüphanesi iniyor · ' + kutuSure() + ' sn. Bitince kırmızı düğmeler yanar.';
+    else if (kutu.durum === 'hata') { n.classList.add('hata'); y.textContent = kutu.neden || 'İndirilemedi. İnternet bağlantını kontrol et.'; }
+    else if (kutu.durum === 'hazir' && tamamZaman && Date.now() - tamamZaman < 8000) { n.classList.add('tamam'); y.textContent = 'TikTok kütüphanesi indi. Yayın düğmeleri hazır.'; }
+    else goster = false;
+    n.hidden = !goster;
+  }
+  function kutuyuYenidenDene(dugme) {
+    if (dugme) dugme.disabled = true;
+    istek('/api/kutuphane', {}).then(function (s) { if (dugme) dugme.disabled = false; if (s.ok && s.j.kutuphane) kutuYaz(s.j.kutuphane); })
+      .catch(function () { if (dugme) dugme.disabled = false; motorYok(); });
+  }
+  $('kutu-yeniden').addEventListener('click', function (e) { kutuyuYenidenDene(e.currentTarget); });
+
+  // ---- açılış ekranı: motor, kütüphane, oyunlar. Hepsi hazır olunca salon tek bir geçişle açılır.
+  var acilisAcik = true, acilisBasi = Date.now(), motorVar = false, oyunlarHazir = false, salonKuruldu = false, kopukSay = 0;
+  (function () { // tavandaki ampuller sırayla yanar
+    var a = $('acilis-ampul'), renk = ['#ffd36a', '#ef4a35', '#27c3ae', '#ffd36a', '#ff8fb0'];
+    for (var i = 0; i < 22; i++) {
+      var b = document.createElement('i'); b.style.setProperty('--r', renk[i % renk.length]); a.appendChild(b);
+      setTimeout(function (x) { x.classList.add('yan'); }.bind(null, b), 120 + i * 45);
+    }
+  })();
+  function satir(id, d, metin, alt, s) {
+    var li = $(id), m = li.querySelector('.m');
+    li.dataset.d = d;
+    m.textContent = metin;
+    if (alt) { var k = document.createElement('small'); k.textContent = alt; m.appendChild(k); }
+    li.querySelector('.s').textContent = s || '';
+  }
+  function acilisYaz() {
+    if (kapandi) return; // motor ana sayfadan kapatıldı: son hâl değişmez
+    if (!motorVar) {
+      satir('a-motor', 'hata', 'Motor çalışmıyor. ' + P().ac, 'Motor açılınca bu sayfa kendiliğinden devam eder.');
+      satir('a-kutu', 'bekliyor', 'TikTok kütüphanesi'); satir('a-oyun', 'bekliyor', 'Oyunlar');
+      $('acilis-alt').textContent = P().kapali;
+      $('beklemeden').hidden = $('yeniden').hidden = $('yalniz-dene').hidden = true;
+      acilisOdak();
+      return;
+    }
+    satir('a-motor', 'tamam', 'Motor çalışıyor');
+    if (kutu.durum === 'hazir') satir('a-kutu', 'tamam', 'TikTok kütüphanesi kurulu');
+    else if (kutu.durum === 'iniyor') satir('a-kutu', 'suruyor', 'TikTok kütüphanesi iniyor', 'Yalnız ilk sefer; yaklaşık bir dakika sürer.', kutuSure() + ' sn');
+    else if (kutu.durum === 'hata') satir('a-kutu', 'hata', kutu.neden || 'İndirilemedi. İnternet bağlantını kontrol et.', 'Dene yine çalışır; yalnız canlı yayın için gerekli.');
+    else satir('a-kutu', 'suruyor', 'TikTok kütüphanesine bakılıyor');
+    var n = kartlar.size;
+    if (!salonKuruldu) satir('a-oyun', 'suruyor', 'Oyunlar hazırlanıyor');
+    else if (!oyunlarHazir) satir('a-oyun', 'suruyor', 'Oyunlar hazırlanıyor', 'İlk önizlemeler açılıyor.', n + ' oyun');
+    else satir('a-oyun', 'tamam', n ? (n === 1 ? 'Oyun hazır' : n + ' oyun hazır') : 'Henüz derlenmiş oyun yok');
+    $('acilis-alt').textContent = kutu.durum === 'iniyor' ? 'İlk açılış: gereken parça iniyor. Beklerken oyunları deneyebilirsin.'
+      : kutu.durum === 'hata' ? 'Canlı yayın parçası inemedi. Oyunları yine deneyebilirsin.' : 'Salon açılıyor…';
+    $('beklemeden').hidden = kutu.durum !== 'iniyor' || !salonKuruldu;
+    $('yeniden').hidden = $('yalniz-dene').hidden = kutu.durum !== 'hata' || !salonKuruldu;
+    acilisOdak();
+    if (kutu.durum === 'hazir' && oyunlarHazir) {
+      var kalan = 650 - (Date.now() - acilisBasi); // anlık parlama olmasın diye en az bu kadar
+      setTimeout(salonuAc, Math.max(0, kalan));
+    }
+  }
+  // Açılış sahnesi kipli bir penceredir: açıkken odak onun içindedir (görünen eylem düğmesi, yoksa sahnenin kendisi),
+  // Tab içinde döner. Kapanınca odak salona geçer: ad kayıtlı değilse ad alanına, kayıtlıysa ilk kabinin Dene düğmesine.
+  function acilisDugmeleri() { return [].slice.call($('acilis').querySelectorAll('button')).filter(function (b) { return !b.hidden; }); }
+  function acilisOdak() {
+    if (!acilisAcik) return;
+    var a = $('acilis'), e = document.activeElement;
+    if (e && e !== document.body && e !== a && a.contains(e) && !e.hidden) return; // sahnenin kendisindeyse düğme gelince ona geçer
+    var d = acilisDugmeleri();
+    (d[0] || a).focus({ preventScroll: true });
+  }
+  document.addEventListener('keydown', function (e) {
+    if (!acilisAcik || e.key !== 'Tab') return;
+    var d = acilisDugmeleri(), i = d.indexOf(document.activeElement);
+    e.preventDefault();
+    if (!d.length) { $('acilis').focus({ preventScroll: true }); return; }
+    d[i < 0 ? 0 : (i + (e.shiftKey ? d.length - 1 : 1)) % d.length].focus({ preventScroll: true });
+  });
+  function salonOdak() {
+    var dene = document.querySelector('.kart .dene');
+    if (!document.body.classList.contains('kayitli') && !$('ad-form').hidden) $('kullanici').focus({ preventScroll: true });
+    else if (dene) dene.focus({ preventScroll: true });
+    else $('salon').focus({ preventScroll: true });
+  }
+  function salonuAc() {
+    if (!acilisAcik) return;
+    acilisAcik = false;
+    $('sayfa').removeAttribute('inert');
+    salonOdak();
+    var a = $('acilis');
+    a.classList.add('kalk');
+    setTimeout(function () { a.hidden = true; }, 520);
+    kutuNotYaz();
+  }
+  function acilisiGoster() { // salondayken motor kaybolursa aynı sahne geri gelir
+    acilisAcik = true;
+    var a = $('acilis'); a.hidden = false; a.classList.remove('kalk');
+    $('sayfa').setAttribute('inert', '');
+    acilisYaz();
+    acilisOdak();
+  }
+  $('beklemeden').addEventListener('click', salonuAc);
+  $('yalniz-dene').addEventListener('click', salonuAc);
+  $('yeniden').addEventListener('click', function (e) { kutuyuYenidenDene(e.currentTarget); });
+  // İlk önizlemeler: görünen kabinlerin iframe'leri yüklenince (en çok 4 sn) oyunlar hazır sayılır.
+  function onizlemeleriBekle() {
+    var bitti = false, bas = Date.now();
+    var son2 = function () { if (bitti) return; bitti = true; oyunlarHazir = true; if (acilisAcik) acilisYaz(); };
+    setTimeout(son2, 2500); // ne olursa olsun en çok bu kadar beklenir
+    (function bak() { // önizlemeler görünürlük gözcüsüyle açılır; ilk iframe'ler oluşana dek kısa bekle
+      var bekle = [];
+      kartlar.forEach(function (k) { if (k.iframe) bekle.push(k.iframe); });
+      if (!kartlar.size) { son2(); return; }
+      if (!bekle.length) { if (Date.now() - bas < 1500) setTimeout(bak, 100); else son2(); return; }
+      var kalan = bekle.length;
+      bekle.forEach(function (f) { f.addEventListener('load', function () { if (--kalan <= 0) setTimeout(son2, 250); }, { once: true }); });
+    })();
+  }
+  function motorYok() {
+    motorVar = false;
+    durumYaz(null);
+    if (acilisAcik) acilisYaz();
+    else if (++kopukSay >= 2) acilisiGoster();
+  }
+  function motorGeldi(d) {
+    if (d && PLATFORM_METIN[d.platform]) platform = d.platform;
+    if (d && d.uyku === true) { uykuGoster(false); return; } // başka sekmeden durduruldu: bu sekme uyandırmaz, ekranı gösterir
+    if (!motorVar && salonKuruldu && kopukSay >= 2) { location.reload(); return; } // motor yeniden açıldı: temiz başla
+    motorVar = true; kopukSay = 0;
+    if (!d.kutuphane) d.kutuphane = { durum: 'hazir' }; // kütüphane durumu bildirmeyen motor: eski davranış
+    if (!salonKuruldu) {
+      salonKuruldu = true;
+      kur(d);
+      requestAnimationFrame(function () { requestAnimationFrame(onizlemeleriBekle); });
+    } else if (imza(d) !== imza(son)) kur(d);
+    else { son = d; durumYaz(d); }
+    if (acilisAcik) acilisYaz();
+  }
+  var sonYokla = 0;
+  function yokla() {
+    if (kapandi) return;
+    sonYokla = Date.now();
+    oku().then(function (d) { if (!kapandi) motorGeldi(d); }).catch(function () { if (!kapandi) motorYok(); });
+  }
+  yerelYaz(true);
+  yokla();
+  // Saniyede bir: açılışta saniye sayacı ve kütüphane notu yerel olarak ilerler; iki saniyede bir motora sorulur.
+  // Sekme arka plandayken de en az dakikada bir sorulur: penceresiz motor, hiçbir sayfa sesini duyurmayınca bir süre
+  // sonra kendiliğinden kapanır; açık duran ana sayfa motoru yaşatır (tarayıcı arka plan sekmesini dakikada bire kısar).
+  var tik = 0;
+  var saat = setInterval(function () {
+    tik++;
+    if (acilisAcik) acilisYaz(); else kutuNotYaz();
+    if (document.hidden) { if (!mesgul && Date.now() - sonYokla > 50000) yokla(); return; }
+    if (mesgul) return;
+    if (acilisAcik || tik % 2 === 0) yokla();
+  }, 1000);
+  // Geri tuşuyla dönülünce (sayfa önbellekten gelir) düğmeler eski "Açılıyor…" hâlinde kalmasın.
+  addEventListener('pageshow', function (e) { if (e.persisted) location.reload(); });
+})();
+</script>
+</body>
+</html>
