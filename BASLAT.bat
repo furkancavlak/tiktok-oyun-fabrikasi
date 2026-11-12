@@ -30,7 +30,7 @@ echo  Kendi yayininla oynamak icin TikTok kullanici adini yaz.
 echo  Yalnizca denemek istiyorsan bos birak ve Enter'a bas: TikTok'a baglanmadan, sahte izleyicilerle acilir.
 echo.
 set "KULLANICI="
-set /p KULLANICI= TikTok kullanici adin (basinda @ olmadan):
+set /p KULLANICI= TikTok kullanici adin (basinda @ olmadan):eskidiziler74
 
 rem --sor: klasorde birden cok oyun varsa kopru hangisinin acilacagini sorar (depo kokunden calistirinca).
 if "%KULLANICI%"=="" (
