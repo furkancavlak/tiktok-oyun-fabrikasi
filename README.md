@@ -1,8 +1,8 @@
 # TikTok Oyun Fabrikası
 
-> **Kullanım notu:** Bu içerikler yayında oynanabilir; ancak YouTube videoları üzerinden kendi sisteminizmiş gibi
-> tanıtılması ve kendi sisteminizmiş gibi değiştirilmesi yasaktır. Video çekecekseniz kaynağı gösterin:
-> Furkan Cavlak, https://github.com/furkancavlak/tiktok-oyun-fabrikasi
+> **Kullanım şartı:** Yayında oynamak, kodu alıp geliştirmek ve üstüne kendi oyununu yapmak serbest. Alıp "ben yaptım"
+> diye sahiplenmek, kendi sisteminmiş gibi tanıtmak yasak. Video çekerken ya da paylaşırken kaynağı göster:
+> TikTok Oyun Fabrikası, Furkan Cavlak, https://github.com/furkancavlak/tiktok-oyun-fabrikasi (ayrıntı `LICENSE` dosyasında).
 
 ## İndir
 
@@ -150,7 +150,10 @@ Sahne 720x1280 sanal ölçekte çizilir, TikTok'un dikey yayınına göre. Alt k
 
 ## Lisans
 
-Bu deponun kendi kodu MIT lisanslıdır. Ayrıntı `LICENSE` dosyasında.
+Bu deponun kendi kodu, MIT lisansına bir atıf şartı eklenmiş hâliyle dağıtılır. Yayında oynamak, kodu değiştirmek,
+geliştirmek ve üstüne oyun yapmak serbesttir. Depoyu ya da ondan türeyen bir işi kendi yaptığın bir sistem gibi sunmak
+yasaktır; videoda, gönderide ya da depoda paylaşırken kaynak gösterilir. Tam metin `LICENSE` dosyasında.
+21 Kasım 2026'dan önceki sürümler düz MIT lisansıyla yayınlanmıştır.
 
 TikTok bağlantısını kuran `tiktok-live-connector` ve `tiktok-live-proto` kütüphaneleri bu deponun parçası değildir ve
 AGPL-3.0 lisanslıdır. Kaynak koddan kurarken onları npm indirir; hazır Windows paketi ise ikisini de kaynak kodu ve lisans
@@ -165,4 +168,4 @@ TikTok Game Factory is a repo for vertical, interactive games played by viewers 
 
 Quick try on Windows: double-click `BASLAT.bat`; a home page opens in the browser with every game, a live preview, a "try with fake viewers" button and a "connect to your live stream" button (the TikTok username is typed on the page). On Windows the engine then runs in the background without a window; "Motoru kapat" on the home page puts it to sleep with a "Başlat" button to wake it; it exits for good a couple of minutes after that tab is closed, and by itself 10 minutes after the last page is closed. From a terminal: `npm install`, then `node kopru.js --ana-sayfa --ac`, or one game directly with `node kopru.js --deneme --oyun halay --ac`. Live: `node kopru.js <username> --oyun <name> --ac`. `node araclar/paket.js <name>` builds a double-click package for a non-programmer streamer.
 
-Limits: the bridge reads streams through the unofficial `tiktok-live-connector` library, which depends on a third-party signing service (Euler Stream) that may limit or stop free use. TikTok offers no official public API for live comments and gifts. Streaming from a phone is not supported. No music files are shipped. Not affiliated with or endorsed by TikTok. Documentation is in Turkish. MIT licence. Gelin Konvoyu 3B uses three.js (MIT) and CC0 models: thanks to Kenney (www.kenney.nl) and Quaternius (quaternius.com).
+Limits: the bridge reads streams through the unofficial `tiktok-live-connector` library, which depends on a third-party signing service (Euler Stream) that may limit or stop free use. TikTok offers no official public API for live comments and gifts. Streaming from a phone is not supported. No music files are shipped. Not affiliated with or endorsed by TikTok. Documentation is in Turkish. Licence: MIT with an attribution condition (do not present it as your own system; credit the source when you show or share it; see `LICENSE`). Gelin Konvoyu 3B uses three.js (MIT) and CC0 models: thanks to Kenney (www.kenney.nl) and Quaternius (quaternius.com).

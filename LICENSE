@@ -1,4 +1,5 @@
-MIT License
+TikTok Oyun Fabrikası License
+(MIT License with an attribution condition)
 
 Copyright (c) 2026 Furkan Cavlak ve katkıcılar
 
@@ -9,8 +10,19 @@ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 copies of the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. The above copyright notice and this permission notice shall be included in
+   all copies or substantial portions of the Software.
+
+2. Attribution. You may not present the Software, or any renamed or modified
+   version of it, as a system that you created yourself. Whenever you publicly
+   present, promote or redistribute the Software or a work based on it (for
+   example in a video, a post, a download page or a repository), you must
+   clearly credit the source in that same place:
+
+       TikTok Oyun Fabrikası, Furkan Cavlak
+       https://github.com/furkancavlak/tiktok-oyun-fabrikasi
+
+   Playing the games on a live stream needs no credit.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -19,3 +31,29 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+--------------------------------------------------------------------------------
+
+Türkçe açıklama (yukarıdaki metnin özetidir; anlaşmazlıkta İngilizce metin geçerlidir)
+
+Serbest olanlar:
+- Oyunları canlı yayında oynamak.
+- Kodu almak, değiştirmek, geliştirmek, üstüne kendi oyununu yapmak.
+- Değiştirdiğin sürümü başkalarına vermek.
+
+Yasak olan:
+- Bu sistemi ya da adını değiştirdiğin bir sürümünü kendin yapmış gibi sunmak.
+
+Şart:
+- Videoda, gönderide, indirme sayfasında ya da depoda bu sistemi (ya da ondan
+  türeyen bir işi) tanıtırken, paylaşırken kaynağı aynı yerde açıkça yaz:
+  TikTok Oyun Fabrikası, Furkan Cavlak
+  https://github.com/furkancavlak/tiktok-oyun-fabrikasi
+- Canlı yayında oyunu oynarken kaynak yazmak gerekmez.
+
+Not: 21 Kasım 2026'dan önce yayınlanan sürümler düz MIT lisansıyla
+dağıtılmıştır. Atıf şartı bu tarihten sonraki sürümler için geçerlidir.
+
+Bu lisans yalnız bu deponun kendi kodunu ve içeriklerini kapsar. Depoyla
+birlikte gelen üçüncü taraf parçalar (three.js, Kenney ve Quaternius modelleri,
+tiktok-live-connector, Node.js) kendi lisanslarıyla dağıtılır.

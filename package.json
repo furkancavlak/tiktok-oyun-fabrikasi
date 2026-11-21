@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "description": "TikTok canlı yayın oyunları fabrikası: ortak çekirdek + oyun başına kancalar. İlk oyun: Mendil Kimde? (halay).",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "engines": {
     "node": ">=18"
   },
