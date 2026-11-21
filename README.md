@@ -1,5 +1,9 @@
 # TikTok Oyun Fabrikası
 
+> **Kullanım notu:** Bu içerikler yayında oynanabilir; ancak YouTube videoları üzerinden kendi sisteminizmiş gibi
+> tanıtılması ve kendi sisteminizmiş gibi değiştirilmesi yasaktır. Video çekecekseniz kaynağı gösterin:
+> Furkan Cavlak, https://github.com/furkancavlak/tiktok-oyun-fabrikasi
+
 ## İndir
 
 **Windows (kurulum yok):** [Releases](https://github.com/furkancavlak/tiktok-oyun-fabrikasi/releases) sayfasından
