@@ -25,11 +25,11 @@
   --cam:#27c3ae; --soluk:#b3a5d6; --yesil:#35e08f;
   --baslik:'Paytone One','Rubik','Trebuchet MS',sans-serif;
   --govde-yazi:'Rubik',system-ui,'Segoe UI',sans-serif;
-  /* kabin boyu: 1366×768'de kabinler düğmeleriyle, "şu an açık" şeridi görünürken de ekrana sığsın */
-  --kabin-h:clamp(440px, calc(100vh - 222px), 760px);
+  /* kabin boyu: 1366×768'de kabinler düğmeleriyle, "şu an açık" şeridi görünürken ve en alttaki imza satırıyla da ekrana sığsın */
+  --kabin-h:clamp(440px, calc(100vh - 250px), 760px);
   --kabin-w:clamp(272px, 22vw, 340px);
 }
-body.calisiyor{--kabin-h:clamp(420px, calc(100vh - 268px), 740px)}
+body.calisiyor{--kabin-h:clamp(420px, calc(100vh - 296px), 740px)}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html{min-height:100%}
@@ -237,6 +237,15 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
 /* motoru kapat: alt satırda, "Motor çalışıyor"un yanında küçük ve sönük; basınca satırın içinde onay sorar */
 .alt .motor-kapat{background:none;border:0;padding:2px 2px;color:var(--soluk);font-size:12.5px;font-weight:500;text-decoration:underline;text-underline-offset:3px}
 .alt .motor-kapat:hover{color:var(--krem)}
+/* imza: alt satırın en altında kendi satırı; düğmelerin arasına girmez, sönük ama okunur */
+.alt .imza{flex:1 0 100%;margin:2px 0 0;padding-top:7px;border-top:1px solid rgba(179,165,214,.18);font-size:12px;letter-spacing:.02em;color:var(--soluk)}
+.alt .imza a{color:var(--krem);text-decoration:underline;text-decoration-color:rgba(255,243,214,.35);text-underline-offset:3px}
+.alt .imza a:hover{color:var(--sari);text-decoration-color:currentColor}
+/* orta genişlikte "Yayına nasıl alırım?" zaten ikinci satıra iner; imza o satırın solunda durur, sayfa uzamaz */
+@media (min-width:761px) and (max-width:1000px){
+  .alt .imza{flex:0 1 auto;order:1;margin:0;padding-top:0;border-top:0}
+  .alt .yazi-dugme{order:2}
+}
 .kapat-onay{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 6px 4px 12px;border-radius:99px;background:rgba(13,8,24,.6);
   border:2px solid rgba(239,74,53,.6);color:var(--krem)}
 .kapat-onay button{border:2px solid var(--kenar);border-radius:99px;padding:3px 12px;font-weight:800;font-size:12.5px}
@@ -438,6 +447,7 @@ body:not(.kayitli) .tus.bagla b,body.kutuphane-yok .tus.bagla b{color:var(--solu
     <span id="yerel">Motor bu bilgisayarda çalışır. Yalnızca bu bilgisayar erişebilir.</span>
     <span class="kutu-not" id="kutu-not" role="status" hidden><span class="lmb" aria-hidden="true"></span><span id="kutu-not-yazi"></span><button type="button" id="kutu-yeniden" hidden>Yeniden dene</button></span>
     <button type="button" class="yazi-dugme" id="yardim-ac">Yayına nasıl alırım?</button>
+    <p class="imza" id="imza">TikTok Oyun Fabrikası · Furkan Cavlak · <a href="https://www.youtube.com/@furkancavlak" target="_blank" rel="noopener">youtube.com/@furkancavlak</a></p>
   </footer>
 </div>
 
