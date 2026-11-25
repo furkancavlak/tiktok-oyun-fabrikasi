@@ -58,6 +58,14 @@ function baslat(klasor, args) { if (args.includes('--ana-sayfa') && !args.includ
   kontrol('Köprü: beğeni sayısı ve büyük sayı', cevir('like', { ...v1, likeCount: 15 }).adet === 15 && cevir('like', { ...v2u, likeCount: 15n }).adet === 15);
   kontrol('Köprü: kimliksiz ya da bozuk veri yok sayılır', cevir('chat', {}) === null && cevir('gift', null) === null && cevir('bilinmeyen', v1) === null);
   kontrol('Köprü: yalnız takma adı olan kullanıcı', cevir('follow', { nickname: 'Sadece Ad' }).kullanici.id === 'Sadece Ad');
+  // Olay kimliği (msgId): oyun aynı iletinin ikinci gelişini bununla atar. 2.x common.msgId, 1.x üst düzey msgId.
+  const m2 = cevir('gift', { ...v2u, common: { msgId: '7312345678901234567' }, giftDetails: { giftType: 2, diamondCount: 10 }, repeatCount: 1, repeatEnd: 1 });
+  const m1 = cevir('chat', { ...v1, msgId: 7312345678901234568n, comment: 'x' });
+  kontrol('Olay kimliği: yeni sürüm common.msgId oyuna taşınır', m2.olayKimlik === '7312345678901234567' && m2.jeton === 10, m2);
+  kontrol('Olay kimliği: eski sürüm msgId (büyük sayı) metne çevrilir', m1.olayKimlik === '7312345678901234568', m1);
+  kontrol('Olay kimliği: yoksa, boşsa ya da 0 ise alan hiç eklenmez', !('olayKimlik' in cevir('chat', { ...v1, comment: 'x' })) && !('olayKimlik' in cevir('like', { ...v1, msgId: '' })) && !('olayKimlik' in cevir('like', { ...v1, common: { msgId: '0' } })) && !('olayKimlik' in cevir('like', { ...v1, msgId: { a: 1 } })));
+  kontrol('Olay kimliği: seri sürerken kimlikli ileti yine yok sayılır', cevir('gift', { ...v2u, common: { msgId: '99' }, giftDetails: { giftType: 1, diamondCount: 10 }, repeatCount: 2, repeatEnd: 0 }) === null);
+  kontrol('Olay kimliği: fırlatan alan olayı düşürmez', (() => { const d = { ...v1, comment: 'x' }; Object.defineProperty(d, 'common', { get() { throw new Error('x'); } }); const o = cevir('chat', d); return o && o.metin === 'x' && !('olayKimlik' in o); })());
   // Oyun seçimi: depoda birden çok oyun varken "hangi oyun?" sorusunun yanıtı (sıra numarası ya da ad).
   const { oyunSec } = require(path.join(KOK, 'kopru.js')), uc = ['halay', 'konvoy', 'vur-duzelsin'];
   kontrol('Köprü: oyun seçimi numarayla ya da adla; boşluk ve büyük harf hoş görülür', typeof oyunSec === 'function' && oyunSec(uc, '2') === 'konvoy' && oyunSec(uc, ' Vur-Duzelsin ') === 'vur-duzelsin');

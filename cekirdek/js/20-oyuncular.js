@@ -113,8 +113,29 @@ function siraGuncelle() {
   D.siraKirli = true;
 }
 
+// Aynı TikTok iletisi iki kez gelebilir (kütüphane tekrarı, yeniden bağlanma); hediye iki kez sayılmasın diye olayın
+// kimliği (olayKimlik, docs/OLAYLAR.md) hatırlanır. Uzun yayında bellek şişmesin: yalnız son 2000 kimlik tutulur (Set
+// ekleme sırasını korur, en eski önce silinir). Kimliksiz olay (sahte izleyici, panel) her zaman işlenir.
+const gorulenOlay = new Set(), GORULEN_SINIR = 2000;
+function tekrarOlayMi(o) {
+  const v = o.olayKimlik;
+  if (typeof v !== 'string' && typeof v !== 'number')
+    return false;
+  const ok = temiz(String(v)).slice(0, 64);
+  if (!ok)
+    return false;
+  if (gorulenOlay.has(ok))
+    return true;
+  gorulenOlay.add(ok);
+  if (gorulenOlay.size > GORULEN_SINIR)
+    gorulenOlay.delete(gorulenOlay.values().next().value);
+  return false;
+}
+
 function olay(o) {
   if (!o || !o.tip)
+    return;
+  if (tekrarOlayMi(o))
     return;
   const kim = o.kullanici || {}, id = temiz(kim.id || kim.ad).slice(0, 64);
   if (!id)

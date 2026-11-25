@@ -25,6 +25,16 @@ const Yayin = {
     }
     if (m.tip)
       return m; // oyunun kendi biçimi
+    // Ham TikTok iletisi: iletinin numarası (2.x d.common.msgId, 1.x d.msgId) olayKimlik olur; olay() tekrarı bununla atar.
+    const o = this.hamCevir(m);
+    if (o) {
+      const d = m.data && typeof m.data === 'object' ? m.data : m, c = d.common && typeof d.common === 'object' ? d.common.msgId : undefined, v = c ?? d.msgId;
+      if ((typeof v === 'string' || typeof v === 'number') && String(v).trim() !== '' && String(v).trim() !== '0')
+        o.olayKimlik = String(v).trim().slice(0, 64);
+    }
+    return o;
+  },
+  hamCevir(m) {
     const e = String(m.event || m.type || '').toLowerCase(), d = m.data && typeof m.data === 'object' ? m.data : m, u = d.user && typeof d.user === 'object' ? d.user : d;
     const kullanici = { id: u.uniqueId || u.userId || u.id || u.nickname, ad: u.nickname || u.uniqueId || u.displayName };
     if (!kullanici.id)

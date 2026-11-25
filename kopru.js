@@ -1044,7 +1044,23 @@ function kullanici(d) {
   if (id === undefined || id === null || id === '') return null;
   return { id: String(id), ad: String(u.nickname || d.nickname || u.uniqueId || d.uniqueId || id) };
 }
+// TikTok iletisinin numarası: aynı ileti iki kez gelirse oyun ikincisini bununla tanıyıp atar (20-oyuncular.js olay).
+// 2.x: d.common.msgId (tiktok-live-proto CommonMessageData), 1.x WebcastPushConnection: üst düzeyde d.msgId. Boş ve 0
+// şemanın "yok" değeridir. Getter fırlatırsa kimlik yok sayılır, olay yine işlenir.
+function olayKimlik(d) {
+  try {
+    const c = d.common && typeof d.common === 'object' ? d.common.msgId : undefined, v = c ?? d.msgId;
+    if (typeof v !== 'string' && typeof v !== 'number' && typeof v !== 'bigint') return '';
+    const s = String(v).replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim().slice(0, 64);
+    return s === '0' ? '' : s;
+  } catch (e) { return ''; }
+}
 function cevir(tur, d) {
+  const o = cevirIc(tur, d);
+  if (o) { const ok = olayKimlik(d); if (ok) o.olayKimlik = ok; } // kimlik yoksa alan hiç eklenmez
+  return o;
+}
+function cevirIc(tur, d) {
   d = d || {}; const k = kullanici(d); if (!k) return null;
   if (tur === 'chat') return { tip: 'yorum', kullanici: k, metin: String(d.comment ?? d.content ?? '') };
   if (tur === 'like') return { tip: 'begeni', kullanici: k, adet: sayi(d.likeCount ?? d.count) || 1 };

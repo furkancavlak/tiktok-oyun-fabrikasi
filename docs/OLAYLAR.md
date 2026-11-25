@@ -25,6 +25,7 @@ işlevi çağırır. Sayfada `window.CanliOyun.olay(o)` olarak erişilir. Aşağ
 | `hediye` | İsteğe bağlı: hangi hediye. `{ id, ad }`; ikisi de yoksa alan hiç olmaz. Olmasa da hediye eskisi gibi sayılır. |
 | `hediye.id` | Platformun hediye numarası, metin olarak (`'5655'`). En çok 32 karakter. Sayı gelirse metne çevrilir. Boş metin ve 0 "yok" sayılır. |
 | `hediye.ad` | Hediyenin adı, düz metin. Denetim karakterleri atılır, kırpılır, 40 karaktere kısaltılır. Yabancıdan gelir: izleyici adı gibi **asla HTML olarak yazılmaz** (sayfaya `textContent`, tuvale `fillText`). |
+| `olayKimlik` | İsteğe bağlı, her türde: platformun ileti numarası (TikTok `msgId`; 2.x `common.msgId`, 1.x `msgId`). Aynı kimlikle ikinci gelen olay **yok sayılır** (hediye iki kez sayılmaz). Son 2000 kimlik hatırlanır, sayfa yenilenince unutulur. Boş metin ve 0 "yok" sayılır; kimliksiz olay her zaman işlenir. En çok 64 karakter. |
 
 Hediye kimliği oyuna `oyunHediye(k, jeton, kademe, hediye, sayi)` kancasının dördüncü bilgisi olarak gelir (bkz.
 KANCALAR.md); bilinmiyorsa `null`. Beşinci bilgi `{ birim, adet }`: olayın `jeton` (tek hediye) ve `adet` alanları. Paneldeki olay akışında jetonun yanında hediyenin adı yazılır
