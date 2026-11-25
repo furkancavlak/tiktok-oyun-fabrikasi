@@ -55610,8 +55610,29 @@ function siraGuncelle() {
   D.siraKirli = true;
 }
 
+// Aynı TikTok iletisi iki kez gelebilir (kütüphane tekrarı, yeniden bağlanma); hediye iki kez sayılmasın diye olayın
+// kimliği (olayKimlik, docs/OLAYLAR.md) hatırlanır. Uzun yayında bellek şişmesin: yalnız son 2000 kimlik tutulur (Set
+// ekleme sırasını korur, en eski önce silinir). Kimliksiz olay (sahte izleyici, panel) her zaman işlenir.
+const gorulenOlay = new Set(), GORULEN_SINIR = 2000;
+function tekrarOlayMi(o) {
+  const v = o.olayKimlik;
+  if (typeof v !== 'string' && typeof v !== 'number')
+    return false;
+  const ok = temiz(String(v)).slice(0, 64);
+  if (!ok)
+    return false;
+  if (gorulenOlay.has(ok))
+    return true;
+  gorulenOlay.add(ok);
+  if (gorulenOlay.size > GORULEN_SINIR)
+    gorulenOlay.delete(gorulenOlay.values().next().value);
+  return false;
+}
+
 function olay(o) {
   if (!o || !o.tip)
+    return;
+  if (tekrarOlayMi(o))
     return;
   const kim = o.kullanici || {}, id = temiz(kim.id || kim.ad).slice(0, 64);
   if (!id)
@@ -57054,6 +57075,16 @@ const Yayin = {
     }
     if (m.tip)
       return m; // oyunun kendi biçimi
+    // Ham TikTok iletisi: iletinin numarası (2.x d.common.msgId, 1.x d.msgId) olayKimlik olur; olay() tekrarı bununla atar.
+    const o = this.hamCevir(m);
+    if (o) {
+      const d = m.data && typeof m.data === 'object' ? m.data : m, c = d.common && typeof d.common === 'object' ? d.common.msgId : undefined, v = c ?? d.msgId;
+      if ((typeof v === 'string' || typeof v === 'number') && String(v).trim() !== '' && String(v).trim() !== '0')
+        o.olayKimlik = String(v).trim().slice(0, 64);
+    }
+    return o;
+  },
+  hamCevir(m) {
     const e = String(m.event || m.type || '').toLowerCase(), d = m.data && typeof m.data === 'object' ? m.data : m, u = d.user && typeof d.user === 'object' ? d.user : d;
     const kullanici = { id: u.uniqueId || u.userId || u.id || u.nickname, ad: u.nickname || u.uniqueId || u.displayName };
     if (!kullanici.id)

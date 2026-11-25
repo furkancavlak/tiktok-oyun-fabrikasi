@@ -50,6 +50,28 @@ const { sonuc, kontrol } = kontrolcu();
   await O({ tip: 'hediye', kullanici: { id: 'yeni', ad: 'Yeni' }, jeton: 50 });
   d = await durum(); kontrol('Sahnede olmayan hediye atınca girer ve sıraya yerleşir', d.lider === 'Yeni' && d.kisi === 4, d.sira);
   kontrol('En çok hediye atan liderdir', d.sira.every(x => x[1] <= d.sira[0][1]) && d.sira[0][0] === d.lider, d.sira);
+  // Tekrar süzgeci: aynı TikTok iletisi (aynı olayKimlik) iki kez gelirse jeton bir kez sayılır.
+  const jt = (s, ad) => (s.find(x => x[0] === ad) || [, 0])[1];
+  await O({ tip: 'hediye', kullanici: { id: 'tk1', ad: 'Tekrar1' }, jeton: 7, olayKimlik: 'msg-1' });
+  await O({ tip: 'hediye', kullanici: { id: 'tk1', ad: 'Tekrar1' }, jeton: 7, olayKimlik: 'msg-1' });
+  d = await durum(); kontrol('Aynı olay kimliğiyle gelen hediye bir kez sayılır', jt(d.sira, 'Tekrar1') === 7, d.sira);
+  await O({ tip: 'hediye', kullanici: { id: 'tk1', ad: 'Tekrar1' }, jeton: 7, olayKimlik: 'msg-2' });
+  d = await durum(); kontrol('Farklı olay kimliğiyle gelen hediye ayrıca sayılır', jt(d.sira, 'Tekrar1') === 14, d.sira);
+  await O({ tip: 'hediye', kullanici: { id: 'tk2', ad: 'Tekrar2' }, jeton: 3 });
+  await O({ tip: 'hediye', kullanici: { id: 'tk2', ad: 'Tekrar2' }, jeton: 3 });
+  d = await durum(); kontrol('Kimliksiz hediye her gelişinde sayılır (eski biçim)', jt(d.sira, 'Tekrar2') === 6, d.sira);
+  // Bellek sınırı: 2000'den fazla yeni kimlikten sonra en eskisi unutulur, en yenisi hâlâ hatırlanır. Beğeni sahneye
+  // kimseyi sokmaz; sayılan beğeni toplamı hangi olayın işlendiğini gösterir.
+  const sinir = await p.evaluate(() => {
+    const b = { tip: 'begeni', kullanici: { id: 'tk3', ad: 'Tekrar3' }, adet: 1 }, t0 = CanliOyun.durum().begeni;
+    for (let i = 0; i <= 2000; i++) CanliOyun.olay({ ...b, olayKimlik: 'sinir-' + i });
+    const t1 = CanliOyun.durum().begeni;
+    CanliOyun.olay({ ...b, olayKimlik: 'sinir-2000' });
+    const t2 = CanliOyun.durum().begeni;
+    CanliOyun.olay({ ...b, olayKimlik: 'sinir-0' });
+    return { yeni: t1 - t0, enYeni: t2 - t1, enEski: CanliOyun.durum().begeni - t2 };
+  });
+  kontrol('Tekrar süzgeci son 2000 kimliği hatırlar, en eskisini unutur', sinir.yeni === 2001 && sinir.enYeni === 0 && sinir.enEski === 1, sinir);
   // Her kademenin en küçük değeri o kademenin adını, bir eksiği bir alt kademenin adını bildirir; çok büyük hediye en üst kademedir.
   const kd = await p.evaluate(K => {
     const cik = [], dene = (j, i) => { CanliOyun._test.zamanEkle(0.2); CanliOyun.olay({ tip: 'hediye', kullanici: { id: 'kd' + j + '_' + i, ad: 'kd' + j }, jeton: j }); return document.getElementById('bildirim').lastChild.textContent; };
